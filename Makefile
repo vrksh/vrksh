@@ -18,7 +18,6 @@ test-tool:
 
 # Run the linter. Fix all warnings before committing.
 lint:
-	@gofmt -l . | grep -v vendor | tee /tmp/gofmt.out; [ ! -s /tmp/gofmt.out ] || (echo "gofmt: run 'gofmt -w .' to fix" && exit 1)
 	golangci-lint run ./...
 
 # Fuzz targets - 60s each. Run before v1 release.

@@ -5,6 +5,7 @@ run:
   modules-download-mode: readonly
 
 linters:
+  default: none
   enable:
     - errcheck
     - govet
@@ -12,13 +13,16 @@ linters:
     - staticcheck
     - misspell
     - exhaustive
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - unused
 
-linters-settings:
-  exhaustive:
-    default-signifies-exhaustive: true
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - unused
+formatters:
+  enable:
+    - gofmt
+    - goimports
