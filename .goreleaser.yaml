@@ -18,7 +18,8 @@ builds:
       - -s -w -X main.version={{.Version}}
 
 archives:
-  - format: [tar.gz]
+  - formats:
+      - tar.gz
     name_template: "vrk_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
