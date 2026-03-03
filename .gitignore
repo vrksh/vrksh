@@ -1,0 +1,17 @@
+# Built binary
+vrk
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Test output
+/tmp/
+
+# Hugo build output
+hugo/public/
+hugo/resources/

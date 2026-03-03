@@ -1,0 +1,47 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    binary: vrk
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - format: tar.gz
+    name_template: "vrk_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "vrk_{{ .Version }}_checksums.txt"
+
+brews:
+  - name: vrk
+    repository:
+      owner: vrksh
+      name: homebrew-vrksh
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://vrk.sh"
+    description: "Unix tools for building reliable AI pipelines"
+    license: "MIT"
+    install: |
+      bin.install "vrk"
+    test: |
+      system "#{bin}/vrk", "--help"
+
+release:
+  github:
+    owner: vrksh
+    name: vrksh
