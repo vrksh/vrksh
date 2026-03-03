@@ -7,6 +7,8 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to create GitHub releases and upload assets
     steps:
       - uses: actions/checkout@v4
         with:

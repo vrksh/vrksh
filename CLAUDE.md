@@ -44,12 +44,19 @@ integrations/
   mcp/                          — MCP server (Quarter 2)
   github-action/                — setup-vrk action (Quarter 2)
   cursor/                       — .cursorrules / Cursor MCP config
-  skills/                       — SKILLS.md templates
+  skills/
+    SKILLS.md                   — agent usage reference: flags, exit codes, gotchas, compose patterns
+                                  This teaches agents how to USE vrksh. Hand-authored. Ships with v1.
+                                  Served at vrk.sh/skills. Accessible via `vrk --skills`.
   prompts/                      — system prompt snippets
   direnv/                       — .envrc template
-AGENTS.md                       — machine-readable tool reference for agents
-CLAUDE.md                       — this file
+AGENTS.md                       — quick orientation: one line per tool, 5 key patterns
+CLAUDE.md                       — this file (for coding agents building vrksh)
 README.md
+
+Two agent-facing files, different purposes:
+- AGENTS.md        quick orientation, under 60 lines, agents skim this
+- integrations/skills/SKILLS.md   full reference, flags/exit codes/gotchas/compose per tool
 ```
 
 **Package structure:** each tool is its own Go package (`package jwt`, `package epoch`, etc.)
@@ -82,6 +89,17 @@ make fuzz                  # fuzz all required tools for 60s each
 make check                 # build + test + lint + cross - run before every commit
 make clean                 # remove build artifacts
 ```
+
+Two flags are built into the root binary alongside the tool dispatcher:
+
+- `vrk --manifest` — prints embedded JSON tool manifest to stdout. For agent discovery.
+- `vrk --skills`   — prints `integrations/skills/SKILLS.md` to stdout. For agent context.
+
+Both use `//go:embed` in main.go. When you add a new tool, update both the manifest JSON and `integrations/skills/SKILLS.md` before committing.
+
+**Two agent-facing files, different purposes — do not confuse them:**
+- `CLAUDE.md` (this file) — for coding agents *building* vrksh. Covers codebase patterns.
+- `integrations/skills/SKILLS.md` — for AI agents *using* vrksh in their pipelines. Covers flags, exit codes, gotchas, and compose patterns per tool. Hand-authored. Ships with v1.
 
 ## Git Workflow
 
@@ -177,6 +195,20 @@ Read `docs/flag-conventions.md` before adding any flag. Summary:
 - **Temperature on `ask`**: default is 0. Do not change this without an explicit `--temperature` flag. Determinism is the default behaviour.
 - **Secret safety in `ask`**: API keys from env vars must never appear in stdout, stderr, or error messages. Sanitise all error output before writing.
 
+## Build order — tests before implementation
+
+When building any tool, always follow this order:
+
+1. Read the correctness spec provided in the session prompt
+2. Write `cmd/<tool>/<tool>_test.go` first — all cases from the spec
+3. Run `go test ./cmd/<tool>/...` — all tests must fail (red)
+4. Write the implementation in `cmd/<tool>/main.go`
+5. Run `go test ./cmd/<tool>/...` again — all tests must pass (green)
+6. Run `make check` — cross-compilation and linting must pass
+
+Do not write any implementation code before the tests exist.
+If no correctness spec was provided in the session prompt, ask for one before proceeding.
+
 ## Testing approach
 
 - Test the contract, not the implementation.
@@ -185,6 +217,7 @@ Read `docs/flag-conventions.md` before adding any flag. Summary:
 - For `epoch` tests, always pass `--now 1740000000` to make relative times deterministic.
 - Fuzz targets required for: `jwt`, `epoch`, `tok`, `sse`. Contract: never panic, never hang, exit within 1 second.
 - Integration tests tagged `//go:build integration` — excluded from default `go test ./...`.
+- Property tests required for every tool — at least one invariant that must hold for any input, not just the example cases.
 
 ## See also
 
