@@ -180,6 +180,17 @@ cat data.txt | vrk prompt --schema s.json --retry 3   # retry if Claude's output
 
 ---
 
+## Reserved Shorthands
+
+These single-letter shorthands are permanently reserved. **Do not use them for any other flag**, even if the long flag name seems unrelated. Their meanings are fixed Unix conventions that users will assume globally.
+
+| Short | Reserved for | Why |
+|-------|-------------|-----|
+| `-v` | `--verbose` | Universal Unix convention (`curl -v`, `ssh -v`, `git -v`). Even though `--verbose` is not implemented today, claiming `-v` for something else (e.g. `--valid`) would surprise every user who reaches for it out of muscle memory. |
+| `-i` | `--interactive` | Convention from `rm -i`, `cp -i`, `grep -i` (case-insensitive) — too ambiguous to assign. |
+
+---
+
 ## Flags That Do Not Exist in vrksh
 
 These are intentionally absent. Do not add them.
@@ -187,7 +198,7 @@ These are intentionally absent. Do not add them.
 | Flag | Why absent |
 |------|-----------|
 | `--config` | Config is optional and XDG-located. Never required, never flagged. |
-| `--verbose` / `-v` | Debugging output goes to stderr unconditionally or not at all. |
+| `--verbose` / `-v` | Debugging output goes to stderr unconditionally or not at all. `-v` shorthand is permanently reserved even while `--verbose` is absent. |
 | `--output <file>` | Unix pipes handle redirection. Tools write to stdout, callers redirect. |
 | `--interactive` / `-i` | All tools are non-interactive by design. |
 | `--format` | Use `--json` or `--text` instead. `--format` is too generic. |

@@ -17,10 +17,20 @@ PASS=0
 FAIL=0
 
 # Token constants
-# valid:   exp=2524608000 (2050-01-01), sub=1234567890, name=John Doe, admin=true
+# valid:   exp=2524608000 (2050-01-01), sub=1234567890, name=John Doe, admin=true, iat=2018
 # expired: exp=1772983763 (2026-03-08 15:29 UTC — already past), same other claims
 VALID_JWT="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImV4cCI6MjUyNDYwODAwMCwiaWF0IjoxNTE2MjM5MDIyfQ.1n2qLms2Fy9TOojNHoEplIoS0Oyu4PKT3wYwRv5_0Ok"
 EXPIRED_JWT="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImV4cCI6MTc3Mjk4Mzc2MywiaWF0IjoxNTE2MjM5MDIyfQ.Ox-nWmGb-ehO0U38wefNLdP18uC6-HjGum6pcNXVVM4"
+
+# Minimal test tokens (header: {"alg":"HS256"}, sig: fakesig)
+# Payload: {"sub":"test","nbf":9999999999}  — nbf year 2286, always in the future
+NBF_FUTURE_JWT="eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0IiwibmJmIjo5OTk5OTk5OTk5fQ.fakesig"
+# Payload: {"sub":"test","nbf":1000000000}  — nbf year 2001, always in the past
+NBF_PAST_JWT="eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0IiwibmJmIjoxMDAwMDAwMDAwfQ.fakesig"
+# Payload: {"sub":"test","iat":9999999999}  — iat year 2286, always in the future
+IAT_FUTURE_JWT="eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0IiwiaWF0Ijo5OTk5OTk5OTk5fQ.fakesig"
+# Payload: {"sub":"test","iat":1000000000}  — iat year 2001, always in the past, no nbf
+IAT_PAST_JWT="eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0IiwiaWF0IjoxMDAwMDAwMDAwfQ.fakesig"
 
 # ------------------------------------------------------------
 # Helpers
@@ -263,11 +273,12 @@ echo "--- --help ---"
 
 stdout=$("$VRK" jwt --help 2>/dev/null) || true
 exit_code=$(set +e; "$VRK" jwt --help > /dev/null 2>&1; echo $?)
-assert_exit            "--help: exit 0"            0       "$exit_code"
-assert_stdout_contains "--help: contains usage"    "usage"  "$stdout"
-assert_stdout_contains "--help: mentions --claim"  "claim"  "$stdout"
+assert_exit            "--help: exit 0"            0         "$exit_code"
+assert_stdout_contains "--help: contains usage"    "usage"   "$stdout"
+assert_stdout_contains "--help: mentions --claim"  "claim"   "$stdout"
 assert_stdout_contains "--help: mentions --expired" "expired" "$stdout"
-assert_stdout_contains "--help: mentions --json"   "json"   "$stdout"
+assert_stdout_contains "--help: mentions --json"   "json"    "$stdout"
+assert_stdout_contains "--help: mentions --valid"  "valid"   "$stdout"
 
 # ------------------------------------------------------------
 # 9. Pipeline usage
@@ -286,6 +297,93 @@ fi
 # claim extraction in pipeline
 sub=$("$VRK" jwt --claim sub "$VALID_JWT" | tr -d '\n') || true
 assert_stdout_equals "pipeline: --claim sub piped" "1234567890" "$sub"
+
+# ------------------------------------------------------------
+# 10. Whitespace / TrimSpace
+# ------------------------------------------------------------
+echo ""
+echo "--- whitespace handling ---"
+
+# Positional arg with leading spaces — decodes correctly with TrimSpace.
+stdout=$("$VRK" jwt "  $VALID_JWT  " 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" jwt "  $VALID_JWT  " > /dev/null 2>&1; echo $?)
+assert_exit            "trim: leading/trailing spaces: exit 0"   0       "$exit_code"
+assert_stdout_contains "trim: leading/trailing spaces: has sub"  '"sub"' "$stdout"
+
+# Positional arg with leading \r — decodes correctly with TrimSpace.
+stdout=$("$VRK" jwt $'\r'"$VALID_JWT" 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" jwt $'\r'"$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "trim: leading CR: exit 0"   0       "$exit_code"
+assert_stdout_contains "trim: leading CR: has sub"  '"sub"' "$stdout"
+
+# ------------------------------------------------------------
+# 11. Multiple positional args — must be exit 2
+# ------------------------------------------------------------
+echo ""
+echo "--- multiple positional args ---"
+
+stderr=$(set +e; "$VRK" jwt "$VALID_JWT" "$VALID_JWT" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt "$VALID_JWT" "$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "multi-arg: exit 2"                      2                 "$exit_code"
+assert_stderr_contains "multi-arg: stderr mentions too many"    "too many"        "$stderr"
+
+# Three args: same result.
+exit_code=$(set +e; "$VRK" jwt "$VALID_JWT" "$VALID_JWT" extra > /dev/null 2>&1; echo $?)
+assert_exit            "multi-arg 3 args: exit 2"               2                 "$exit_code"
+
+# ------------------------------------------------------------
+# 12. --valid flag
+# ------------------------------------------------------------
+echo ""
+echo "--- --valid ---"
+
+# Valid token: exp=2050 (future), iat=2018 (past), no nbf → exit 0.
+stdout=$("$VRK" jwt --valid "$VALID_JWT" 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" jwt --valid "$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--valid valid token: exit 0"            0        "$exit_code"
+assert_stdout_contains "--valid valid token: stdout has payload" '"sub"' "$stdout"
+
+# Expired token → exit 1, stderr mentions "token expired".
+stdout=$("$VRK" jwt --valid "$EXPIRED_JWT" 2>/dev/null) || true
+stderr=$(set +e; "$VRK" jwt --valid "$EXPIRED_JWT" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --valid "$EXPIRED_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--valid expired token: exit 1"           1               "$exit_code"
+assert_stdout_empty    "--valid expired token: stdout empty"                     "$stdout"
+assert_stderr_contains "--valid expired token: stderr expired"   "token expired" "$stderr"
+
+# nbf in future → exit 1, stderr mentions "not yet valid".
+stderr=$(set +e; "$VRK" jwt --valid "$NBF_FUTURE_JWT" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --valid "$NBF_FUTURE_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--valid nbf future: exit 1"               1              "$exit_code"
+assert_stderr_contains "--valid nbf future: stderr not yet valid" "not yet valid" "$stderr"
+
+# nbf in past → exit 0.
+exit_code=$(set +e; "$VRK" jwt --valid "$NBF_PAST_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--valid nbf past: exit 0"                  0             "$exit_code"
+
+# iat in future → exit 1, stderr mentions "issued in the future".
+stderr=$(set +e; "$VRK" jwt --valid "$IAT_FUTURE_JWT" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --valid "$IAT_FUTURE_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--valid iat future: exit 1"                   1                    "$exit_code"
+assert_stderr_contains "--valid iat future: stderr issued in future"  "issued in the future" "$stderr"
+
+# iat in past, no nbf → exit 0 (missing nbf not treated as failure).
+exit_code=$(set +e; "$VRK" jwt --valid "$IAT_PAST_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--valid iat past no nbf: exit 0"               0             "$exit_code"
+
+# --valid and --expired together on valid token: both pass → exit 0.
+exit_code=$(set +e; "$VRK" jwt --valid --expired "$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--valid+--expired valid: exit 0"                0             "$exit_code"
+
+# --valid and --expired together on expired token: --expired fires first → exit 1.
+exit_code=$(set +e; "$VRK" jwt --valid --expired "$EXPIRED_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--valid+--expired expired: exit 1"               1             "$exit_code"
+
+# --valid + --json on valid token: exit 0, JSON envelope produced.
+stdout=$("$VRK" jwt --valid --json "$VALID_JWT" 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" jwt --valid --json "$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--valid+--json: exit 0"                         0             "$exit_code"
+assert_stdout_contains "--valid+--json: has header key"                 '"header"'    "$stdout"
 
 # ------------------------------------------------------------
 # Summary

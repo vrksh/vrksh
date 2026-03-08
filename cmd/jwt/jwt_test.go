@@ -2,12 +2,22 @@ package jwt
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"os"
 	"strings"
 	"testing"
 )
+
+// buildJWT constructs a minimal test JWT from a JSON payload string.
+// The header is always {"alg":"HS256"} and the signature is always "fakesig".
+// decodeJWT does not verify signatures, so this is valid for testing.
+func buildJWT(payload string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256"}`))
+	body := base64.RawURLEncoding.EncodeToString([]byte(payload))
+	return header + "." + body + ".fakesig"
+}
 
 const (
 	// validJWT has exp: 2524608000 (year 2050) — always in the future.
@@ -260,6 +270,176 @@ func TestPropertyAnyValidJWT(t *testing.T) {
 		if code == 2 {
 			t.Errorf("token %q: exit 2 (usage error) — must be 0 or 1 only", tok)
 		}
+	}
+}
+
+// --- TrimSpace tests ---
+
+// TestTrimSpaceOnInput verifies that leading/trailing whitespace in the token
+// is stripped before decoding. Trailing whitespace that lands in the signature
+// part is harmless (signature is not decoded), but leading whitespace corrupts
+// the header. The test covers both paths: positional arg and stdin.
+func TestTrimSpaceOnInput(t *testing.T) {
+	// positional arg with leading spaces: without TrimSpace, parts[0] would be
+	// "  eyJhbGci..." and base64 decoding would fail → exit 1.
+	// With TrimSpace the leading spaces are stripped → exit 0.
+	t.Run("leading whitespace in positional arg", func(t *testing.T) {
+		stdout, _, code := runJWT(t, []string{"  " + validJWT + "  "}, "")
+		if code != 0 {
+			t.Fatalf("exit code = %d (arg with surrounding spaces), want 0", code)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
+			t.Fatalf("stdout not valid JSON: %v\ngot: %q", err, stdout)
+		}
+		if payload["sub"] != "1234567890" {
+			t.Errorf("sub = %v, want %q", payload["sub"], "1234567890")
+		}
+	})
+
+	// stdin with \r\n: ReadInput strips the trailing \n leaving a \r before the
+	// first dot — corrupting parts[0]. TrimSpace removes the \r.
+	// Construct a token where \r lands in the header part, not the signature.
+	// The simplest way: prepend \r so it becomes part of parts[0].
+	t.Run("leading CR in positional arg", func(t *testing.T) {
+		stdout, _, code := runJWT(t, []string{"\r" + validJWT}, "")
+		if code != 0 {
+			t.Fatalf("exit code = %d (arg with leading \\r), want 0", code)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
+			t.Fatalf("stdout not valid JSON: %v\ngot: %q", err, stdout)
+		}
+	})
+
+	// stdin regression: echo "$TOKEN" appends \n — ReadInput strips it so
+	// this already worked. Included to confirm no regression.
+	t.Run("single trailing newline via stdin", func(t *testing.T) {
+		stdoutWithNL, _, codeWithNL := runJWT(t, []string{}, validJWT+"\n")
+		stdoutClean, _, codeClean := runJWT(t, []string{}, validJWT)
+		if codeWithNL != 0 {
+			t.Fatalf("exit code = %d (stdin with \\n), want 0", codeWithNL)
+		}
+		if codeClean != 0 {
+			t.Fatalf("exit code = %d (clean stdin), want 0", codeClean)
+		}
+		if strings.TrimSpace(stdoutWithNL) != strings.TrimSpace(stdoutClean) {
+			t.Errorf("outputs differ:\n  with \\n:  %q\n  without: %q", stdoutWithNL, stdoutClean)
+		}
+	})
+}
+
+// --- Multiple positional args test ---
+
+// TestTooManyArguments verifies that passing more than one positional arg
+// returns exit 2 (usage error) with a clear message, not a confusing
+// "invalid JWT: expected 3 parts" runtime error.
+func TestTooManyArguments(t *testing.T) {
+	stdout, stderr, code := runJWT(t, []string{validJWT, validJWT}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (usage error)", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout must be empty on usage error, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "too many arguments") {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, "too many arguments")
+	}
+}
+
+// --- --valid flag tests ---
+
+// TestValidFlagWithValidToken verifies that a well-formed token (exp in future,
+// iat in past, no nbf) passes all --valid checks and exits 0 with payload JSON.
+func TestValidFlagWithValidToken(t *testing.T) {
+	// validJWT: exp=2524608000 (year 2050), iat=1516239022 (year 2018), no nbf.
+	stdout, _, code := runJWT(t, []string{"--valid", validJWT}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
+		t.Fatalf("stdout not valid JSON: %v\ngot: %q", err, stdout)
+	}
+}
+
+// TestValidFlagWithExpiredToken verifies that --valid exits 1 and reports the
+// expiry when the token's exp claim is in the past.
+func TestValidFlagWithExpiredToken(t *testing.T) {
+	stdout, stderr, code := runJWT(t, []string{"--valid", expiredJWT}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout must be empty on error, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "token expired") {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, "token expired")
+	}
+}
+
+// TestValidFlagNbfInFuture verifies that --valid exits 1 when nbf is in the
+// far future (token not yet valid).
+func TestValidFlagNbfInFuture(t *testing.T) {
+	// nbf=9999999999 is year 2286 — always in the future.
+	tok := buildJWT(`{"sub":"test","nbf":9999999999}`)
+	stdout, stderr, code := runJWT(t, []string{"--valid", tok}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (nbf in future)", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout must be empty on error, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "not yet valid") {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, "not yet valid")
+	}
+}
+
+// TestValidFlagNbfInPast verifies that --valid exits 0 when nbf is in the
+// past (token is already valid per nbf).
+func TestValidFlagNbfInPast(t *testing.T) {
+	// nbf=1000000000 is year 2001 — always in the past.
+	tok := buildJWT(`{"sub":"test","nbf":1000000000}`)
+	stdout, _, code := runJWT(t, []string{"--valid", tok}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (nbf in past)", code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
+		t.Fatalf("stdout not valid JSON: %v\ngot: %q", err, stdout)
+	}
+}
+
+// TestValidFlagIatInFuture verifies that --valid exits 1 when iat is in the
+// far future (token claims to be issued in the future — suspicious).
+func TestValidFlagIatInFuture(t *testing.T) {
+	// iat=9999999999 is year 2286 — always in the future.
+	tok := buildJWT(`{"sub":"test","iat":9999999999}`)
+	stdout, stderr, code := runJWT(t, []string{"--valid", tok}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (iat in future)", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout must be empty on error, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "issued in the future") {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, "issued in the future")
+	}
+}
+
+// TestValidFlagNbfMissing verifies that --valid exits 0 for a token that has
+// iat in the past but no nbf claim. A missing nbf must not be treated as
+// "not yet valid".
+func TestValidFlagNbfMissing(t *testing.T) {
+	// iat=1000000000 (year 2001), no nbf, no exp.
+	tok := buildJWT(`{"sub":"test","iat":1000000000}`)
+	stdout, _, code := runJWT(t, []string{"--valid", tok}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (no nbf claim = nbf check skipped)", code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
+		t.Fatalf("stdout not valid JSON: %v\ngot: %q", err, stdout)
 	}
 }
 

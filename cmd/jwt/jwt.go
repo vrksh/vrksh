@@ -30,8 +30,10 @@ func Run() int {
 
 	var claimName string
 	var checkExpired bool
+	var checkValid bool
 	fs.StringVarP(&claimName, "claim", "c", "", "print value of a single claim as plain text")
 	fs.BoolVarP(&checkExpired, "expired", "e", false, "exit 1 if the token is expired")
+	fs.BoolVar(&checkValid, "valid", false, "exit 1 if token is expired, not yet valid (nbf), or issued in the future (iat)")
 
 	// Suppress pflag's automatic printing so we control where output goes.
 	fs.SetOutput(io.Discard)
@@ -45,10 +47,20 @@ func Run() int {
 
 	jsonFlag, _ := fs.GetBool("json")
 
+	// Reject more than one positional arg early — joining them with a space
+	// produces a confusing "invalid JWT: expected 3 parts" error downstream.
+	if len(fs.Args()) > 1 {
+		return shared.UsageErrorf("jwt: too many arguments, expected one token")
+	}
+
 	input, err := shared.ReadInput(fs.Args())
 	if err != nil {
 		return shared.UsageErrorf("jwt: %v", err)
 	}
+	// JWT tokens are never whitespace-padded. Strip leading/trailing whitespace
+	// so that \r\n line endings, leading spaces, or copy-paste artifacts don't
+	// corrupt the base64url-encoded header or payload.
+	input = strings.TrimSpace(input)
 
 	header, payload, err := decodeJWT(input)
 	if err != nil {
@@ -68,6 +80,44 @@ func Run() int {
 			}
 		}
 		// No exp claim, or exp is in the future — fall through to output.
+	}
+
+	// --valid: stricter than --expired. Checks exp, nbf, and iat in order.
+	// Only checks a claim when it is present in the payload; absence is not an error.
+	if checkValid {
+		now := time.Now().Unix()
+
+		// 1. exp: token must not be expired.
+		if expNum, ok := payload["exp"].(json.Number); ok {
+			if expUnix, err := expNum.Int64(); err == nil {
+				if now > expUnix {
+					exp := time.Unix(expUnix, 0)
+					ago := time.Since(exp).Round(time.Second)
+					return shared.Errorf("jwt: token expired %s ago (exp: %s)", ago, exp.UTC().Format(time.RFC3339))
+				}
+			}
+		}
+
+		// 2. nbf: token must be past its not-before time.
+		if nbfNum, ok := payload["nbf"].(json.Number); ok {
+			if nbfUnix, err := nbfNum.Int64(); err == nil {
+				if now < nbfUnix {
+					nbf := time.Unix(nbfUnix, 0)
+					return shared.Errorf("jwt: token not yet valid (nbf: %s)", nbf.UTC().Format(time.RFC3339))
+				}
+			}
+		}
+
+		// 3. iat: token must not claim to be issued in the future.
+		if iatNum, ok := payload["iat"].(json.Number); ok {
+			if iatUnix, err := iatNum.Int64(); err == nil {
+				if now < iatUnix {
+					iat := time.Unix(iatUnix, 0)
+					return shared.Errorf("jwt: token issued in the future (iat: %s)", iat.UTC().Format(time.RFC3339))
+				}
+			}
+		}
+		// All checks passed — fall through to output.
 	}
 
 	// --claim: extract a single field as plain text.
@@ -167,6 +217,7 @@ func printUsage(fs *pflag.FlagSet) int {
 		"       echo <token> | jwt [flags]",
 		"",
 		"JWT inspector — decode and inspect JWT tokens without verifying signatures.",
+		"Accepts exactly one token as a positional argument or via stdin.",
 		"",
 		"flags:",
 	}

@@ -58,6 +58,7 @@ func (f *StandardFlags) Register(fs *pflag.FlagSet) {
 | `--schema` | `-s` | structured output |
 | `--model` | `-m` | model override |
 | `--count` | `-n` | numeric count (like `head -n`) |
+| `--verbose` | `-v` | reserved — Unix convention. Do not use `-v` for any other flag. |
 | `--explain` | none | dangerous to fat-finger — forces intent |
 | `--dry-run` | none | same reason |
 
