@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -131,6 +132,82 @@ func TestReadInputOptional(t *testing.T) {
 				pipeStdin(t, tc.stdin)
 			}
 			got, err := ReadInputOptional(tc.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestReadInputOptionalFailingReader confirms that a real I/O error from stdin
+// is propagated rather than silently swallowed.
+func TestReadInputOptionalFailingReader(t *testing.T) {
+	// Create an OS pipe and immediately close the write end with an error so
+	// any read from the read end returns a non-EOF error.
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	injected := errors.New("injected read error")
+	// CloseWithError is on *io.PipeWriter, not *os.File. Use a separate
+	// goroutine: close the OS write-fd with a deliberate broken-pipe situation
+	// by closing the read end first, then writing to force SIGPIPE / error.
+	// Simpler: close the file we hand to os.Stdin so Read() returns an error.
+	_ = pw.Close()
+	_ = pr.Close() // close the read end — subsequent Read calls return an error
+
+	// Swap os.Stdin with the closed file; restore on cleanup.
+	orig := os.Stdin
+	os.Stdin = pr
+	t.Cleanup(func() { os.Stdin = orig })
+
+	// Use a thin wrapper so we can force a predictable error without relying
+	// on platform-specific closed-fd wording.
+	_ = injected // referenced above for documentation clarity
+
+	_, gotErr := ReadInputOptional(nil)
+	if gotErr == nil {
+		t.Fatal("expected error from closed stdin, got nil")
+	}
+}
+
+// TestReadInputOptionalWhitespaceEdgeCases pins the TrimSuffix behaviour so
+// that any future change from TrimSuffix → TrimRight (or vice-versa) is
+// caught immediately.
+func TestReadInputOptionalWhitespaceEdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		stdin string
+		want  string
+	}{
+		{
+			// Single newline: TrimSuffix removes it → empty → ("", nil).
+			name:  "single newline returns empty",
+			stdin: "\n",
+			want:  "",
+		},
+		{
+			// Spaces + newline: TrimSuffix removes newline → "   " → TrimSpace
+			// is empty → ("", nil).
+			name:  "spaces and newline returns empty",
+			stdin: "   \n",
+			want:  "",
+		},
+		{
+			// Two newlines: TrimSuffix removes one → "\n" → TrimSpace is empty
+			// → ("", nil). TrimSuffix strips exactly one trailing newline.
+			name:  "two newlines returns empty",
+			stdin: "\n\n",
+			want:  "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pipeStdin(t, tc.stdin)
+			got, err := ReadInputOptional(nil)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

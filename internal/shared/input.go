@@ -11,6 +11,10 @@ import (
 // ReadInput returns input from positional args (joined with a space) or from
 // stdin. Strips exactly one trailing newline from stdin — not all whitespace.
 // Returns an error if no input is provided or if stdin contains only whitespace.
+//
+// When multiple positional args are given they are joined with a single space
+// (e.g. ["hello", "world"] → "hello world"). Callers that must reject more
+// than one arg should validate len(args) themselves before calling ReadInput.
 func ReadInput(args []string) (string, error) {
 	if len(args) > 0 {
 		return strings.Join(args, " "), nil
@@ -18,15 +22,22 @@ func ReadInput(args []string) (string, error) {
 	return readFromStdin()
 }
 
-// ReadInputOptional behaves like ReadInput but returns ("", nil) instead of an
-// error when no input is present. Use for tools that have a meaningful default
-// when no input is given.
+// ReadInputOptional behaves like ReadInput but returns ("", nil) when stdin is
+// empty or contains only whitespace — use for tools that have a meaningful
+// default when no input is given. Real I/O errors are still propagated.
 func ReadInputOptional(args []string) (string, error) {
 	if len(args) > 0 {
 		return strings.Join(args, " "), nil
 	}
-	s, err := readFromStdin()
+	b, err := io.ReadAll(os.Stdin)
 	if err != nil {
+		return "", fmt.Errorf("reading stdin: %w", err)
+	}
+	if len(b) == 0 {
+		return "", nil
+	}
+	s := strings.TrimSuffix(string(b), "\n")
+	if strings.TrimSpace(s) == "" {
 		return "", nil
 	}
 	return s, nil
