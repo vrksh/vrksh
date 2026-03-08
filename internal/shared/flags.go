@@ -17,6 +17,7 @@ func StandardFlags() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("vrk", pflag.ContinueOnError)
 	fs.BoolP("json", "j", false, "emit output as JSON")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	fs.BoolP("fail", "f", false, "exit 1 if condition not met")
 	fs.Bool("dry-run", false, "preview side effects without executing")
 	fs.Bool("explain", false, "print what the tool would do without executing")
 	return fs

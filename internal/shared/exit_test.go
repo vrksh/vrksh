@@ -179,6 +179,72 @@ func TestWarn(t *testing.T) {
 	}
 }
 
+func TestErrorf(t *testing.T) {
+	t.Run("returns ExitError (1)", func(t *testing.T) {
+		r, w, _ := os.Pipe()
+		orig := os.Stderr
+		os.Stderr = w
+		got := Errorf("something broke")
+		_ = w.Close()
+		os.Stderr = orig
+		_ = r.Close()
+		if got != ExitError {
+			t.Errorf("Errorf() = %d, want %d", got, ExitError)
+		}
+	})
+
+	t.Run("writes error prefix to stderr", func(t *testing.T) {
+		stderr, _ := captureExit(t, func() { _ = Errorf("disk full") })
+		if stderr != "error: disk full\n" {
+			t.Errorf("stderr = %q, want %q", stderr, "error: disk full\n")
+		}
+	})
+
+	t.Run("formats arguments", func(t *testing.T) {
+		stderr, _ := captureExit(t, func() { _ = Errorf("file %q: %v", "x.txt", "not found") })
+		want := "error: file \"x.txt\": not found\n"
+		if stderr != want {
+			t.Errorf("stderr = %q, want %q", stderr, want)
+		}
+	})
+
+	t.Run("does not call ExitFunc", func(t *testing.T) {
+		_, code := captureExit(t, func() { _ = Errorf("oops") })
+		if code != -1 {
+			t.Errorf("Errorf called ExitFunc with code %d, want no exit", code)
+		}
+	})
+}
+
+func TestUsageErrorf(t *testing.T) {
+	t.Run("returns ExitUsage (2)", func(t *testing.T) {
+		r, w, _ := os.Pipe()
+		orig := os.Stderr
+		os.Stderr = w
+		got := UsageErrorf("missing flag --key")
+		_ = w.Close()
+		os.Stderr = orig
+		_ = r.Close()
+		if got != ExitUsage {
+			t.Errorf("UsageErrorf() = %d, want %d", got, ExitUsage)
+		}
+	})
+
+	t.Run("writes usage error prefix to stderr", func(t *testing.T) {
+		stderr, _ := captureExit(t, func() { _ = UsageErrorf("missing flag") })
+		if stderr != "usage error: missing flag\n" {
+			t.Errorf("stderr = %q, want %q", stderr, "usage error: missing flag\n")
+		}
+	})
+
+	t.Run("does not call ExitFunc", func(t *testing.T) {
+		_, code := captureExit(t, func() { _ = UsageErrorf("bad args") })
+		if code != -1 {
+			t.Errorf("UsageErrorf called ExitFunc with code %d, want no exit", code)
+		}
+	})
+}
+
 func TestExitConstants(t *testing.T) {
 	tests := []struct {
 		name string

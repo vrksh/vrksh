@@ -10,7 +10,7 @@ func TestStandardFlags(t *testing.T) {
 		if err := fs.Parse([]string{}); err != nil {
 			t.Fatalf("Parse: %v", err)
 		}
-		for _, name := range []string{"json", "quiet", "dry-run", "explain"} {
+		for _, name := range []string{"json", "quiet", "fail", "dry-run", "explain"} {
 			got, err := fs.GetBool(name)
 			if err != nil {
 				t.Fatalf("GetBool(%q): %v", name, err)
@@ -23,10 +23,10 @@ func TestStandardFlags(t *testing.T) {
 
 	t.Run("long flags set correctly", func(t *testing.T) {
 		fs := StandardFlags()
-		if err := fs.Parse([]string{"--json", "--quiet", "--dry-run", "--explain"}); err != nil {
+		if err := fs.Parse([]string{"--json", "--quiet", "--fail", "--dry-run", "--explain"}); err != nil {
 			t.Fatalf("Parse: %v", err)
 		}
-		for _, name := range []string{"json", "quiet", "dry-run", "explain"} {
+		for _, name := range []string{"json", "quiet", "fail", "dry-run", "explain"} {
 			got, err := fs.GetBool(name)
 			if err != nil {
 				t.Fatalf("GetBool(%q): %v", name, err)
@@ -67,6 +67,17 @@ func TestStandardFlags(t *testing.T) {
 		quiet, _ := fs.GetBool("quiet")
 		if quiet {
 			t.Error("quiet should be false when only -j is set")
+		}
+	})
+
+	t.Run("-f sets fail", func(t *testing.T) {
+		fs := StandardFlags()
+		if err := fs.Parse([]string{"-f"}); err != nil {
+			t.Fatalf("Parse: %v", err)
+		}
+		got, _ := fs.GetBool("fail")
+		if !got {
+			t.Error("-f: want fail=true, got false")
 		}
 	})
 

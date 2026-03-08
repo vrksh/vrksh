@@ -53,23 +53,19 @@ func TestPrintJSON(t *testing.T) {
 		}
 	})
 
-	t.Run("nil exits 1 with stderr message", func(t *testing.T) {
-		stderr, code := captureExit(t, func() {
-			_ = PrintJSON(nil)
-		})
-		if code != ExitError {
-			t.Errorf("exit code = %d, want %d", code, ExitError)
+	t.Run("nil returns error not die", func(t *testing.T) {
+		err := PrintJSON(nil)
+		if err == nil {
+			t.Fatal("expected non-nil error for nil input, got nil")
 		}
-		if !strings.Contains(stderr, "cannot marshal nil") {
-			t.Errorf("stderr %q does not contain %q", stderr, "cannot marshal nil")
+		if !strings.Contains(err.Error(), "cannot marshal nil") {
+			t.Errorf("error %q does not contain %q", err.Error(), "cannot marshal nil")
 		}
 	})
 
 	t.Run("nil writes nothing to stdout", func(t *testing.T) {
 		flush := captureStdout(t)
-		captureExit(t, func() {
-			_ = PrintJSON(nil)
-		})
+		_ = PrintJSON(nil)
 		if got := flush(); got != "" {
 			t.Errorf("wrote %q to stdout on nil, want nothing", got)
 		}

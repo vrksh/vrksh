@@ -24,7 +24,7 @@ cmd/
 internal/
   shared/
     input.go                    — ReadInput, ReadInputOptional, ReadInputFile
-    exit.go                     — Die, DieUsage, Warn, exit code constants (0/1/2)
+    exit.go                     — Errorf, UsageErrorf, Warn (for Run()); Die, DieUsage (main() only); exit code constants
     json.go                     — PrintJSON, PrintJSONL, JSONOutput
     flags.go                    — StandardFlags with pflag shorthands (-j/--json, -q/--quiet, etc.)
     kvpath.go                   — KVPath()
@@ -117,7 +117,14 @@ func main() {
 
 **Why registry, not switch:** at 30+ tools a switch requires two edits per tool (import + case) and drifts from the manifest. The registry requires one line. `--manifest` is trivially derived by iterating `tools`. Never revert to a switch.
 
-**`Run() int` not `Run()`:** every tool's `Run()` must return an exit code (0/1/2). `main.go` calls `os.Exit(tool())`. This keeps tools usable as libraries, makes tests check return values instead of intercepting `os.Exit`, and is the standard Go pattern. Never call `os.Exit` inside a tool's `Run()` — only in `main()` and in `Die()`/`DieUsage()`.
+**`Run() int` not `Run()`:** every tool's `Run()` must return an exit code (0/1/2). `main.go` calls `os.Exit(tool())`. This keeps tools usable as libraries, makes tests check return values instead of intercepting `os.Exit`, and is the standard Go pattern. Never call `os.Exit` inside a tool's `Run()`.
+
+Inside `Run()`, use `shared.Errorf()` and `shared.UsageErrorf()` — they print to stderr and return the exit code:
+```go
+return shared.Errorf("jwt: invalid token: %v", err)   // prints "error: ...", returns 1
+return shared.UsageErrorf("missing required input")    // prints "usage error: ...", returns 2
+```
+`Die()`/`DieUsage()` call `os.Exit` and are for `main()` only. Calling them inside `Run()` terminates the test process.
 
 **`manifest.json`:** lives at repo root, checked in, updated manually when tools are added. Format:
 ```json
@@ -188,9 +195,9 @@ git push origin v0.1.0
 
 - **One binary, multicall dispatch.** `main.go` reads `os.Args[0]` or `os.Args[1]` to route. Never create separate binaries per tool. Each tool is `package <toolname>` in `cmd/<tool>/` with a single exported `Run() int` function. `main.go` imports them all via the registry map.
 - **`Run() int` returns exit code.** Never call `os.Exit` inside a tool's `Run()`. Return 0, 1, or 2. `main.go` calls `os.Exit(fn())`. This keeps tools testable as libraries and removes the need for panic/recover in tests.
-- **Library-first shared utilities.** Functions in `internal/shared/` must return `error`, not call `Die()` directly. `KVPath() (string, error)`, `PrintJSON(v any) error`. The tool's `Run()` receives the error and decides whether to call `Die()`. This makes shared utilities usable in tests and future library consumers without process exit.
+- **Library-first shared utilities.** Functions in `internal/shared/` must return `error`, not call `Die()` directly. `KVPath() (string, error)`, `PrintJSON(v any) error`. The tool's `Run()` receives the error and calls `shared.Errorf()` or `shared.UsageErrorf()` — never `Die()`. This makes shared utilities usable in tests and future library consumers without process exit.
 - **`pflag` for flag parsing.** `github.com/spf13/pflag` — not stdlib `flag`, not cobra. Drop-in replacement with POSIX short flags (`-j`/`--json`). For subcommands (`kv set`/`kv get`), use a manual switch on `os.Args[1]` then a sub-`pflag.FlagSet`. No cobra.
-- **Always check `fs.Parse(args)` error.** When using `pflag.ContinueOnError`, you must check the return value of `fs.Parse(args)` and call `DieUsage(err.Error())` if it is non-nil. Never let pflag print to stderr and continue with invalid flag state.
+- **Always check `fs.Parse(args)` error.** When using `pflag.ContinueOnError`, you must check the return value of `fs.Parse(args)` and `return shared.UsageErrorf(err.Error())` if it is non-nil. Never let pflag print to stderr and continue with invalid flag state.
 - **`modernc.org/sqlite` for SQLite.** Never `mattn/go-sqlite3` — it requires CGO and breaks cross-compilation. Verify `modernc.org/sqlite` is in `go.mod` before building any tool that touches `kv`.
 - **No CGO anywhere.** The static binary promise depends on this. `CGO_ENABLED=0` must produce a working binary.
 - **Streaming input for record-processing tools.** Tools that operate on JSONL record-by-record (`valve`, `fuse`, `each`, `dedup`, `recase`, `agg`, `emit`) must use `bufio.Scanner` — not `io.ReadAll`. `io.ReadAll` is only appropriate for tools where the full input is semantically required (`prompt`, `tok`, `chunk`). Use `internal/shared/input.go:ScanLines()` for the streaming path.
@@ -256,9 +263,9 @@ Read `docs/flag-conventions.md` before adding any flag. Summary:
 - **`--json` on `prompt`**: means "emit response as JSON object with metadata." It does NOT mean "instruct the LLM to respond in JSON." That is `--schema`.
 - **Temperature on `prompt`**: default is 0. Do not change this without an explicit `--temperature` flag. Determinism is the default behaviour.
 - **Secret safety in `prompt`**: API keys from env vars must never appear in stdout, stderr, or error messages. Sanitise all error output before writing.
-- **`Run()` must return int, not call `os.Exit`.** A tool's `Run()` returns 0, 1, or 2. `os.Exit` lives only in `main()` and `Die()`/`DieUsage()`. If you call `os.Exit` inside `Run()`, tests cannot check exit codes without panic/recover.
-- **Shared utilities return error, not die.** `KVPath()`, `PrintJSON()`, and other `internal/shared` functions must return `error`. The tool's `Run()` decides whether to call `Die()`. Never call `Die()` inside a shared utility.
-- **`fs.Parse` error must be checked.** After `fs.Parse(args)`, always check the error. If non-nil, call `DieUsage(err.Error())`. Never continue with unparsed flags.
+- **`Run()` must return int, not call `os.Exit`.** A tool's `Run()` returns 0, 1, or 2. `os.Exit` lives only in `main()`. Inside `Run()`, use `return shared.Errorf(...)` (returns 1) and `return shared.UsageErrorf(...)` (returns 2). If you call `os.Exit` or `Die()`/`DieUsage()` inside `Run()`, it terminates the test process.
+- **Shared utilities return error, not die.** `KVPath()`, `PrintJSON()`, and other `internal/shared` functions must return `error`. The tool's `Run()` handles the error with `shared.Errorf()`. Never call `Die()` inside a shared utility.
+- **`fs.Parse` error must be checked.** After `fs.Parse(args)`, always check the error. If non-nil, `return shared.UsageErrorf(err.Error())`. Never continue with unparsed flags.
 - **`io.ReadAll` is wrong for record-processing tools.** `valve`, `fuse`, `each`, `dedup`, `recase`, `agg`, `emit` process JSONL line-by-line. Use `bufio.Scanner` / `ScanLines()`. `io.ReadAll` on a 10GB log file is an OOM crash. Only use `io.ReadAll` for tools that need the full input (`prompt`, `tok`, `chunk`).
 - **`KVPath()` failure message must be actionable.** If `os.UserHomeDir()` fails, die with: `kv: cannot determine home directory: <err>\nset VRK_KV_PATH to override`. Do not silently fall back to `/tmp/vrk.db` — silent fallback creates two databases and confuses users.
 - **`modernc.org/sqlite` must be in `go.mod`** before building any tool that touches `kv`. If it is missing, add it explicitly. Do not substitute `mattn/go-sqlite3`.

@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -8,17 +9,18 @@ import (
 // KVPath returns the path to the SQLite database used by vrk kv.
 // Reads VRK_KV_PATH if set; otherwise defaults to ~/.vrk.db.
 // Creates the parent directory if it does not exist.
-func KVPath() string {
+// Returns an error — the caller decides whether to Die().
+func KVPath() (string, error) {
 	if p := os.Getenv("VRK_KV_PATH"); p != "" {
 		dir := filepath.Dir(p)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			Die("creating kv directory %s: %v", dir, err)
+			return "", fmt.Errorf("creating kv directory %s: %w", dir, err)
 		}
-		return p
+		return p, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		Die("finding home directory: %v", err)
+		return "", fmt.Errorf("finding home directory: %w", err)
 	}
-	return filepath.Join(home, ".vrk.db")
+	return filepath.Join(home, ".vrk.db"), nil
 }

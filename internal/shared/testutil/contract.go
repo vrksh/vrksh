@@ -10,8 +10,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/vrksh/vrksh/internal/shared"
 )
 
 // ContractCase describes a single test scenario for a vrksh tool.
@@ -24,16 +22,12 @@ type ContractCase struct {
 	WantExit int      // expected exit code: 0, 1, or 2
 }
 
-// exitSentinel is the panic value used to intercept os.Exit calls.
-type exitSentinel struct{ code int }
-
-// RunContractTests runs each case by replacing os.Stdin/Stdout/Stderr and
-// shared.ExitFunc, calling run(), and asserting the captured output and exit
-// code against the expected values.
+// RunContractTests runs each case by replacing os.Stdin/Stdout/Stderr, calling
+// run(), and asserting the captured output and exit code against expected values.
 //
-// Tools must route all exits through shared.Die or shared.DieUsage — direct
-// os.Exit calls will terminate the test process.
-func RunContractTests(t *testing.T, run func(), cases []ContractCase) {
+// run must be the tool's Run() function — it returns the exit code directly.
+// No os.Exit interception, no panic/recover: the return value is the exit code.
+func RunContractTests(t *testing.T, run func() int, cases []ContractCase) {
 	t.Helper()
 	for _, tc := range cases {
 		tc := tc
@@ -55,7 +49,7 @@ func RunContractTests(t *testing.T, run func(), cases []ContractCase) {
 
 // runCase executes a single ContractCase and returns captured stdout, stderr,
 // and exit code. It restores all global state before returning.
-func runCase(t *testing.T, run func(), tc ContractCase) (stdout, stderr string, exitCode int) {
+func runCase(t *testing.T, run func() int, tc ContractCase) (stdout, stderr string, exitCode int) {
 	t.Helper()
 
 	// --- set up stdin ---
@@ -87,7 +81,6 @@ func runCase(t *testing.T, run func(), tc ContractCase) (stdout, stderr string, 
 	origStdout := os.Stdout
 	origStderr := os.Stderr
 	origArgs := os.Args
-	origExit := shared.ExitFunc
 
 	// --- replace globals ---
 	os.Stdin = stdinR
@@ -95,24 +88,8 @@ func runCase(t *testing.T, run func(), tc ContractCase) (stdout, stderr string, 
 	os.Stderr = stderrW
 	os.Args = append([]string{"vrk"}, tc.Args...)
 
-	exitCode = 0
-	shared.ExitFunc = func(code int) {
-		exitCode = code
-		panic(exitSentinel{code})
-	}
-
-	// --- call run, recover exit panics ---
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if _, ok := r.(exitSentinel); !ok {
-					panic(r) // re-panic for unexpected panics
-				}
-				// exitCode was already set above
-			}
-		}()
-		run()
-	}()
+	// --- call run, capture return value ---
+	exitCode = run()
 
 	// --- close write ends so readers reach EOF ---
 	_ = stdoutW.Close()
@@ -124,7 +101,6 @@ func runCase(t *testing.T, run func(), tc ContractCase) (stdout, stderr string, 
 	os.Stdout = origStdout
 	os.Stderr = origStderr
 	os.Args = origArgs
-	shared.ExitFunc = origExit
 
 	// --- read captured output ---
 	var outBuf, errBuf bytes.Buffer

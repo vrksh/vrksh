@@ -7,11 +7,10 @@ import (
 )
 
 // PrintJSON marshals v to JSON and writes it to stdout with a trailing newline.
-// Calls Die (exit 1) if v is nil.
+// Returns an error if v is nil or marshaling fails — the caller decides whether to Die().
 func PrintJSON(v any) error {
 	if v == nil {
-		Die("cannot marshal nil")
-		return nil // unreachable — Die does not return
+		return fmt.Errorf("cannot marshal nil")
 	}
 	b, err := json.Marshal(v)
 	if err != nil {

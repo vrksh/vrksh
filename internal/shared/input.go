@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -51,6 +52,13 @@ func ReadInputLines(args []string) ([]string, error) {
 		lines = lines[:len(lines)-1]
 	}
 	return lines, nil
+}
+
+// ScanLines returns a bufio.Scanner over r. Use for JSONL record-processing
+// tools that read input line-by-line. Never use io.ReadAll for record-processing
+// tools — it will OOM on large inputs.
+func ScanLines(r io.Reader) *bufio.Scanner {
+	return bufio.NewScanner(r)
 }
 
 // readFromStdin reads all of stdin, strips exactly one trailing newline, and

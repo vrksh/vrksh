@@ -1,0 +1,13 @@
+{
+  "version": "0.1.0",
+  "tools": [
+    {"name": "jwt",    "description": "JWT inspector — decode, --claim, --expired"},
+    {"name": "epoch",  "description": "Timestamp converter — unix↔ISO, relative time"},
+    {"name": "uuid",   "description": "UUID generator — v4/v7, --count, --json"},
+    {"name": "tok",    "description": "Token counter — --budget, --fail, --model"},
+    {"name": "sse",    "description": "SSE stream parser — text/event-stream to JSONL"},
+    {"name": "coax",   "description": "Retry wrapper — --retry, --backoff, --on"},
+    {"name": "prompt", "description": "LLM prompt — --model, --budget, --schema, --fail"},
+    {"name": "kv",     "description": "Key-value store — set/get/del/list, SQLite-backed"}
+  ]
+}

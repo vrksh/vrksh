@@ -3,6 +3,7 @@ package shared
 import (
 	"io"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -186,5 +187,29 @@ func TestReadInputLines(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestScanLines verifies ScanLines returns a working line-by-line scanner.
+func TestScanLines(t *testing.T) {
+	input := "line1\nline2\nline3\n"
+	scanner := ScanLines(strings.NewReader(input))
+
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scanner error: %v", err)
+	}
+
+	want := []string{"line1", "line2", "line3"}
+	if len(lines) != len(want) {
+		t.Fatalf("got %d lines %v, want %d", len(lines), lines, len(want))
+	}
+	for i, line := range lines {
+		if line != want[i] {
+			t.Errorf("line[%d]: got %q, want %q", i, line, want[i])
+		}
 	}
 }

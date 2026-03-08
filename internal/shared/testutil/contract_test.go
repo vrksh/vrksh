@@ -8,24 +8,26 @@ import (
 	"github.com/vrksh/vrksh/internal/shared"
 )
 
-func dummyRun() {
+func dummyRun() int {
 	_, _ = fmt.Fprint(os.Stdout, "hello\n")
+	return 0
 }
 
-func dummyRunExit1() {
-	shared.Die("test error")
+func dummyRunExit1() int {
+	return shared.Errorf("test error")
 }
 
-func dummyRunExit2() {
-	shared.DieUsage("missing argument")
+func dummyRunExit2() int {
+	return shared.UsageErrorf("missing argument")
 }
 
-func dummyRunWithStdin() {
+func dummyRunWithStdin() int {
 	input, err := shared.ReadInput(os.Args[1:])
 	if err != nil {
-		shared.DieUsage("%v", err)
+		return shared.UsageErrorf("%v", err)
 	}
 	_, _ = fmt.Fprintln(os.Stdout, input)
+	return 0
 }
 
 func TestRunContractTests(t *testing.T) {
@@ -35,13 +37,13 @@ func TestRunContractTests(t *testing.T) {
 		})
 	})
 
-	t.Run("exit 1 captured from Die", func(t *testing.T) {
+	t.Run("exit 1 returned directly", func(t *testing.T) {
 		RunContractTests(t, dummyRunExit1, []ContractCase{
 			{Name: "error", WantErr: "test error", WantExit: 1},
 		})
 	})
 
-	t.Run("exit 2 captured from DieUsage", func(t *testing.T) {
+	t.Run("exit 2 returned directly", func(t *testing.T) {
 		RunContractTests(t, dummyRunExit2, []ContractCase{
 			{Name: "usage", WantErr: "missing argument", WantExit: 2},
 		})
