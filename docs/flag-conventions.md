@@ -63,7 +63,7 @@ cat response.md | vrk strip --text        # redundant here but valid
 ```bash
 cat prompt.txt | vrk tok --budget 4000 --fail    # exit 1 if over 4000 tokens
 echo $TOKEN | vrk jwt --expired --fail           # exit 1 if token is expired
-cat data.txt | vrk ask --schema s.json --fail    # exit 1 if output doesn't match schema
+cat data.txt | vrk prompt --schema s.json --fail    # exit 1 if output doesn't match schema
 ```
 
 ---
@@ -74,14 +74,14 @@ cat data.txt | vrk ask --schema s.json --fail    # exit 1 if output doesn't matc
 
 **Distinct from `--json`:** `--json` is about format. `--schema` is about contract. A tool can produce `--json` output without enforcing any shape. `--schema` enforces a specific shape and exits 1 on mismatch.
 
-**Provider-aware on `ask`:**
+**Provider-aware on `prompt`:**
 - OpenAI: uses `response_format.json_schema` with `strict: true` — API-level guarantee, no validation step needed.
 - Anthropic/Claude: injects schema into system prompt, then validates response post-call. Exits 1 on mismatch. Use `--retry N` to retry on validation failure.
 
 **Examples:**
 ```bash
-cat data.txt | vrk ask --schema resume.json           # output must match schema
-cat data.txt | vrk ask --schema resume.json --retry 3 # retry up to 3x if Claude misses
+cat data.txt | vrk prompt --schema resume.json           # output must match schema
+cat data.txt | vrk prompt --schema resume.json --retry 3 # retry up to 3x if Claude misses
 cat messy.txt | vrk cast --schema invoice.json        # extract + enforce structure
 ```
 
@@ -100,7 +100,7 @@ cat messy.txt | vrk cast --schema invoice.json        # extract + enforce struct
 
 **Examples:**
 ```bash
-echo 'summarize this' | vrk ask --explain
+echo 'summarize this' | vrk prompt --explain
 # prints: curl https://api.anthropic.com/v1/messages -H '...' -d '{...}'
 
 vrk kv set mykey myvalue --explain
@@ -125,7 +125,7 @@ vrk kv set mykey myvalue --explain
 
 **Meaning:** Preview side effects without executing them. For tools that write files, modify state, or make mutations.
 
-**Distinct from `--explain`:** `--explain` shows the equivalent shell command. `--dry-run` shows what state would change. Use `--dry-run` for stateful tools (`kv`, `vrk --bare`), `--explain` for network/API tools (`ask`, `fetch`).
+**Distinct from `--explain`:** `--explain` shows the equivalent shell command. `--dry-run` shows what state would change. Use `--dry-run` for stateful tools (`kv`, `vrk --bare`), `--explain` for network/API tools (`prompt`, `fetch`).
 
 **Examples:**
 ```bash
@@ -137,7 +137,7 @@ vrk kv set mykey val --dry-run   # shows what would be written without writing
 
 ### `--model <name>`
 
-**Meaning:** Override the default model. Applies to tools that make LLM calls (`ask`, `cast`, `slim`, `seek`).
+**Meaning:** Override the default model. Applies to tools that make LLM calls (`prompt`, `cast`, `slim`, `seek`).
 
 **Format:** Provider-prefixed model string or bare model name. Resolution order:
 1. `--model` flag
@@ -147,9 +147,9 @@ vrk kv set mykey val --dry-run   # shows what would be written without writing
 
 **Examples:**
 ```bash
-cat prompt.txt | vrk ask --model gpt-4o
-cat prompt.txt | vrk ask --model claude-opus-4-5
-cat prompt.txt | vrk ask --model ollama/llama3   # local via --endpoint
+cat prompt.txt | vrk prompt --model gpt-4o
+cat prompt.txt | vrk prompt --model claude-opus-4-5
+cat prompt.txt | vrk prompt --model ollama/llama3   # local via --endpoint
 ```
 
 ---
@@ -158,24 +158,24 @@ cat prompt.txt | vrk ask --model ollama/llama3   # local via --endpoint
 
 **Meaning:** Token budget. Behaviour depends on tool:
 - On `tok`: warn or fail if stdin exceeds N tokens.
-- On `ask`: refuse to send if stdin exceeds N tokens (integrates `tok` internally).
+- On `prompt`: refuse to send if stdin exceeds N tokens (integrates `tok` internally).
 
 Always used with `--fail` to make it a hard guard, or `--warn` to make it advisory.
 
 ```bash
 cat prompt.txt | vrk tok --budget 4000 --warn    # warn to stderr, continue
 cat prompt.txt | vrk tok --budget 4000 --fail    # exit 1 if over budget
-cat prompt.txt | vrk ask --budget 4000 --fail    # refuse to call API if over budget
+cat prompt.txt | vrk prompt --budget 4000 --fail    # refuse to call API if over budget
 ```
 
 ---
 
 ### `--retry <N>`
 
-**Meaning:** Retry the operation up to N times on failure. Not the same as `coax` — `--retry` is a flag on a tool for a specific failure mode within that tool (e.g. schema validation failure on `ask`). `coax` wraps any external command.
+**Meaning:** Retry the operation up to N times on failure. Not the same as `coax` — `--retry` is a flag on a tool for a specific failure mode within that tool (e.g. schema validation failure on `prompt`). `coax` wraps any external command.
 
 ```bash
-cat data.txt | vrk ask --schema s.json --retry 3   # retry if Claude's output fails schema
+cat data.txt | vrk prompt --schema s.json --retry 3   # retry if Claude's output fails schema
 ```
 
 ---

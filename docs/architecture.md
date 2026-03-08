@@ -154,11 +154,11 @@ printf '+3d' | vrk epoch # no trailing newline — also works
 
 ---
 
-## 7. `ask` Defaults — Determinism First
+## 7. `prompt` Defaults — Determinism First
 
-**Decision:** `ask` defaults to temperature 0, uses `VRK_DEFAULT_MODEL` or built-in default, never infers model from context.
+**Decision:** `prompt` defaults to temperature 0, uses `VRK_DEFAULT_MODEL` or built-in default, never infers model from context.
 
-**Why:** `ask` is a pipeline tool, not a chat interface. Pipelines need reproducible outputs. Temperature 0 is the correct default for a tool that is supposed to behave like `jq` or `sed`.
+**Why:** `prompt` is a pipeline tool, not a chat interface. Pipelines need reproducible outputs. Temperature 0 is the correct default for a tool that is supposed to behave like `jq` or `sed`.
 
 **Temperature escalation on `--retry`:** retrying at temperature 0 produces identical wrong output every time. `--retry N` escalates: attempt 1 at 0.0, attempt 2 at 0.1, attempt 3 at 0.2. First attempt is maximally deterministic; subsequent attempts introduce variance to break failure loops.
 
@@ -189,7 +189,7 @@ printf '+3d' | vrk epoch # no trailing newline — also works
 **Decision:** `checkpoint` is a `tee`-style pipeline primitive. It passes stdin to stdout unchanged while writing a named snapshot as a side effect.
 
 ```bash
-cat data.jsonl | vrk ask | vrk checkpoint step-2 | vrk validate
+cat data.jsonl | vrk prompt | vrk checkpoint step-2 | vrk validate
 #                                    ↑
 #              data flows through — pipeline never breaks
 #              snapshot written to ~/.vrk/checkpoints/step-2
@@ -241,7 +241,7 @@ cat data.jsonl | vrk ask | vrk checkpoint step-2 | vrk validate
 
 ## 12. Streaming — Explicit Flush, No Buffering
 
-**Decision:** streaming tools (`sse`, `ask` with streaming) flush stdout explicitly after every write.
+**Decision:** streaming tools (`sse`, `prompt` with streaming) flush stdout explicitly after every write.
 
 ```go
 w := bufio.NewWriter(os.Stdout)

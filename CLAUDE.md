@@ -19,7 +19,7 @@ cmd/
   tok/tok.go                    — package tok, exports Run()
   sse/sse.go                    — package sse, exports Run()
   coax/coax.go                  — package coax, exports Run()
-  ask/ask.go                    — package ask, exports Run()
+  prompt/prompt.go               — package prompt, exports Run()
   kv/kv.go                      — package kv, exports Run()
 internal/
   shared/
@@ -189,11 +189,11 @@ Read `docs/flag-conventions.md` before adding any flag. Summary:
 - **Flag library**: use `pflag` (`github.com/spf13/pflag`), not stdlib `flag`, not cobra. `pflag` is already imported via `internal/shared/flags.go` — use `StandardFlags` and extend with `pflag.FlagSet` per tool. Do not add cobra.
 - **Stdin-only input**: the most common mistake — implementing a tool that only reads from stdin and requires `echo 'input' | vrk tool`. Every tool must also accept a positional argument: `vrk tool 'input'`. Use `internal/shared/input.go:readInput()`. Do not reinvent this.
 - **Trailing newline stripping**: `echo` appends a newline. `printf` does not. `strings.TrimRight(input, "\n")` — strip exactly one trailing newline, not all whitespace. `strings.TrimSpace` is wrong here; it would strip meaningful leading/trailing whitespace from content.
-- **Buffered stdout**: streaming tools (`sse`, `ask`) need explicit `bufio.Writer` flushing after every write. Do not rely on default buffering.
+- **Buffered stdout**: streaming tools (`sse`, `prompt`) need explicit `bufio.Writer` flushing after every write. Do not rely on default buffering.
 - **Stderr contamination**: informational messages, warnings, progress — all go to stderr. If it's not data, it must not touch stdout.
-- **`--json` on `ask`**: means "emit response as JSON object with metadata." It does NOT mean "instruct the LLM to respond in JSON." That is `--schema`.
-- **Temperature on `ask`**: default is 0. Do not change this without an explicit `--temperature` flag. Determinism is the default behaviour.
-- **Secret safety in `ask`**: API keys from env vars must never appear in stdout, stderr, or error messages. Sanitise all error output before writing.
+- **`--json` on `prompt`**: means "emit response as JSON object with metadata." It does NOT mean "instruct the LLM to respond in JSON." That is `--schema`.
+- **Temperature on `prompt`**: default is 0. Do not change this without an explicit `--temperature` flag. Determinism is the default behaviour.
+- **Secret safety in `prompt`**: API keys from env vars must never appear in stdout, stderr, or error messages. Sanitise all error output before writing.
 
 ## Build order — tests before implementation
 
