@@ -60,16 +60,70 @@ Two agent-facing files, different purposes:
 ```
 
 **Package structure:** each tool is its own Go package (`package jwt`, `package epoch`, etc.)
-with a single exported function `Run()`. `main.go` imports each tool package and calls `Run()`.
-This is idiomatic Go — tools in their own directories, own namespaces, independently testable.
+with a single exported function `Run() int` that returns an exit code. `main.go` maintains a
+registry map and calls `os.Exit(tool())`. This is idiomatic Go — tools in their own directories,
+own namespaces, independently testable without process exit.
 
 ```go
-// main.go pattern
-import "github.com/vrksh/vrksh/cmd/jwt"
-...
-case "jwt":
-    jwt.Run()
+// main.go pattern — registry map, not switch statement
+import (
+    "github.com/vrksh/vrksh/cmd/jwt"
+    "github.com/vrksh/vrksh/cmd/epoch"
+    // one import per tool
+)
+
+//go:embed integrations/skills/SKILLS.md
+var skillsDoc string
+
+//go:embed manifest.json
+var manifestJSON string
+
+var tools = map[string]func() int{
+    "jwt":    jwt.Run,
+    "epoch":  epoch.Run,
+    "prompt": prompt.Run,
+    // one line per tool — no switch, no manual argument shifting
+}
+
+func main() {
+    // handle --manifest and --skills before tool dispatch
+    if len(os.Args) > 1 && os.Args[1] == "--manifest" {
+        fmt.Print(manifestJSON)
+        os.Exit(0)
+    }
+    if len(os.Args) > 1 && os.Args[1] == "--skills" {
+        fmt.Print(skillsDoc)
+        os.Exit(0)
+    }
+    // multicall: check argv[0] first, then argv[1]
+    name := filepath.Base(os.Args[0])
+    if fn, ok := tools[name]; ok {
+        os.Exit(fn())
+    }
+    if len(os.Args) < 2 {
+        fmt.Fprintf(os.Stderr, "usage: vrk <tool> [args]\n")
+        os.Exit(2)
+    }
+    name = os.Args[1]
+    os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+    fn, ok := tools[name]
+    if !ok {
+        fmt.Fprintf(os.Stderr, "vrk: unknown tool %q\n", name)
+        os.Exit(2)
+    }
+    os.Exit(fn())
+}
 ```
+
+**Why registry, not switch:** at 30+ tools a switch requires two edits per tool (import + case) and drifts from the manifest. The registry requires one line. `--manifest` is trivially derived by iterating `tools`. Never revert to a switch.
+
+**`Run() int` not `Run()`:** every tool's `Run()` must return an exit code (0/1/2). `main.go` calls `os.Exit(tool())`. This keeps tools usable as libraries, makes tests check return values instead of intercepting `os.Exit`, and is the standard Go pattern. Never call `os.Exit` inside a tool's `Run()` — only in `main()` and in `Die()`/`DieUsage()`.
+
+**`manifest.json`:** lives at repo root, checked in, updated manually when tools are added. Format:
+```json
+{"version":"0.1.0","tools":[{"name":"jwt","description":"JWT inspector"},{"name":"epoch","description":"Timestamp converter"}]}
+```
+When you add a tool, add it to `tools` map, `manifest.json`, and `SKILLS.md` in the same commit.
 
 **Monorepo.** Everything lives here. Only `homebrew-vrksh` is a separate repo — hard Homebrew naming requirement.
 
@@ -89,6 +143,10 @@ make fuzz                  # fuzz all required tools for 60s each
 make check                 # build + test + lint + cross - run before every commit
 make clean                 # remove build artifacts
 ```
+
+**Makefile must have `export CGO_ENABLED=0` at the top** — not repeated per target. If it is not there, add it before anything else. This prevents accidental CGO creep from any target that doesn't explicitly set it.
+
+**Linters enabled in `.golangci.yml`:** `errcheck`, `govet`, `staticcheck`, `gosimple`, `ineffassign`, `unused`, `revive`, `gocritic`. Add `bodyclose` when `grab` is built (catches leaked HTTP response bodies). Do not add linters you are not going to fix — every enabled linter is a rule Claude Code must satisfy.
 
 Two flags are built into the root binary alongside the tool dispatcher:
 
@@ -128,10 +186,14 @@ git push origin v0.1.0
 
 ## Architecture rules — never deviate
 
-- **One binary, multicall dispatch.** `main.go` reads `os.Args[0]` or `os.Args[1]` to route. Never create separate binaries per tool. Each tool is `package <toolname>` in `cmd/<tool>/` with a single exported `Run()` function. `main.go` imports them all.
+- **One binary, multicall dispatch.** `main.go` reads `os.Args[0]` or `os.Args[1]` to route. Never create separate binaries per tool. Each tool is `package <toolname>` in `cmd/<tool>/` with a single exported `Run() int` function. `main.go` imports them all via the registry map.
+- **`Run() int` returns exit code.** Never call `os.Exit` inside a tool's `Run()`. Return 0, 1, or 2. `main.go` calls `os.Exit(fn())`. This keeps tools testable as libraries and removes the need for panic/recover in tests.
+- **Library-first shared utilities.** Functions in `internal/shared/` must return `error`, not call `Die()` directly. `KVPath() (string, error)`, `PrintJSON(v any) error`. The tool's `Run()` receives the error and decides whether to call `Die()`. This makes shared utilities usable in tests and future library consumers without process exit.
 - **`pflag` for flag parsing.** `github.com/spf13/pflag` — not stdlib `flag`, not cobra. Drop-in replacement with POSIX short flags (`-j`/`--json`). For subcommands (`kv set`/`kv get`), use a manual switch on `os.Args[1]` then a sub-`pflag.FlagSet`. No cobra.
-- **`modernc.org/sqlite` for SQLite.** Never `mattn/go-sqlite3` — it requires CGO and breaks cross-compilation.
+- **Always check `fs.Parse(args)` error.** When using `pflag.ContinueOnError`, you must check the return value of `fs.Parse(args)` and call `DieUsage(err.Error())` if it is non-nil. Never let pflag print to stderr and continue with invalid flag state.
+- **`modernc.org/sqlite` for SQLite.** Never `mattn/go-sqlite3` — it requires CGO and breaks cross-compilation. Verify `modernc.org/sqlite` is in `go.mod` before building any tool that touches `kv`.
 - **No CGO anywhere.** The static binary promise depends on this. `CGO_ENABLED=0` must produce a working binary.
+- **Streaming input for record-processing tools.** Tools that operate on JSONL record-by-record (`valve`, `fuse`, `each`, `dedup`, `recase`, `agg`, `emit`) must use `bufio.Scanner` — not `io.ReadAll`. `io.ReadAll` is only appropriate for tools where the full input is semantically required (`prompt`, `tok`, `chunk`). Use `internal/shared/input.go:ScanLines()` for the streaming path.
 - **Minimal dependencies.** Check `go.mod` after every session. Justify every new import.
 
 ## The contract — every tool must follow this
@@ -194,6 +256,12 @@ Read `docs/flag-conventions.md` before adding any flag. Summary:
 - **`--json` on `prompt`**: means "emit response as JSON object with metadata." It does NOT mean "instruct the LLM to respond in JSON." That is `--schema`.
 - **Temperature on `prompt`**: default is 0. Do not change this without an explicit `--temperature` flag. Determinism is the default behaviour.
 - **Secret safety in `prompt`**: API keys from env vars must never appear in stdout, stderr, or error messages. Sanitise all error output before writing.
+- **`Run()` must return int, not call `os.Exit`.** A tool's `Run()` returns 0, 1, or 2. `os.Exit` lives only in `main()` and `Die()`/`DieUsage()`. If you call `os.Exit` inside `Run()`, tests cannot check exit codes without panic/recover.
+- **Shared utilities return error, not die.** `KVPath()`, `PrintJSON()`, and other `internal/shared` functions must return `error`. The tool's `Run()` decides whether to call `Die()`. Never call `Die()` inside a shared utility.
+- **`fs.Parse` error must be checked.** After `fs.Parse(args)`, always check the error. If non-nil, call `DieUsage(err.Error())`. Never continue with unparsed flags.
+- **`io.ReadAll` is wrong for record-processing tools.** `valve`, `fuse`, `each`, `dedup`, `recase`, `agg`, `emit` process JSONL line-by-line. Use `bufio.Scanner` / `ScanLines()`. `io.ReadAll` on a 10GB log file is an OOM crash. Only use `io.ReadAll` for tools that need the full input (`prompt`, `tok`, `chunk`).
+- **`KVPath()` failure message must be actionable.** If `os.UserHomeDir()` fails, die with: `kv: cannot determine home directory: <err>\nset VRK_KV_PATH to override`. Do not silently fall back to `/tmp/vrk.db` — silent fallback creates two databases and confuses users.
+- **`modernc.org/sqlite` must be in `go.mod`** before building any tool that touches `kv`. If it is missing, add it explicitly. Do not substitute `mattn/go-sqlite3`.
 
 ## Build order — tests before implementation
 
@@ -212,6 +280,7 @@ If no correctness spec was provided in the session prompt, ask for one before pr
 ## Testing approach
 
 - Test the contract, not the implementation.
+- **Check return value, not `os.Exit`.** Because `Run() int` returns the exit code, tests simply call `Run()` and check the int. No panic/recover, no `exitSentinel`. If you find yourself intercepting `os.Exit` in a test, `Run()` is calling `os.Exit` internally — that is a bug, fix it.
 - Golden files in `testdata/<tool>/` for deterministic tools.
 - Exit code tests are highest priority — they must never regress.
 - For `epoch` tests, always pass `--now 1740000000` to make relative times deterministic.
