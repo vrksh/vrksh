@@ -269,6 +269,14 @@ Read `docs/flag-conventions.md` before adding any flag. Summary:
 - **`io.ReadAll` is wrong for record-processing tools.** `valve`, `fuse`, `each`, `dedup`, `recase`, `agg`, `emit` process JSONL line-by-line. Use `bufio.Scanner` / `ScanLines()`. `io.ReadAll` on a 10GB log file is an OOM crash. Only use `io.ReadAll` for tools that need the full input (`prompt`, `tok`, `chunk`).
 - **`KVPath()` failure message must be actionable.** If `os.UserHomeDir()` fails, die with: `kv: cannot determine home directory: <err>\nset VRK_KV_PATH to override`. Do not silently fall back to `/tmp/vrk.db` — silent fallback creates two databases and confuses users.
 - **`modernc.org/sqlite` must be in `go.mod`** before building any tool that touches `kv`. If it is missing, add it explicitly. Do not substitute `mattn/go-sqlite3`.
+- **JSON numbers: use `json.NewDecoder` with `UseNumber()`, never `json.Unmarshal` into `interface{}`** when the JSON may contain large integers (timestamps, IDs, token counts). `json.Unmarshal` into `interface{}` converts all numbers to `float64`, which silently loses precision above 2^53. JWT `exp`/`iat` claims, Unix timestamps, and database IDs all fall in this range. Always:
+  ```go
+  var v interface{}
+  d := json.NewDecoder(strings.NewReader(input))
+  d.UseNumber()
+  if err := d.Decode(&v); err != nil { ... }
+  ```
+  This applies to `jwt`, `epoch`, `kv`, `prompt --json`, and any tool that unmarshals JSONL records.
 
 ## Build order — tests before implementation
 
@@ -280,6 +288,9 @@ When building any tool, always follow this order:
 4. Write the implementation in `cmd/<tool>/main.go`
 5. Run `go test ./cmd/<tool>/...` again — all tests must pass (green)
 6. Run `make check` — cross-compilation and linting must pass
+7. Run `testdata/<tool>/smoke.sh` against the built binary — confirms end-to-end behaviour that unit tests cannot catch (real process exit codes, stdout/stderr separation, pipeline composition)
+
+The smoke script must be committed in the same commit as the tool.
 
 Do not write any implementation code before the tests exist.
 If no correctness spec was provided in the session prompt, ask for one before proceeding.
