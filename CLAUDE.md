@@ -288,7 +288,7 @@ When building any tool, always follow this order:
 4. Write the implementation in `cmd/<tool>/main.go`
 5. Run `go test ./cmd/<tool>/...` again — all tests must pass (green)
 6. Run `make check` — cross-compilation and linting must pass
-7. Run `make smoke` — runs all `testdata/*/smoke.sh` against the built binary — confirms end-to-end behaviour that unit tests cannot catch (real process exit codes, stdout/stderr separation, pipeline composition)
+7. Run `testdata/<tool>/smoke.sh` against the built binary — confirms end-to-end behaviour that unit tests cannot catch (real process exit codes, stdout/stderr separation, pipeline composition)
 
 The smoke script must be committed in the same commit as the tool.
 
@@ -301,7 +301,7 @@ If no correctness spec was provided in the session prompt, ask for one before pr
 - **Check return value, not `os.Exit`.** Because `Run() int` returns the exit code, tests simply call `Run()` and check the int. No panic/recover, no `exitSentinel`. If you find yourself intercepting `os.Exit` in a test, `Run()` is calling `os.Exit` internally — that is a bug, fix it.
 - Golden files in `testdata/<tool>/` for deterministic tools.
 - Exit code tests are highest priority — they must never regress.
-- For `epoch` tests, always pass `--now 1740000000` to make relative times deterministic.
+- For `epoch` tests, always pass `--at 1740009600` to make relative times deterministic. Use `1740009600` (`2025-02-20T00:00:00Z`) as the anchor — not `1740000000` (that is `2025-02-19T21:20:00Z`, not a clean boundary).
 - Fuzz targets required for: `jwt`, `epoch`, `tok`, `sse`. Contract: never panic, never hang, exit within 1 second.
 - Integration tests tagged `//go:build integration` — excluded from default `go test ./...`.
 - Property tests required for every tool — at least one invariant that must hold for any input, not just the example cases.

@@ -1,0 +1,109 @@
+# AGENTS.md — vrksh quick reference
+
+Unix-style CLI tools for AI pipelines. One static Go binary, multicall dispatch.
+For full flag reference, gotchas, and compose patterns: `vrk --skills`
+
+---
+
+## Tools
+
+| Tool | What it does | Key flags |
+|------|-------------|-----------|
+| `jwt` | Decode and inspect JWTs (no signature verification) | `--claim <key>`, `--expired`, `--valid`, `--json` |
+| `epoch` | Convert between Unix timestamps and ISO 8601 | `--iso`, `--tz <zone>`, `--now`, `--at <ts>` |
+| `uuid` | Generate UUIDs | `--v7`, `--count <n>`, `--json` |
+| `tok` | Count tokens, enforce budget | `--budget <n>`, `--model <name>` |
+| `sse` | Parse Server-Sent Events stream to JSONL | `--data-only` |
+| `coax` | Retry a command until it succeeds | `--attempts <n>`, `--delay <d>` |
+| `prompt` | Send a prompt to an LLM, emit response | `--model`, `--system`, `--json`, `--schema` |
+| `kv` | Persistent key-value store (SQLite-backed) | subcommands: `set get del incr list` |
+
+---
+
+## The contract — every tool follows this
+
+- Input: positional argument **or** stdin (both always work)
+- Output: data → stdout only
+- Errors: → stderr only; stdout is empty on error
+- Exit 0: success
+- Exit 1: runtime error (invalid input, API failure, budget exceeded)
+- Exit 2: usage error (missing input, unknown flag, bad argument)
+- `--help`: always works, exits 0, prints to stdout
+
+```bash
+vrk jwt 'eyJ...'           # positional arg
+echo 'eyJ...' | vrk jwt    # stdin — identical result
+```
+
+---
+
+## Five key patterns
+
+**1. Pipeline guard — fail fast on expired token**
+```bash
+echo "$JWT" | vrk jwt --expired | vrk prompt --system "..."
+# If JWT is expired, vrk jwt exits 1 and the pipeline stops
+```
+
+**2. Deterministic timestamps in pipelines**
+```bash
+echo '+3d' | vrk epoch --at 1740009600    # always 1740268800, regardless of system time
+```
+
+**3. Token budget enforcement**
+```bash
+cat context.txt | vrk tok --budget 4000   # exits 1 if over budget
+```
+
+**4. Extract a single JWT claim**
+```bash
+echo "$JWT" | vrk jwt --claim sub         # prints raw value, no JSON wrapping
+```
+
+**5. Persistent state across pipeline runs**
+```bash
+vrk kv set run_id "$(vrk uuid)"
+vrk kv get run_id
+```
+
+---
+
+## Flag conventions — consistent across all tools
+
+| Flag | Short | Meaning |
+|------|-------|---------|
+| `--json` | `-j` | Emit output as JSON object or JSONL |
+| `--text` | `-t` | Plain text output, no formatting |
+| `--quiet` | `-q` | Suppress stderr |
+| `--fail` | `-f` | Exit 1 if condition not met |
+| `--schema` | `-s` | Output must match JSON schema |
+| `--model` | `-m` | Override model |
+| `--count` | `-n` | Numeric count |
+| `--explain` | — | Print what would happen, don't do it |
+| `--dry-run` | — | Preview mutations without executing |
+
+---
+
+## Gotchas
+
+- **`epoch` relative times must be signed.** `+3d` or `-3d`. Bare `3d` exits 2.
+- **`epoch` timezone abbreviations are ambiguous.** `IST`, `EST`, `PST` exit 2.
+  Use IANA names (`America/New_York`) or numeric offsets (`+05:30`).
+- **`epoch --tz` requires `--iso`.** Using `--tz` without `--iso` exits 2.
+- **`epoch --at` requires input.** `vrk epoch --at 1740009600` with no other
+  input exits 2. Use `vrk epoch --now` to print the current timestamp.
+- **`jwt` does not verify signatures.** It is an inspector, not a validator.
+- **`jwt --claim` returns raw values.** Strings are unquoted, booleans are
+  `true`/`false`, numbers are plain integers. No JSON wrapping.
+- **`prompt --json` wraps the response in metadata.** It does NOT instruct the
+  LLM to respond in JSON. Use `--schema` for structured LLM output.
+
+---
+
+## Discovery
+
+```bash
+vrk --manifest    # JSON list of all tools and descriptions
+vrk --skills      # full reference: flags, exit codes, gotchas, compose patterns
+vrk <tool> --help # per-tool usage
+```
