@@ -288,7 +288,7 @@ When building any tool, always follow this order:
 4. Write the implementation in `cmd/<tool>/main.go`
 5. Run `go test ./cmd/<tool>/...` again — all tests must pass (green)
 6. Run `make check` — cross-compilation and linting must pass
-7. Run `testdata/<tool>/smoke.sh` against the built binary — confirms end-to-end behaviour that unit tests cannot catch (real process exit codes, stdout/stderr separation, pipeline composition)
+7. Run `make smoke` — runs all `testdata/*/smoke.sh` against the built binary — confirms end-to-end behaviour that unit tests cannot catch (real process exit codes, stdout/stderr separation, pipeline composition)
 
 The smoke script must be committed in the same commit as the tool.
 

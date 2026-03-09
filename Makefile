@@ -1,6 +1,6 @@
 export CGO_ENABLED=0
 
-.PHONY: build test test-v test-tool lint fuzz cross check clean
+.PHONY: build test test-v test-tool lint fuzz cross check smoke clean
 
 # Build the binary. CGO_ENABLED=0 is mandatory - static binary promise depends on it.
 build:
@@ -38,9 +38,17 @@ cross:
 	@GOOS=darwin GOARCH=arm64 go build -o /dev/null . && echo "ok  darwin/arm64"
 
 # Full pre-commit check. Run before every commit. Takes ~30 seconds.
-check: build test lint cross
+check: build test lint cross smoke
 	@echo ""
 	@echo "all checks passed"
+
+# End-to-end smoke tests against the real binary.
+# Depends on build so it can also be run standalone: make smoke
+smoke: build
+	@for f in testdata/*/smoke.sh; do \
+		echo "--- $$f ---"; \
+		VRK=./vrk bash $$f || exit 1; \
+	done
 
 # Remove build artifacts
 clean:
