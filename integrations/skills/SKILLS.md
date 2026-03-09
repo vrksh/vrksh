@@ -155,3 +155,89 @@ CUTOFF=$(vrk epoch -30d --at "$BASELINE")
 - `--now` is a boolean flag (prints current timestamp and exits). Use `--at` to set a reference.
 - Negative integers (`-1000`) are valid pre-epoch Unix timestamps — pass via stdin to avoid flag parsing.
 - Stdout is always empty on error — errors go to stderr only.
+
+---
+
+## uuid — UUID Generator
+
+Generates UUIDs. v4 (random) by default, v7 (time-ordered) with `--v7`.
+Reads no stdin — input is never required or consumed.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--v7` | — | Generate a v7 (time-ordered) UUID instead of v4 |
+| `--count <n>` | `-n` | Number of UUIDs to generate (default 1, must be >= 1) |
+| `--json` | `-j` | Emit each UUID as a JSON object: `{uuid, version, generated_at}` |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 2 | Usage error — `--count` less than 1, unknown flag |
+
+### Output format
+
+Plain text (default): one UUID per line, lowercase, with hyphens. Format: `8-4-4-4-12` hex characters.
+
+JSON (`--json`): one object per line (JSONL), always with these three fields:
+```json
+{"uuid":"a3f2c1d4-8e7b-4f2a-9c1d-3e5f7a8b9c0d","version":4,"generated_at":1740000000}
+```
+`generated_at` is a Unix timestamp (seconds) computed once per invocation — all UUIDs in a batch share the same value.
+
+### Examples
+
+```bash
+# Single v4 UUID (default)
+vrk uuid
+
+# Single v7 UUID (time-ordered)
+vrk uuid --v7
+
+# Five v4 UUIDs
+vrk uuid --count 5
+
+# Five v7 UUIDs — lexicographically ordered (each >= previous)
+vrk uuid --v7 --count 5
+
+# JSON output
+vrk uuid --json
+# → {"uuid":"...","version":4,"generated_at":1740000000}
+
+# JSONL output for a batch
+vrk uuid --count 5 --json
+
+# Use as a correlation ID in a pipeline
+ID=$(vrk uuid)
+vrk prompt "Summarise this" | vrk kv set "result:$ID"
+```
+
+### Compose patterns
+
+```bash
+# Generate a request ID and thread it through a pipeline
+REQ=$(vrk uuid)
+cat payload.json | vrk prompt "process this" | vrk kv set "response:$REQ"
+
+# Use v7 UUIDs as time-ordered database keys (sortable without a separate created_at column)
+vrk uuid --v7 --count 100 | while read id; do
+  echo "$id"
+done
+
+# Extract uuid field from JSON output
+vrk uuid --json | jq -r '.uuid'
+
+# Batch generation with metadata preserved
+vrk uuid --v7 --count 10 --json | jq -r '.uuid'
+```
+
+### Gotchas
+
+- `uuid` reads **no stdin**. Piping anything into it is silently ignored — the tool generates UUIDs regardless.
+- v7 UUIDs are **lexicographically ordered** within a batch because the library's monotonic counter guarantees each successive UUID is greater than the last, even within the same millisecond.
+- `--count 0` exits 2 — it is a usage error, not a no-op.
+- `generated_at` is computed **once before the generation loop**, so all UUIDs in a `--count N` batch share the same timestamp. This is intentional — it reflects when the batch was requested, not each individual generation.
+- Stdout is always empty on error — errors go to stderr only.
