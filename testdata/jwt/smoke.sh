@@ -87,6 +87,15 @@ assert_stderr_contains() {
   fi
 }
 
+assert_stderr_empty() {
+  local desc=$1 stderr=$2
+  if [ -z "$stderr" ]; then
+    ok "$desc (stderr empty)"
+  else
+    fail "$desc" "expected empty stderr, got: $stderr"
+  fi
+}
+
 # assert_stdout_equals <description> <expected> <actual>
 assert_stdout_equals() {
   local desc=$1 expected=$2 actual=$3
@@ -172,15 +181,76 @@ exit_code=$(set +e; "$VRK" jwt --json "$VALID_JWT" > /dev/null 2>&1; echo $?)
 assert_exit            "--json valid: exit 0"              0            "$exit_code"
 assert_stdout_contains "--json valid: has header"          '"header"'   "$stdout"
 assert_stdout_contains "--json valid: has payload"         '"payload"'  "$stdout"
-assert_stdout_contains "--json valid: has expires_in"      '"expires_in"' "$stdout"
+assert_stdout_contains "--json valid: has signature"       '"signature"' "$stdout"
+assert_stdout_contains "--json valid: has expired field"   '"expired"'  "$stdout"
+assert_stdout_contains "--json valid: has valid field"     '"valid"'    "$stdout"
 assert_stdout_contains "--json valid: alg in header"       '"alg"'      "$stdout"
-assert_stdout_contains "--json valid: expires_in not expired" "20"      "$stdout"  # 2050 = "~24 years..."
+assert_stdout_contains "--json valid: expired=false"       'false'      "$stdout"
 
-# --json on expired token: exit 0, expires_in = "expired"
+# --json on expired token: exit 0, expired=true, valid=false
 stdout=$("$VRK" jwt --json "$EXPIRED_JWT" 2>/dev/null) || true
 exit_code=$(set +e; "$VRK" jwt --json "$EXPIRED_JWT" > /dev/null 2>&1; echo $?)
-assert_exit            "--json expired: exit 0"               0          "$exit_code"
-assert_stdout_contains "--json expired: expires_in=expired"  'expired'   "$stdout"
+assert_exit            "--json expired: exit 0"            0       "$exit_code"
+assert_stdout_contains "--json expired: expired=true"     'true'   "$stdout"
+
+# -j shortform must be identical to --json
+stdout=$("$VRK" jwt -j "$VALID_JWT" 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" jwt -j "$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "-j shortform: exit 0"             0            "$exit_code"
+assert_stdout_contains "-j shortform: has header"         '"header"'   "$stdout"
+assert_stdout_contains "-j shortform: has signature"      '"signature"' "$stdout"
+
+# --expired --json valid token: {"expired":false}, exit 0, stderr empty
+stdout=$("$VRK" jwt --expired --json "$VALID_JWT" 2>/dev/null) || true
+stderr=$(set +e; "$VRK" jwt --expired --json "$VALID_JWT" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --expired --json "$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--expired --json valid: exit 0"          0            "$exit_code"
+assert_stderr_empty    "--expired --json valid: stderr empty"                 "$stderr"
+assert_stdout_contains "--expired --json valid: expired key"     '"expired"'  "$stdout"
+assert_stdout_contains "--expired --json valid: expired=false"   'false'      "$stdout"
+
+# --expired --json expired token: {"expired":true}, exit 1, stderr empty
+stdout=$(set +e; "$VRK" jwt --expired --json "$EXPIRED_JWT" 2>/dev/null; true)
+stderr=$(set +e; "$VRK" jwt --expired --json "$EXPIRED_JWT" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --expired --json "$EXPIRED_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--expired --json expired: exit 1"        1           "$exit_code"
+assert_stderr_empty    "--expired --json expired: stderr empty"              "$stderr"
+assert_stdout_contains "--expired --json expired: expired=true"  'true'      "$stdout"
+
+# --claim --json found: {"claim":"sub","value":"1234567890"}, exit 0, stderr empty
+stdout=$("$VRK" jwt --claim sub --json "$VALID_JWT" 2>/dev/null) || true
+stderr=$(set +e; "$VRK" jwt --claim sub --json "$VALID_JWT" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --claim sub --json "$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--claim --json found: exit 0"            0             "$exit_code"
+assert_stderr_empty    "--claim --json found: stderr empty"                    "$stderr"
+assert_stdout_contains "--claim --json found: claim key"         '"claim"'     "$stdout"
+assert_stdout_contains "--claim --json found: value key"         '"value"'     "$stdout"
+assert_stdout_contains "--claim --json found: value correct"     '1234567890'  "$stdout"
+
+# --claim --json missing: error JSON to stdout, stderr empty, exit 1
+stdout=$(set +e; "$VRK" jwt --claim does_not_exist --json "$VALID_JWT" 2>/dev/null; true)
+stderr=$(set +e; "$VRK" jwt --claim does_not_exist --json "$VALID_JWT" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --claim does_not_exist --json "$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--claim --json missing: exit 1"          1          "$exit_code"
+assert_stderr_empty    "--claim --json missing: stderr empty"               "$stderr"
+assert_stdout_contains "--claim --json missing: error key"       '"error"'  "$stdout"
+
+# Invalid token + --json: error JSON to stdout, stderr empty, exit 1
+stdout=$(set +e; "$VRK" jwt --json "notajwt" 2>/dev/null; true)
+stderr=$(set +e; "$VRK" jwt --json "notajwt" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --json "notajwt" > /dev/null 2>&1; echo $?)
+assert_exit            "--json invalid token: exit 1"            1          "$exit_code"
+assert_stderr_empty    "--json invalid token: stderr empty"                 "$stderr"
+assert_stdout_contains "--json invalid token: error key"         '"error"'  "$stdout"
+assert_stdout_contains "--json invalid token: code key"          '"code"'   "$stdout"
+
+# No input + --json: error JSON to stdout, stderr empty, exit 2
+stdout=$(set +e; "$VRK" jwt --json < /dev/null 2>/dev/null; true)
+stderr=$(set +e; "$VRK" jwt --json < /dev/null 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --json < /dev/null > /dev/null 2>&1; echo $?)
+assert_exit            "--json no input: exit 2"                 2          "$exit_code"
+assert_stderr_empty    "--json no input: stderr empty"                      "$stderr"
+assert_stdout_contains "--json no input: error key"              '"error"'  "$stdout"
 
 # ------------------------------------------------------------
 # 5. --expired

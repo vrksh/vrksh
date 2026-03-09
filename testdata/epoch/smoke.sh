@@ -88,6 +88,15 @@ assert_stderr_contains() {
   fi
 }
 
+assert_stderr_empty() {
+  local desc=$1 stderr=$2
+  if [ -z "$stderr" ]; then
+    ok "$desc (stderr empty)"
+  else
+    fail "$desc" "expected empty stderr, got: $stderr"
+  fi
+}
+
 echo "vrk epoch — smoke tests"
 echo "binary: $VRK"
 echo "anchor: $ANCHOR = 2025-02-20T00:00:00Z"
@@ -275,7 +284,82 @@ assert_stdout_contains "--help: mentions --tz" "tz" "$stdout"
 assert_stdout_contains "--help: mentions --now" "now" "$stdout"
 
 # ------------------------------------------------------------
-# 8. Pipeline usage
+# 8. --json output
+# ------------------------------------------------------------
+echo ""
+echo "--- --json ---"
+
+# Unix input: {input, unix, iso} — no ref or tz
+stdout=$("$VRK" epoch "$ANCHOR" --json 2>/dev/null) || true
+stderr=$(set +e; "$VRK" epoch "$ANCHOR" --json 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" epoch "$ANCHOR" --json > /dev/null 2>&1; echo $?)
+assert_exit            "--json unix: exit 0"          0            "$exit_code"
+assert_stderr_empty    "--json unix: stderr empty"                 "$stderr"
+assert_stdout_contains "--json unix: has unix"         '"unix"'    "$stdout"
+assert_stdout_contains "--json unix: has iso"          '"iso"'     "$stdout"
+assert_stdout_contains "--json unix: has input"        '"input"'   "$stdout"
+assert_stdout_contains "--json unix: unix value"       '1740009600' "$stdout"
+assert_stdout_contains "--json unix: iso value"        '2025-02-20T00:00:00Z' "$stdout"
+
+# -j shortform must be identical
+stdout_j=$("$VRK" epoch "$ANCHOR" -j 2>/dev/null) || true
+exit_code_j=$(set +e; "$VRK" epoch "$ANCHOR" -j > /dev/null 2>&1; echo $?)
+assert_exit            "-j shortform: exit 0"         0            "$exit_code_j"
+assert_stdout_contains "-j shortform: has unix"        '"unix"'    "$stdout_j"
+
+# ISO date input: input field preserved as given
+stdout=$("$VRK" epoch 2025-02-20 --json 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" epoch 2025-02-20 --json > /dev/null 2>&1; echo $?)
+assert_exit            "--json ISO date: exit 0"       0             "$exit_code"
+assert_stdout_contains "--json ISO date: input value"  '2025-02-20'  "$stdout"
+assert_stdout_contains "--json ISO date: unix value"   '1740009600'  "$stdout"
+
+# Relative with --at: ref field present
+stdout=$("$VRK" epoch +3d --at "$ANCHOR" --json 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" epoch +3d --at "$ANCHOR" --json > /dev/null 2>&1; echo $?)
+assert_exit            "--json +3d --at: exit 0"       0             "$exit_code"
+assert_stdout_contains "--json +3d --at: unix value"   '1740268800'  "$stdout"
+assert_stdout_contains "--json +3d --at: ref present"  '"ref"'       "$stdout"
+assert_stdout_contains "--json +3d --at: ref value"    "$ANCHOR"     "$stdout"
+
+# --now --json: no input field
+stdout=$("$VRK" epoch --now --json 2>/dev/null) || true
+stderr=$(set +e; "$VRK" epoch --now --json 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" epoch --now --json > /dev/null 2>&1; echo $?)
+assert_exit            "--now --json: exit 0"          0             "$exit_code"
+assert_stderr_empty    "--now --json: stderr empty"                  "$stderr"
+assert_stdout_contains "--now --json: has unix"        '"unix"'      "$stdout"
+assert_stdout_contains "--now --json: has iso"         '"iso"'       "$stdout"
+# input must NOT appear for --now
+if echo "$stdout" | grep -q '"input"'; then
+  fail "--now --json: no input field" "stdout contained 'input' key: $stdout"
+else
+  ok "--now --json: no input field"
+fi
+
+# --json --tz: tz field present, iso uses offset
+stdout=$("$VRK" epoch "$ANCHOR" --json --tz +05:30 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" epoch "$ANCHOR" --json --tz +05:30 > /dev/null 2>&1; echo $?)
+assert_exit            "--json --tz: exit 0"           0                         "$exit_code"
+assert_stdout_contains "--json --tz: tz field"         '"tz"'                    "$stdout"
+assert_stdout_contains "--json --tz: tz value"         '+05:30'                  "$stdout"
+assert_stdout_contains "--json --tz: iso uses offset"  '2025-02-20T05:30:00+05:30' "$stdout"
+
+# --tz without --iso is allowed when --json is active
+exit_code=$(set +e; "$VRK" epoch "$ANCHOR" --json --tz America/New_York > /dev/null 2>&1; echo $?)
+assert_exit "--json --tz without --iso: exit 0" 0 "$exit_code"
+
+# Error + --json: JSON to stdout, stderr empty
+stdout=$(set +e; echo '3d' | "$VRK" epoch --json 2>/dev/null; true)
+stderr=$(set +e; echo '3d' | "$VRK" epoch --json 2>&1 >/dev/null; true)
+exit_code=$(set +e; echo '3d' | "$VRK" epoch --json > /dev/null 2>&1; echo $?)
+assert_exit            "--json error: exit 2"          2         "$exit_code"
+assert_stderr_empty    "--json error: stderr empty"              "$stderr"
+assert_stdout_contains "--json error: error key"       '"error"' "$stdout"
+assert_stdout_contains "--json error: code key"        '"code"'  "$stdout"
+
+# ------------------------------------------------------------
+# 9. Pipeline usage
 # ------------------------------------------------------------
 echo ""
 echo "--- pipeline ---"

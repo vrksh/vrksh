@@ -147,6 +147,7 @@ func TestValidTokenClaimMissing(t *testing.T) {
 }
 
 func TestValidTokenJSONFlag(t *testing.T) {
+	// New shape: {header, payload, signature, expired, valid} — no expires_in.
 	stdout, _, code := runJWT(t, []string{"--json", validJWT}, "")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
@@ -155,14 +156,19 @@ func TestValidTokenJSONFlag(t *testing.T) {
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &envelope); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
 	}
-	for _, key := range []string{"header", "payload", "expires_in"} {
+	for _, key := range []string{"header", "payload", "signature", "expired", "valid"} {
 		if _, ok := envelope[key]; !ok {
 			t.Errorf("envelope missing key %q", key)
 		}
 	}
+	// expires_in must NOT appear in the new shape.
+	if _, ok := envelope["expires_in"]; ok {
+		t.Error("envelope must not contain deprecated key \"expires_in\"")
+	}
 }
 
-func TestValidTokenJSONFlagExpiresIn(t *testing.T) {
+func TestValidTokenJSONFlagExpiredValid(t *testing.T) {
+	// validJWT has exp in year 2050 — expired=false, valid=true.
 	stdout, _, code := runJWT(t, []string{"--json", validJWT}, "")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
@@ -171,12 +177,172 @@ func TestValidTokenJSONFlagExpiresIn(t *testing.T) {
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &envelope); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v", err)
 	}
-	expiresIn, ok := envelope["expires_in"].(string)
-	if !ok {
-		t.Fatalf("expires_in is not a string: %T %v", envelope["expires_in"], envelope["expires_in"])
+	if expired, _ := envelope["expired"].(bool); expired {
+		t.Errorf("expired = true, want false for a future-exp token")
 	}
-	if expiresIn == "" || expiresIn == "expired" {
-		t.Errorf("expires_in = %q, want a future duration string", expiresIn)
+	if valid, _ := envelope["valid"].(bool); !valid {
+		t.Errorf("valid = false, want true for a well-formed future-exp token")
+	}
+}
+
+func TestExpiredTokenJSONFlagExpiredValid(t *testing.T) {
+	// expiredJWT has exp in the past — expired=true, valid=false.
+	stdout, _, code := runJWT(t, []string{"--json", expiredJWT}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (default --json path never exits 1 for expiry)", code)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &envelope); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v", err)
+	}
+	if expired, _ := envelope["expired"].(bool); !expired {
+		t.Errorf("expired = false, want true for a past-exp token")
+	}
+	if valid, _ := envelope["valid"].(bool); valid {
+		t.Errorf("valid = true, want false for an expired token")
+	}
+}
+
+func TestValidTokenJSONFlagSignature(t *testing.T) {
+	// validJWT ends with a real signature — the signature field must be non-empty.
+	stdout, _, code := runJWT(t, []string{"--json", validJWT}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &envelope); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v", err)
+	}
+	sig, ok := envelope["signature"].(string)
+	if !ok || sig == "" {
+		t.Errorf("signature = %q, want non-empty string", sig)
+	}
+}
+
+// --- --expired --json ---
+
+func TestJSONExpiredFlagWithValidToken(t *testing.T) {
+	// --expired --json with a valid (future-exp) token: stdout has {"expired":false}, exit 0.
+	stdout, stderr, code := runJWT(t, []string{"--expired", "--json", validJWT}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if expired, _ := obj["expired"].(bool); expired {
+		t.Errorf("expired = true, want false for a future-exp token")
+	}
+}
+
+func TestJSONExpiredFlagWithExpiredToken(t *testing.T) {
+	// --expired --json with an expired token: stdout has {"expired":true}, exit 1.
+	// When --json is active, error info goes to stdout as JSON; stderr is empty.
+	stdout, stderr, code := runJWT(t, []string{"--expired", "--json", expiredJWT}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if expired, _ := obj["expired"].(bool); !expired {
+		t.Errorf("expired = false, want true for a past-exp token")
+	}
+}
+
+// --- --claim --json ---
+
+func TestJSONClaimFound(t *testing.T) {
+	// --claim sub --json → {"claim":"sub","value":"1234567890"}, exit 0.
+	stdout, stderr, code := runJWT(t, []string{"--claim", "sub", "--json", validJWT}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if claim, _ := obj["claim"].(string); claim != "sub" {
+		t.Errorf("claim = %q, want %q", claim, "sub")
+	}
+	if value, _ := obj["value"].(string); value != "1234567890" {
+		t.Errorf("value = %q, want %q", value, "1234567890")
+	}
+}
+
+func TestJSONClaimMissing(t *testing.T) {
+	// --claim missing --json → {"error":"...","code":1} on stdout, exit 1.
+	stdout, stderr, code := runJWT(t, []string{"--claim", "missing_field", "--json", validJWT}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+	if code, _ := obj["code"].(float64); int(code) != 1 {
+		t.Errorf("code = %v, want 1", obj["code"])
+	}
+}
+
+// --- error JSON ---
+
+func TestJSONInvalidToken(t *testing.T) {
+	// Invalid token + --json → {"error":"...","code":1} on stdout, exit 1. Stderr empty.
+	stdout, stderr, code := runJWT(t, []string{"--json", "notajwt"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+	if code, _ := obj["code"].(float64); int(code) != 1 {
+		t.Errorf("code = %v, want 1", obj["code"])
+	}
+}
+
+func TestJSONNoInput(t *testing.T) {
+	// No input + --json → {"error":"...","code":2} on stdout, exit 2. Stderr empty.
+	stdout, stderr, code := runJWT(t, []string{"--json"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+	if code, _ := obj["code"].(float64); int(code) != 2 {
+		t.Errorf("code = %v, want 2", obj["code"])
 	}
 }
 

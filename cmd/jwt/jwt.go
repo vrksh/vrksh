@@ -15,12 +15,22 @@ import (
 	"github.com/vrksh/vrksh/internal/shared"
 )
 
-// jwtEnvelope is the shape emitted by --json. Struct fields marshal in declaration
-// order, giving a stable key sequence in the output.
+// jwtEnvelope is the shape emitted by --json when no other mode flag is set.
+// Fields marshal in declaration order for a stable key sequence in output.
 type jwtEnvelope struct {
 	Header    map[string]any `json:"header"`
 	Payload   map[string]any `json:"payload"`
-	ExpiresIn string         `json:"expires_in,omitempty"`
+	Signature string         `json:"signature"`
+	Expired   bool           `json:"expired"`
+	Valid     bool           `json:"valid"`
+}
+
+// jsonError emits {"error":"msg","code":N} to stdout and returns N.
+// Used when --json is active so that all output — including errors — goes
+// to stdout as structured JSON and stderr stays empty.
+func jsonError(code int, msg string) int {
+	_ = shared.PrintJSON(map[string]any{"error": msg, "code": code})
+	return code
 }
 
 // Run is the entry point for vrk jwt. Returns 0 (success), 1 (runtime error),
@@ -43,87 +53,117 @@ func Run() int {
 		if errors.Is(err, pflag.ErrHelp) {
 			return printUsage(fs)
 		}
+		// Parse errors happen before we know if --json is active. Use stderr.
 		return shared.UsageErrorf("%s", err.Error())
 	}
 
-	// Reject more than one positional arg early — joining them with a space
-	// produces a confusing "invalid JWT: expected 3 parts" error downstream.
+	// errorf and usageErrorf route errors through JSON when --json is active,
+	// so that stdout always carries the structured result and stderr stays empty.
+	errorf := func(format string, args ...any) int {
+		if jsonFlag {
+			return jsonError(shared.ExitError, fmt.Sprintf(format, args...))
+		}
+		return shared.Errorf(format, args...)
+	}
+	usageErrorf := func(format string, args ...any) int {
+		if jsonFlag {
+			return jsonError(shared.ExitUsage, fmt.Sprintf(format, args...))
+		}
+		return shared.UsageErrorf(format, args...)
+	}
+
+	// Reject more than one positional arg early.
 	if len(fs.Args()) > 1 {
-		return shared.UsageErrorf("jwt: too many arguments, expected one token")
+		return usageErrorf("jwt: too many arguments, expected one token")
 	}
 
 	input, err := shared.ReadInput(fs.Args())
 	if err != nil {
-		return shared.UsageErrorf("jwt: %v", err)
+		return usageErrorf("jwt: %v", err)
 	}
-	// JWT tokens are never whitespace-padded. Strip leading/trailing whitespace
-	// so that \r\n line endings, leading spaces, or copy-paste artifacts don't
+	// Strip whitespace: copy-paste artifacts or echo-appended newlines must not
 	// corrupt the base64url-encoded header or payload.
 	input = strings.TrimSpace(input)
 
-	header, payload, err := decodeJWT(input)
+	header, payload, signature, err := decodeJWT(input)
 	if err != nil {
-		return shared.Errorf("%v", err)
+		return errorf("%v", err)
 	}
 
-	// --expired: check before formatting output so it acts as a guard regardless
-	// of which output flag is also set.
+	// --expired: check before formatting output so it acts as a guard.
 	if checkExpired {
-		if expNum, ok := payload["exp"].(json.Number); ok {
-			if expUnix, err := expNum.Int64(); err == nil {
-				if time.Now().Unix() > expUnix {
+		expired := isTokenExpired(payload)
+		if jsonFlag {
+			// --expired --json: emit {"expired":bool} — always to stdout, exit 1 if expired.
+			if err := shared.PrintJSON(map[string]any{"expired": expired}); err != nil {
+				return jsonError(shared.ExitError, err.Error())
+			}
+			if expired {
+				return 1
+			}
+			return 0
+		}
+		if expired {
+			if expNum, ok := payload["exp"].(json.Number); ok {
+				if expUnix, e := expNum.Int64(); e == nil {
 					exp := time.Unix(expUnix, 0)
 					ago := time.Since(exp).Round(time.Second)
 					return shared.Errorf("jwt: token expired %s ago (exp: %s)", ago, exp.UTC().Format(time.RFC3339))
 				}
 			}
+			return shared.Errorf("jwt: token is expired")
 		}
-		// No exp claim, or exp is in the future — fall through to output.
+		// Not expired — fall through to output.
 	}
 
 	// --valid: stricter than --expired. Checks exp, nbf, and iat in order.
-	// Only checks a claim when it is present in the payload; absence is not an error.
 	if checkValid {
 		now := time.Now().Unix()
 
-		// 1. exp: token must not be expired.
+		// 1. exp: must not be expired.
 		if expNum, ok := payload["exp"].(json.Number); ok {
-			if expUnix, err := expNum.Int64(); err == nil {
+			if expUnix, e := expNum.Int64(); e == nil {
 				if now > expUnix {
 					exp := time.Unix(expUnix, 0)
 					ago := time.Since(exp).Round(time.Second)
-					return shared.Errorf("jwt: token expired %s ago (exp: %s)", ago, exp.UTC().Format(time.RFC3339))
+					return errorf("jwt: token expired %s ago (exp: %s)", ago, exp.UTC().Format(time.RFC3339))
 				}
 			}
 		}
 
-		// 2. nbf: token must be past its not-before time.
+		// 2. nbf: must be past its not-before time.
 		if nbfNum, ok := payload["nbf"].(json.Number); ok {
-			if nbfUnix, err := nbfNum.Int64(); err == nil {
+			if nbfUnix, e := nbfNum.Int64(); e == nil {
 				if now < nbfUnix {
 					nbf := time.Unix(nbfUnix, 0)
-					return shared.Errorf("jwt: token not yet valid (nbf: %s)", nbf.UTC().Format(time.RFC3339))
+					return errorf("jwt: token not yet valid (nbf: %s)", nbf.UTC().Format(time.RFC3339))
 				}
 			}
 		}
 
-		// 3. iat: token must not claim to be issued in the future.
+		// 3. iat: must not be issued in the future.
 		if iatNum, ok := payload["iat"].(json.Number); ok {
-			if iatUnix, err := iatNum.Int64(); err == nil {
+			if iatUnix, e := iatNum.Int64(); e == nil {
 				if now < iatUnix {
 					iat := time.Unix(iatUnix, 0)
-					return shared.Errorf("jwt: token issued in the future (iat: %s)", iat.UTC().Format(time.RFC3339))
+					return errorf("jwt: token issued in the future (iat: %s)", iat.UTC().Format(time.RFC3339))
 				}
 			}
 		}
 		// All checks passed — fall through to output.
 	}
 
-	// --claim: extract a single field as plain text.
+	// --claim: extract a single field.
 	if claimName != "" {
 		val, ok := payload[claimName]
 		if !ok {
-			return shared.Errorf("jwt: claim %q not found", claimName)
+			return errorf("jwt: claim %q not found", claimName)
+		}
+		if jsonFlag {
+			if err := shared.PrintJSON(map[string]any{"claim": claimName, "value": formatClaim(val)}); err != nil {
+				return jsonError(shared.ExitError, err.Error())
+			}
+			return 0
 		}
 		if _, err := fmt.Fprintln(os.Stdout, formatClaim(val)); err != nil {
 			return shared.Errorf("jwt: %v", err)
@@ -131,21 +171,17 @@ func Run() int {
 		return 0
 	}
 
-	// --json: full envelope with header, payload, and expiry description.
+	// --json: full envelope with new shape.
 	if jsonFlag {
-		env := jwtEnvelope{Header: header, Payload: payload}
-		if expNum, ok := payload["exp"].(json.Number); ok {
-			if expUnix, err := expNum.Int64(); err == nil {
-				remaining := time.Until(time.Unix(expUnix, 0))
-				if remaining <= 0 {
-					env.ExpiresIn = "expired"
-				} else {
-					env.ExpiresIn = remaining.Round(time.Second).String()
-				}
-			}
+		env := jwtEnvelope{
+			Header:    header,
+			Payload:   payload,
+			Signature: signature,
+			Expired:   isTokenExpired(payload),
+			Valid:     isTokenValid(payload),
 		}
 		if err := shared.PrintJSON(env); err != nil {
-			return shared.Errorf("jwt: %v", err)
+			return jsonError(shared.ExitError, err.Error())
 		}
 		return 0
 	}
@@ -157,36 +193,69 @@ func Run() int {
 	return 0
 }
 
+// isTokenExpired reports whether the token's exp claim is present and in the past.
+func isTokenExpired(payload map[string]any) bool {
+	if expNum, ok := payload["exp"].(json.Number); ok {
+		if expUnix, err := expNum.Int64(); err == nil {
+			return time.Now().Unix() > expUnix
+		}
+	}
+	return false
+}
+
+// isTokenValid reports whether the token passes all three time checks:
+// exp (not expired), nbf (past), iat (not in future). Missing claims are skipped.
+func isTokenValid(payload map[string]any) bool {
+	now := time.Now().Unix()
+
+	if expNum, ok := payload["exp"].(json.Number); ok {
+		if expUnix, err := expNum.Int64(); err == nil && now > expUnix {
+			return false
+		}
+	}
+	if nbfNum, ok := payload["nbf"].(json.Number); ok {
+		if nbfUnix, err := nbfNum.Int64(); err == nil && now < nbfUnix {
+			return false
+		}
+	}
+	if iatNum, ok := payload["iat"].(json.Number); ok {
+		if iatUnix, err := iatNum.Int64(); err == nil && now < iatUnix {
+			return false
+		}
+	}
+	return true
+}
+
 // decodeJWT splits a JWT into its three parts, base64url-decodes the header and
-// payload, and JSON-unmarshals them. Signatures are never verified — this is an
-// inspector, not a validator.
-func decodeJWT(token string) (header, payload map[string]any, err error) {
+// payload, and JSON-unmarshals them. Also returns the raw signature string.
+// Signatures are never verified — this is an inspector, not a validator.
+func decodeJWT(token string) (header, payload map[string]any, signature string, err error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, nil, fmt.Errorf("invalid JWT: expected 3 parts, got %d", len(parts))
+		return nil, nil, "", fmt.Errorf("invalid JWT: expected 3 parts, got %d", len(parts))
 	}
 
 	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid JWT: cannot decode header: %v", err)
+		return nil, nil, "", fmt.Errorf("invalid JWT: cannot decode header: %v", err)
 	}
 	dec := json.NewDecoder(bytes.NewReader(headerBytes))
 	dec.UseNumber()
 	if err := dec.Decode(&header); err != nil {
-		return nil, nil, fmt.Errorf("invalid JWT: header is not valid JSON: %v", err)
+		return nil, nil, "", fmt.Errorf("invalid JWT: header is not valid JSON: %v", err)
 	}
 
 	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid JWT: cannot decode payload: %v", err)
+		return nil, nil, "", fmt.Errorf("invalid JWT: cannot decode payload: %v", err)
 	}
 	dec = json.NewDecoder(bytes.NewReader(payloadBytes))
 	dec.UseNumber()
 	if err := dec.Decode(&payload); err != nil {
-		return nil, nil, fmt.Errorf("invalid JWT: payload is not valid JSON: %v", err)
+		return nil, nil, "", fmt.Errorf("invalid JWT: payload is not valid JSON: %v", err)
 	}
 
-	return header, payload, nil
+	return header, payload, parts[2], nil
 }
 
 // formatClaim prints a claim value as plain text. Strings are printed without

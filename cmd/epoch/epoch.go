@@ -14,6 +14,15 @@ import (
 	"github.com/vrksh/vrksh/internal/shared"
 )
 
+// epochJSON is the shape emitted by --json.
+type epochJSON struct {
+	Input string `json:"input,omitempty"`
+	Unix  int64  `json:"unix"`
+	ISO   string `json:"iso"`
+	Ref   string `json:"ref,omitempty"`
+	TZ    string `json:"tz,omitempty"`
+}
+
 // Run is the entry point for vrk epoch. Returns 0 (success), 1 (runtime error),
 // or 2 (usage error). Never calls os.Exit.
 func Run() int {
@@ -21,12 +30,14 @@ func Run() int {
 	fs.SetOutput(io.Discard)
 
 	var isoFlag bool
+	var jsonFlag bool
 	var tzStr string
 	var nowFlag bool
 	var atStr string
 
 	fs.BoolVar(&isoFlag, "iso", false, "output as ISO 8601 string instead of Unix integer")
-	fs.StringVar(&tzStr, "tz", "", "timezone for --iso output (IANA name or +HH:MM offset)")
+	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit output as JSON: {input, unix, iso, ref?, tz?}")
+	fs.StringVar(&tzStr, "tz", "", "timezone for --iso or --json output (IANA name or +HH:MM offset)")
 	fs.BoolVar(&nowFlag, "now", false, "print current Unix timestamp and exit")
 	fs.StringVar(&atStr, "at", "", "reference timestamp for relative input (unix integer), e.g. --at 1740009600")
 
@@ -52,28 +63,55 @@ func Run() int {
 		return shared.UsageErrorf("epoch: %s", err.Error())
 	}
 
-	// --tz without --iso is always a usage error; timezone has no meaning
-	// when output is a Unix integer.
-	if tzStr != "" && !isoFlag {
-		return shared.UsageErrorf("epoch: --tz requires --iso")
+	// jsonError routes error output through stdout as JSON when --json is active,
+	// keeping stderr empty so downstream consumers see only structured data.
+	usageErrorf := func(format string, args ...any) int {
+		if jsonFlag {
+			_ = shared.PrintJSON(map[string]any{"error": fmt.Sprintf(format, args...), "code": shared.ExitUsage})
+			return shared.ExitUsage
+		}
+		return shared.UsageErrorf(format, args...)
+	}
+
+	// --tz without --iso or --json: timezone has no meaning for a plain Unix integer.
+	if tzStr != "" && !isoFlag && !jsonFlag {
+		return usageErrorf("epoch: --tz requires --iso")
 	}
 
 	posArgs := fs.Args()
 
 	// Reject more than one positional arg.
 	if len(posArgs) > 1 {
-		return shared.UsageErrorf("epoch: too many arguments, expected one input")
+		return usageErrorf("epoch: too many arguments, expected one input")
 	}
 
 	// If the pre-pass extracted a negative-relative arg AND there is also a
 	// positional arg, that is two inputs — reject it.
 	if negRelInput != "" && len(posArgs) > 0 {
-		return shared.UsageErrorf("epoch: too many arguments, expected one input")
+		return usageErrorf("epoch: too many arguments, expected one input")
 	}
 
 	// --now with no other input source: print current timestamp immediately,
 	// without touching stdin (reading stdin on a TTY would hang).
 	if nowFlag && negRelInput == "" && len(posArgs) == 0 {
+		if jsonFlag {
+			loc, tzErr := parseTimezone(tzStr)
+			if tzErr != nil {
+				return usageErrorf("epoch: %v", tzErr)
+			}
+			now := time.Now()
+			out := epochJSON{
+				Unix: now.Unix(),
+				ISO:  now.In(loc).Format(time.RFC3339),
+			}
+			if tzStr != "" {
+				out.TZ = tzStr
+			}
+			if err := shared.PrintJSON(out); err != nil {
+				return shared.Errorf("epoch: %v", err)
+			}
+			return 0
+		}
 		if _, err := fmt.Fprintf(os.Stdout, "%d\n", time.Now().Unix()); err != nil {
 			return shared.Errorf("epoch: %v", err)
 		}
@@ -97,12 +135,12 @@ func Run() int {
 
 	// --at with no input: usage error (nothing to calculate relative to).
 	if atStr != "" && input == "" {
-		return shared.UsageErrorf("epoch: --at requires input; use --now to print the current timestamp")
+		return usageErrorf("epoch: --at requires input; use --now to print the current timestamp")
 	}
 
 	// No input at all (no --now, no args, no stdin).
 	if input == "" {
-		return shared.UsageErrorf("epoch: no input: provide as argument or via stdin")
+		return usageErrorf("epoch: no input: provide as argument or via stdin")
 	}
 
 	// Resolve the "now" reference timestamp for relative calculations.
@@ -110,7 +148,7 @@ func Run() int {
 	if atStr != "" {
 		v, err := strconv.ParseInt(atStr, 10, 64)
 		if err != nil {
-			return shared.UsageErrorf("epoch: --at: invalid timestamp %q: must be a Unix integer", atStr)
+			return usageErrorf("epoch: --at: invalid timestamp %q: must be a Unix integer", atStr)
 		}
 		nowRef = v
 	} else {
@@ -120,16 +158,35 @@ func Run() int {
 	// Parse input into a Unix timestamp.
 	ts, parseErr := parseInput(input, nowRef)
 	if parseErr != nil {
-		return shared.UsageErrorf("epoch: %v", parseErr)
+		return usageErrorf("epoch: %v", parseErr)
 	}
 
-	// Resolve timezone (only meaningful with --iso, already guarded above).
+	// Resolve timezone (meaningful with --iso and --json).
 	loc, tzErr := parseTimezone(tzStr)
 	if tzErr != nil {
-		return shared.UsageErrorf("epoch: %v", tzErr)
+		return usageErrorf("epoch: %v", tzErr)
 	}
 
-	// Emit output.
+	// --json: emit structured output.
+	if jsonFlag {
+		out := epochJSON{
+			Input: input,
+			Unix:  ts,
+			ISO:   time.Unix(ts, 0).In(loc).Format(time.RFC3339),
+		}
+		if atStr != "" {
+			out.Ref = atStr
+		}
+		if tzStr != "" {
+			out.TZ = tzStr
+		}
+		if err := shared.PrintJSON(out); err != nil {
+			return shared.Errorf("epoch: %v", err)
+		}
+		return 0
+	}
+
+	// Emit plain text output.
 	if isoFlag {
 		if _, err := fmt.Fprintln(os.Stdout, time.Unix(ts, 0).In(loc).Format(time.RFC3339)); err != nil {
 			return shared.Errorf("epoch: %v", err)

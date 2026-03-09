@@ -2,6 +2,7 @@ package epoch
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"strings"
@@ -441,6 +442,151 @@ func TestPropertyExitCodeIsValid(t *testing.T) {
 		if code != 0 && code != 1 && code != 2 {
 			t.Errorf("args=%v stdin=%q: exit code = %d, want 0/1/2", tc.args, tc.stdin, code)
 		}
+	}
+}
+
+// --- --json output ---
+
+func TestJSONUnixInput(t *testing.T) {
+	// 1740009600 --json → {input:"1740009600", unix:1740009600, iso:"2025-02-20T00:00:00Z"}, exit 0.
+	stdout, stderr, code := runEpoch(t, []string{"1740009600", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if input, _ := obj["input"].(string); input != "1740009600" {
+		t.Errorf("input = %q, want %q", input, "1740009600")
+	}
+	if unix, _ := obj["unix"].(float64); int64(unix) != 1740009600 {
+		t.Errorf("unix = %v, want 1740009600", obj["unix"])
+	}
+	if iso, _ := obj["iso"].(string); iso != "2025-02-20T00:00:00Z" {
+		t.Errorf("iso = %q, want %q", iso, "2025-02-20T00:00:00Z")
+	}
+	// ref and tz must not appear when --at and --tz were not used.
+	if _, ok := obj["ref"]; ok {
+		t.Error("ref must not appear when --at was not used")
+	}
+	if _, ok := obj["tz"]; ok {
+		t.Error("tz must not appear when --tz was not used")
+	}
+}
+
+func TestJSONISODateInput(t *testing.T) {
+	// 2025-02-20 --json: input preserved as given; unix matches midnight UTC.
+	stdout, _, code := runEpoch(t, []string{"2025-02-20", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if input, _ := obj["input"].(string); input != "2025-02-20" {
+		t.Errorf("input = %q, want %q", input, "2025-02-20")
+	}
+	if unix, _ := obj["unix"].(float64); int64(unix) != 1740009600 {
+		t.Errorf("unix = %v, want 1740009600", obj["unix"])
+	}
+}
+
+func TestJSONRelativeWithAt(t *testing.T) {
+	// +3d --at 1740009600 --json: ref field present because --at was used.
+	stdout, _, code := runEpoch(t, []string{"+3d", "--at", nowAnchor, "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if unix, _ := obj["unix"].(float64); int64(unix) != 1740268800 {
+		t.Errorf("unix = %v, want 1740268800", obj["unix"])
+	}
+	if ref, _ := obj["ref"].(string); ref != nowAnchor {
+		t.Errorf("ref = %q, want %q", ref, nowAnchor)
+	}
+}
+
+func TestJSONNow(t *testing.T) {
+	// --now --json: no input field; unix and iso present.
+	stdout, stderr, code := runEpoch(t, []string{"--now", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	// input must NOT appear for --now.
+	if _, ok := obj["input"]; ok {
+		t.Error("input must not appear for --now --json")
+	}
+	if _, ok := obj["unix"]; !ok {
+		t.Error("unix must be present")
+	}
+	if _, ok := obj["iso"]; !ok {
+		t.Error("iso must be present")
+	}
+}
+
+func TestJSONWithTZ(t *testing.T) {
+	// --json --tz +05:30: tz field present; iso uses the offset.
+	stdout, _, code := runEpoch(t, []string{"1740009600", "--json", "--tz", "+05:30"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if tz, _ := obj["tz"].(string); tz != "+05:30" {
+		t.Errorf("tz = %q, want %q", tz, "+05:30")
+	}
+	if iso, _ := obj["iso"].(string); iso != "2025-02-20T05:30:00+05:30" {
+		t.Errorf("iso = %q, want %q", iso, "2025-02-20T05:30:00+05:30")
+	}
+}
+
+func TestJSONTZWithoutISOAllowed(t *testing.T) {
+	// --json --tz without --iso must NOT be a usage error.
+	// The old rule was "--tz requires --iso"; --json relaxes it because json always includes iso.
+	_, _, code := runEpoch(t, []string{"1740009600", "--json", "--tz", "America/New_York"}, "")
+	if code == 2 {
+		t.Fatalf("exit code = 2 (usage error) — --tz must be allowed without --iso when --json is active")
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+}
+
+func TestJSONError(t *testing.T) {
+	// Usage error + --json → {"error":"...","code":2} on stdout, exit 2. Stderr empty.
+	stdout, stderr, code := runEpoch(t, []string{"3d", "--json"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+	if c, _ := obj["code"].(float64); int(c) != 2 {
+		t.Errorf("code = %v, want 2", obj["code"])
 	}
 }
 

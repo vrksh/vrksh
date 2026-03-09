@@ -16,7 +16,17 @@ Input: positional argument or stdin.
 |------|-------|-------------|
 | `--claim <name>` | `-c` | Print a single claim value as plain text |
 | `--expired` | `-e` | Exit 1 if the token is expired |
-| `--json` | `-j` | Emit full envelope: `{header, payload, expires_in}` |
+| `--valid` | — | Exit 1 if expired, nbf in future, or iat in future |
+| `--json` | `-j` | Emit structured JSON output (shape depends on other flags) |
+
+### --json output shapes
+
+| Flags | Shape |
+|-------|-------|
+| `--json` alone | `{"header":{…},"payload":{…},"signature":"…","expired":bool,"valid":bool}` |
+| `--expired --json` | `{"expired":bool}` — exit 1 if expired, 0 if not |
+| `--claim <name> --json` | `{"claim":"name","value":"…"}` |
+| Any error + `--json` | `{"error":"msg","code":N}` on stdout; stderr empty |
 
 ### Exit codes
 
@@ -35,11 +45,14 @@ vrk jwt "$TOKEN"
 # Extract a single claim
 vrk jwt --claim sub "$TOKEN"
 
-# Full envelope with expiry info
+# Full envelope with header, payload, signature, expired, valid
 vrk jwt --json "$TOKEN"
 
 # Guard: exit 1 if token is expired
 vrk jwt --expired "$TOKEN"
+
+# Guard with JSON output: {"expired":true/false}, exit 1 if expired
+vrk jwt --expired --json "$TOKEN"
 
 # Pipe form
 echo "$TOKEN" | vrk jwt --claim sub
@@ -55,6 +68,9 @@ vrk kv get "user:$SUB"
 # Decode token from an env var and check expiry before making an API call
 vrk jwt --expired "$AUTH_TOKEN" && curl -H "Authorization: Bearer $AUTH_TOKEN" ...
 
+# Check expiry with structured output — pipe-friendly
+vrk jwt --expired --json "$AUTH_TOKEN" | jq '.expired'
+
 # Inspect a token mid-pipeline
 echo "$TOKEN" | vrk jwt --json | jq '.payload.exp'
 ```
@@ -63,10 +79,12 @@ echo "$TOKEN" | vrk jwt --json | jq '.payload.exp'
 
 - `--expired` exits 1 only if the `exp` claim is present **and** in the past.
   A token with no `exp` claim is treated as never-expiring and exits 0.
-- `--json` never exits 1 for an expired token — it just sets `expires_in` to `"expired"`.
-  Use `--expired` when you need the exit code guard.
-- Default output (no flags) prints the payload only. Use `--json` to also get the header.
-- Stdout is always empty on error — errors go to stderr only.
+- `--json` alone never exits 1 for an expired token — check `expired` field or use `--expired`.
+- `--expired --json`: exits 1 when expired, but stdout still has `{"expired":true}` (not empty).
+  This differs from `--expired` without `--json`, where stdout is empty on exit 1.
+- When `--json` is active, all errors go to stdout as `{"error":"msg","code":N}` and stderr is empty.
+- Default output (no flags) prints the payload only. Use `--json` to also get the header and signature.
+- Stdout is always empty on error unless `--json` is active.
 
 ---
 
@@ -81,16 +99,31 @@ Input: positional argument or stdin.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--iso` | — | Output as ISO 8601 string instead of Unix integer |
-| `--tz <zone>` | — | Timezone for `--iso` output; IANA name or `+HH:MM` offset |
+| `--json` | `-j` | Emit structured JSON: `{input?, unix, iso, ref?, tz?}` |
+| `--tz <zone>` | — | Timezone for `--iso` or `--json` output; IANA name or `+HH:MM` offset |
 | `--now` | — | Print current Unix timestamp and exit |
 | `--at <ts>` | — | Override reference time for relative input (unix integer) |
+
+### --json output shape
+
+```json
+{"input":"+3d","unix":1740268800,"iso":"2025-02-23T00:00:00Z","ref":"1740009600","tz":"+05:30"}
+```
+
+- `input`: the original input string — omitted for `--now`
+- `unix`: computed Unix timestamp (integer)
+- `iso`: always present — ISO 8601 in UTC or the specified `--tz`
+- `ref`: only when `--at` was used
+- `tz`: only when `--tz` was used
+
+Errors with `--json` active: `{"error":"msg","code":N}` to stdout; stderr empty.
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 2 | Usage error — unsupported format, missing sign, ambiguous timezone, no input, `--tz` without `--iso` |
+| 2 | Usage error — unsupported format, missing sign, ambiguous timezone, no input, `--tz` without `--iso` or `--json` |
 
 ### Relative time format
 
@@ -149,12 +182,13 @@ CUTOFF=$(vrk epoch -30d --at "$BASELINE")
 - Relative times **must** be signed: `+3d` or `-3d`. Bare `3d` exits 2.
 - Timezone abbreviations (IST, EST, PST) exit 2 — they are ambiguous across regions.
   Use full IANA names (`America/New_York`) or numeric offsets (`+05:30`).
-- `--tz` requires `--iso`; using it without `--iso` exits 2.
-- Unix integer input is passed through unchanged — timezone has no effect on it.
+- `--tz` requires `--iso` or `--json`; using it with plain integer output exits 2.
+- Unix integer input is passed through unchanged — timezone affects only `--iso` / `--json` output.
 - Use `--at <ts>` to make pipelines involving relative times deterministic.
 - `--now` is a boolean flag (prints current timestamp and exits). Use `--at` to set a reference.
 - Negative integers (`-1000`) are valid pre-epoch Unix timestamps — pass via stdin to avoid flag parsing.
-- Stdout is always empty on error — errors go to stderr only.
+- When `--json` is active, errors go to stdout as `{"error":"msg","code":N}` and stderr is empty.
+- Stdout is always empty on error unless `--json` is active.
 
 ---
 
