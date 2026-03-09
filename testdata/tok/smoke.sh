@@ -177,17 +177,13 @@ assert_stdout_empty   "budget 1: stdout empty"       "$stdout"
 assert_stderr_contains "budget 1: stderr message"   "2 tokens exceeds budget of 1"  "$stderr"
 
 # ------------------------------------------------------------
-# 7. --budget + --fail: same result (--fail is redundant on tok)
+# 7. --fail is not a flag on tok — must be rejected as unknown (exit 2)
 # ------------------------------------------------------------
 echo ""
-echo "--- --budget --fail ---"
+echo "--- --fail rejected ---"
 
-stdout=$(set +e; echo 'hello world' | "$VRK" tok --budget 1 --fail 2>/dev/null; true)
-stderr=$(set +e; echo 'hello world' | "$VRK" tok --budget 1 --fail 2>&1 >/dev/null; true)
-exit_code=$(set +e; echo 'hello world' | "$VRK" tok --budget 1 --fail > /dev/null 2>&1; echo $?)
-assert_exit           "budget+fail: exit 1"           1                          "$exit_code"
-assert_stdout_empty   "budget+fail: stdout empty"     "$stdout"
-assert_stderr_contains "budget+fail: stderr message" "2 tokens exceeds budget of 1"  "$stderr"
+exit_code=$(set +e; echo 'hello world' | "$VRK" tok --fail > /dev/null 2>&1; echo $?)
+assert_exit "--fail: exit 2 (unknown flag)" 2 "$exit_code"
 
 # ------------------------------------------------------------
 # 8. Pipeline safety: nothing passes through on exit 1
@@ -195,10 +191,10 @@ assert_stderr_contains "budget+fail: stderr message" "2 tokens exceeds budget of
 echo ""
 echo "--- pipeline safety ---"
 
-# echo 'hello world' | vrk tok --budget 1 --fail | wc -c → 0
+# echo 'hello world' | vrk tok --budget 1 | wc -c → 0
 # vrk tok exits 1 here, so wrap it in `|| true` to stop pipefail from aborting
 # the outer pipeline — we want to count the (empty) bytes that reach wc -c.
-byte_count=$(echo 'hello world' | { "$VRK" tok --budget 1 --fail 2>/dev/null || true; } | wc -c | tr -d ' ')
+byte_count=$(echo 'hello world' | { "$VRK" tok --budget 1 2>/dev/null || true; } | wc -c | tr -d ' ')
 assert_stdout_equals "pipeline: wc -c = 0" "0" "$byte_count"
 
 # ------------------------------------------------------------

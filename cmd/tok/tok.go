@@ -68,10 +68,11 @@ type tokOutput struct {
 // Run is the entry point for vrk tok. Returns 0 (success), 1 (runtime/budget
 // error), or 2 (usage error). Never calls os.Exit.
 func Run() int {
-	fs := shared.StandardFlags()
-
+	fs := pflag.NewFlagSet("tok", pflag.ContinueOnError)
+	var jsonFlag bool
 	var budget int
 	var model string
+	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit output as JSON")
 	fs.IntVar(&budget, "budget", 0, "exit 1 if token count exceeds N")
 	fs.StringVarP(&model, "model", "m", "cl100k_base", "tokenizer model (currently only cl100k_base is supported)")
 
@@ -84,8 +85,6 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
-
-	jsonFlag, _ := fs.GetBool("json")
 
 	// Resolve the effective model name for output. --model affects the label
 	// in --json output; all models currently count with cl100k_base.
@@ -125,11 +124,8 @@ func Run() int {
 		count = len(enc.Encode(input, nil, nil))
 	}
 
-	// Budget guard: always a hard check when --budget is set.
-	// Deviation from flag-conventions.md: on tok, --budget N always exits 1 when exceeded
-	// without needing --fail. The flag-conventions describe --fail as required for a hard guard,
-	// but tok's primary purpose IS the budget guard — a budget that silently passes is useless.
-	// --fail is accepted (it is in StandardFlags) but redundant here.
+	// Budget guard: always a hard check. tok does not have a --fail flag;
+	// --budget alone is the guard. A budget that silently passes is useless.
 	if budget > 0 && count > budget {
 		return shared.Errorf("tok: %d tokens exceeds budget of %d", count, budget)
 	}

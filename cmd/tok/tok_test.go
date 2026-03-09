@@ -193,25 +193,23 @@ func TestBudgetExceeded(t *testing.T) {
 	}
 }
 
-func TestBudgetExceededWithFail(t *testing.T) {
-	// --fail is redundant on tok (--budget is always a hard guard), but must
-	// produce the same result as --budget alone.
-	stdout, stderr, code := runTok(t, []string{"--budget", "1", "--fail"}, "hello world")
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1 (--budget 1 --fail)", code)
+func TestFailFlagRejected(t *testing.T) {
+	// tok has no --fail flag. Passing it must be a usage error (exit 2), not
+	// silently ignored. This prevents the -f trap where a following digit
+	// becomes a stray positional arg (e.g. -f 1 counts "input 1" not "input").
+	stdout, _, code := runTok(t, []string{"--budget", "1", "--fail"}, "hello world")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (--fail is unknown on tok)", code)
 	}
 	if stdout != "" {
-		t.Errorf("stdout must be empty on budget failure, got %q", stdout)
-	}
-	if !strings.Contains(stderr, "2 tokens exceeds budget of 1") {
-		t.Errorf("stderr = %q, want it to contain %q", stderr, "2 tokens exceeds budget of 1")
+		t.Errorf("stdout must be empty on usage error, got %q", stdout)
 	}
 }
 
 func TestBudgetPipelineOutputEmpty(t *testing.T) {
 	// When budget is exceeded the tool exits 1 with nothing on stdout.
-	// This simulates: echo 'hello world' | vrk tok --budget 1 --fail | wc -c → 0
-	stdout, _, code := runTok(t, []string{"--budget", "1", "--fail"}, "hello world")
+	// This simulates: echo 'hello world' | vrk tok --budget 1 | wc -c → 0
+	stdout, _, code := runTok(t, []string{"--budget", "1"}, "hello world")
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}

@@ -26,11 +26,12 @@ type jwtEnvelope struct {
 // Run is the entry point for vrk jwt. Returns 0 (success), 1 (runtime error),
 // or 2 (usage error). Never calls os.Exit.
 func Run() int {
-	fs := shared.StandardFlags()
-
+	fs := pflag.NewFlagSet("jwt", pflag.ContinueOnError)
+	var jsonFlag bool
 	var claimName string
 	var checkExpired bool
 	var checkValid bool
+	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit output as JSON")
 	fs.StringVarP(&claimName, "claim", "c", "", "print value of a single claim as plain text")
 	fs.BoolVarP(&checkExpired, "expired", "e", false, "exit 1 if the token is expired")
 	fs.BoolVar(&checkValid, "valid", false, "exit 1 if token is expired, not yet valid (nbf), or issued in the future (iat)")
@@ -44,8 +45,6 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
-
-	jsonFlag, _ := fs.GetBool("json")
 
 	// Reject more than one positional arg early — joining them with a space
 	// produces a confusing "invalid JWT: expected 3 parts" error downstream.

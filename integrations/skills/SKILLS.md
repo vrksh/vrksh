@@ -257,7 +257,6 @@ Input: positional argument or stdin.
 | `--budget <N>` | — | Exit 1 if token count exceeds N |
 | `--model <name>` | `-m` | Tokenizer model label (default: `cl100k_base`; only cl100k_base is currently implemented) |
 | `--json` | `-j` | Emit output as `{"tokens": N, "model": "cl100k_base"}` |
-| `--fail` | `-f` | Redundant alias for the budget check (accepted, has no additional effect) |
 
 ### Exit codes
 
@@ -316,7 +315,7 @@ cat generated_prompt.txt | vrk tok --budget 100000 || { echo "Prompt too large";
 ### Gotchas
 
 - **cl100k_base is approximate for Claude (~95% accurate).** The exact Claude tokenizer is not publicly available. Set `--budget` at 90% of the model's actual context limit to absorb the error margin.
-- **`--budget` is always a hard guard on `tok`** — it exits 1 when exceeded without needing `--fail`. This differs from other tools where `--budget` is advisory by default. The `--fail` flag is accepted but redundant.
+- **`--budget` is the only guard flag on `tok`** — it exits 1 when exceeded. `tok` has no `--fail` flag; passing it is a usage error (exit 2).
 - **Empty pipe is 0 tokens, not an error.** `cat /dev/null | vrk tok` exits 0 and prints `0`. Only running `vrk tok` interactively in a terminal (no pipe) exits 2.
 - **When budget is exceeded, stdout is empty.** The count is reported only on success. On exit 1, only stderr contains the message. This makes `vrk tok --budget N | next-command` safe — `next-command` receives no input when the budget check fails.
 - **`--json` does not change error format.** When budget is exceeded, stderr is always plain text regardless of `--json`. Stdout is still empty on exit 1.
