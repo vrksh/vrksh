@@ -64,67 +64,11 @@ with a single exported function `Run() int` that returns an exit code. `main.go`
 registry map and calls `os.Exit(tool())`. This is idiomatic Go — tools in their own directories,
 own namespaces, independently testable without process exit.
 
-```go
-// main.go pattern — registry map, not switch statement
-import (
-    "github.com/vrksh/vrksh/cmd/jwt"
-    "github.com/vrksh/vrksh/cmd/epoch"
-    // one import per tool
-)
-
-//go:embed integrations/skills/SKILLS.md
-var skillsDoc string
-
-//go:embed manifest.json
-var manifestJSON string
-
-var tools = map[string]func() int{
-    "jwt":    jwt.Run,
-    "epoch":  epoch.Run,
-    "prompt": prompt.Run,
-    // one line per tool — no switch, no manual argument shifting
-}
-
-func main() {
-    // handle --manifest and --skills before tool dispatch
-    if len(os.Args) > 1 && os.Args[1] == "--manifest" {
-        fmt.Print(manifestJSON)
-        os.Exit(0)
-    }
-    if len(os.Args) > 1 && os.Args[1] == "--skills" {
-        fmt.Print(skillsDoc)
-        os.Exit(0)
-    }
-    // multicall: check argv[0] first, then argv[1]
-    name := filepath.Base(os.Args[0])
-    if fn, ok := tools[name]; ok {
-        os.Exit(fn())
-    }
-    if len(os.Args) < 2 {
-        fmt.Fprintf(os.Stderr, "usage: vrk <tool> [args]\n")
-        os.Exit(2)
-    }
-    name = os.Args[1]
-    os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
-    fn, ok := tools[name]
-    if !ok {
-        fmt.Fprintf(os.Stderr, "vrk: unknown tool %q\n", name)
-        os.Exit(2)
-    }
-    os.Exit(fn())
-}
-```
-
 **Why registry, not switch:** at 30+ tools a switch requires two edits per tool (import + case) and drifts from the manifest. The registry requires one line. `--manifest` is trivially derived by iterating `tools`. Never revert to a switch.
 
 **`Run() int` not `Run()`:** every tool's `Run()` must return an exit code (0/1/2). `main.go` calls `os.Exit(tool())`. This keeps tools usable as libraries, makes tests check return values instead of intercepting `os.Exit`, and is the standard Go pattern. Never call `os.Exit` inside a tool's `Run()`.
 
-Inside `Run()`, use `shared.Errorf()` and `shared.UsageErrorf()` — they print to stderr and return the exit code:
-```go
-return shared.Errorf("jwt: invalid token: %v", err)   // prints "error: ...", returns 1
-return shared.UsageErrorf("missing required input")    // prints "usage error: ...", returns 2
-```
-`Die()`/`DieUsage()` call `os.Exit` and are for `main()` only. Calling them inside `Run()` terminates the test process.
+Inside `Run()`, use `shared.Errorf()` (prints "error: ...", returns 1) and `shared.UsageErrorf()` (prints "usage error: ...", returns 2). `Die()`/`DieUsage()` call `os.Exit` — for `main()` only, never inside `Run()`.
 
 **`manifest.json`:** lives at repo root, checked in, updated manually when tools are added. Format:
 ```json
@@ -158,7 +102,13 @@ make clean                 # remove build artifacts
 Two flags are built into the root binary alongside the tool dispatcher:
 
 - `vrk --manifest` — prints embedded JSON tool manifest to stdout. For agent discovery.
-- `vrk --skills`   — prints `integrations/skills/SKILLS.md` to stdout. For agent context.
+- `vrk --skills`          — prints full `integrations/skills/SKILLS.md` to stdout. For agent context.
+- `vrk --skills <tool>`   — prints skill documentation for a single tool only. Lower token cost
+                            when an agent only needs one tool's flags and gotchas.
+                            Example: `vrk --skills tok` → tok-specific flags, exit codes, gotchas.
+                            Implemented in main.go alongside `--skills` (same embed, filtered output).
+                            Do NOT add `--skills` as a flag to individual tool ToolMain() functions —
+                            it is a meta-operation on the binary, not on the tool.
 
 Both use `//go:embed` in main.go. When you add a new tool, update both the manifest JSON and `integrations/skills/SKILLS.md` before committing.
 
@@ -215,24 +165,6 @@ git push origin v0.1.0
 - `--help` must always work, even with no stdin.
 - **Every tool that accepts input must accept it two ways — positional argument OR stdin. Never require `echo`.**
 
-```go
-// Use this pattern in every tool. Copy from internal/shared/input.go.
-// For flags, use internal/shared/flags.go — pflag.FlagSet, not flag.FlagSet.
-func readInput(args []string) (string, error) {
-    if len(args) > 0 {
-        return strings.Join(args, " "), nil   // vrk epoch '+3d'
-    }
-    b, err := io.ReadAll(os.Stdin)            // echo '+3d' | vrk epoch
-    if err != nil {
-        return "", err
-    }
-    if len(bytes.TrimSpace(b)) == 0 {
-        return "", fmt.Errorf("no input: provide as argument or via stdin")
-    }
-    return strings.TrimRight(string(b), "\n"), nil
-}
-```
-
 Both of these must always work identically:
 ```bash
 vrk epoch '+3d'
@@ -242,15 +174,7 @@ printf '+3d' | vrk epoch   # no trailing newline — must also work
 
 ## Flag conventions
 
-Read `docs/flag-conventions.md` before adding any flag. Summary:
-
-- `--json` — emit output as JSON object or JSONL. Same meaning on every tool.
-- `--text` — plain prose, no formatting. Same meaning on every tool.
-- `--fail` — exit 1 if condition not met (budget, schema, expiry).
-- `--schema` — output must match this JSON schema or exit 1.
-- `--explain` — print what the tool would do without doing it. Never makes network calls.
-- `--quiet` — suppress all stderr.
-- `--dry-run` — preview side effects without executing.
+Read `docs/flag-conventions.md` before adding any flag. Key shorthands: `-j/--json`, `-t/--text`, `-q/--quiet`, `-f/--fail`, `-s/--schema`, `-m/--model`, `-n/--count`. `--explain` and `--dry-run` have no shorthands (too dangerous to fat-finger).
 
 ## Things Claude Code gets wrong on this project
 
@@ -294,6 +218,44 @@ The smoke script must be committed in the same commit as the tool.
 
 Do not write any implementation code before the tests exist.
 If no correctness spec was provided in the session prompt, ask for one before proceeding.
+
+**Verification before declaring done** — `make check` passing is necessary but not
+sufficient. Before saying the tool is complete, verify:
+- The tool does what the spec says, not just what the tests check
+- Edge cases from the spec that were not turned into tests still work manually
+- The smoke test covers the "killer pipeline" example from the spec, not just isolated flags
+- `vrk <tool> --help` output is accurate — flags listed match flags implemented
+
+If any of these fail, the tool is not done. Do not commit.
+
+## When a bug is hard to find — systematic debugging
+
+Do not guess. Do not try random fixes. Follow this four-phase process:
+
+**Phase 1 — Reproduce precisely**
+Write the smallest possible failing case before touching any code. If you cannot
+reliably reproduce the bug, you cannot verify the fix. Commit the reproduction as
+a failing test first.
+
+**Phase 2 — Locate the root cause**
+Trace the actual execution path, not the assumed one. Add temporary `fmt.Fprintf(os.Stderr, ...)` log lines at decision points. Read the output. The bug is usually one layer deeper than the first place you look. Do not remove the log lines until the root cause is confirmed — they are evidence, not noise.
+
+**Phase 3 — Fix minimally**
+Change the smallest amount of code that makes the failing test pass without breaking
+any other tests. If the fix requires touching more than two files or three functions,
+the root cause analysis is probably incomplete. Go back to Phase 2.
+
+**Phase 4 — Verify nothing regressed**
+Run `make check` in full. Run the smoke test for the affected tool. If the bug was
+in shared code (`internal/shared/`), run smoke tests for all tools that use that
+shared function — a fix in `ReadInput` can break `jwt`, `epoch`, `tok`, and `sse`
+simultaneously.
+
+**Common root causes on this project (check these first):**
+- Exit code wrong: the error path calls `Die()` inside `Run()` instead of `return shared.Errorf()`
+- Stdin not read: positional arg path works, pipe path doesn't — `ReadInput` not called for both
+- Test passes but smoke fails: test mocks something `Run()` does, real binary does not
+- Flaky test: timing or randomness not seeded — add `--seed` or `--at` to make deterministic
 
 ## Testing approach
 

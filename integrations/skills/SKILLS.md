@@ -241,3 +241,83 @@ vrk uuid --v7 --count 10 --json | jq -r '.uuid'
 - `--count 0` exits 2 — it is a usage error, not a no-op.
 - `generated_at` is computed **once before the generation loop**, so all UUIDs in a `--count N` batch share the same timestamp. This is intentional — it reflects when the batch was requested, not each individual generation.
 - Stdout is always empty on error — errors go to stderr only.
+
+---
+
+## tok — Token Counter and Budget Guard
+
+Counts tokens in stdin using the cl100k_base tokenizer. Exact for GPT-4 family,
+~95% accurate for Claude. Optionally fails if over a budget.
+Input: positional argument or stdin.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--budget <N>` | — | Exit 1 if token count exceeds N |
+| `--model <name>` | `-m` | Tokenizer model label (default: `cl100k_base`; only cl100k_base is currently implemented) |
+| `--json` | `-j` | Emit output as `{"tokens": N, "model": "cl100k_base"}` |
+| `--fail` | `-f` | Redundant alias for the budget check (accepted, has no additional effect) |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success — count printed (or JSON emitted), within budget if `--budget` was set |
+| 1 | Over budget — `--budget N` was set and token count exceeds N |
+| 2 | Usage error — unknown flag; running interactively with no piped input |
+
+### Examples
+
+```bash
+# Count tokens in a file
+cat prompt.txt | vrk tok
+
+# Count a string directly
+vrk tok "hello world"
+# → 2
+
+# JSON output
+echo "hello world" | vrk tok --json
+# → {"tokens":2,"model":"cl100k_base"}
+
+# Budget guard — exit 1 if over 4000 tokens
+cat prompt.txt | vrk tok --budget 4000
+
+# Budget guard with --fail (identical to --budget alone on tok)
+cat prompt.txt | vrk tok --budget 4000 --fail
+
+# Count with explicit model label
+echo "hello world" | vrk tok --model cl100k_base
+# → 2
+```
+
+### Compose patterns
+
+```bash
+# Pre-flight check before sending to an LLM — abort if too large
+cat prompt.txt | vrk tok --budget 4000 && cat prompt.txt | vrk prompt "summarise this"
+
+# Gate in a pipeline — nothing downstream runs if over budget
+cat big_context.txt | vrk tok --budget 8000 | vrk prompt "answer: $QUESTION"
+# (vrk tok exits 1 and passes nothing to vrk prompt when over budget)
+
+# Count tokens and store result
+TOKENS=$(cat prompt.txt | vrk tok)
+echo "Sending $TOKENS tokens to the model"
+
+# JSON output for structured logging
+cat prompt.txt | vrk tok --json | vrk kv set "last_prompt_tokens"
+
+# CI size gate — fail build if generated prompt is too large
+cat generated_prompt.txt | vrk tok --budget 100000 || { echo "Prompt too large"; exit 1; }
+```
+
+### Gotchas
+
+- **cl100k_base is approximate for Claude (~95% accurate).** The exact Claude tokenizer is not publicly available. Set `--budget` at 90% of the model's actual context limit to absorb the error margin.
+- **`--budget` is always a hard guard on `tok`** — it exits 1 when exceeded without needing `--fail`. This differs from other tools where `--budget` is advisory by default. The `--fail` flag is accepted but redundant.
+- **Empty pipe is 0 tokens, not an error.** `cat /dev/null | vrk tok` exits 0 and prints `0`. Only running `vrk tok` interactively in a terminal (no pipe) exits 2.
+- **When budget is exceeded, stdout is empty.** The count is reported only on success. On exit 1, only stderr contains the message. This makes `vrk tok --budget N | next-command` safe — `next-command` receives no input when the budget check fails.
+- **`--json` does not change error format.** When budget is exceeded, stderr is always plain text regardless of `--json`. Stdout is still empty on exit 1.
+- Stdout is always empty on error — errors go to stderr only.
