@@ -18,6 +18,7 @@ Input: positional argument or stdin.
 | `--expired` | `-e` | Exit 1 if the token is expired |
 | `--valid` | — | Exit 1 if expired, nbf in future, or iat in future |
 | `--json` | `-j` | Emit structured JSON output (shape depends on other flags) |
+| `--quiet` | `-q` | Suppress all stderr output (exit codes unaffected) |
 
 ### --json output shapes
 
@@ -103,6 +104,7 @@ Input: positional argument or stdin.
 | `--tz <zone>` | — | Timezone for `--iso` or `--json` output; IANA name or `+HH:MM` offset |
 | `--now` | — | Print current Unix timestamp and exit |
 | `--at <ts>` | — | Override reference time for relative input (unix integer) |
+| `--quiet` | `-q` | Suppress all stderr output (exit codes unaffected) |
 
 ### --json output shape
 
@@ -204,6 +206,7 @@ Reads no stdin — input is never required or consumed.
 | `--v7` | — | Generate a v7 (time-ordered) UUID instead of v4 |
 | `--count <n>` | `-n` | Number of UUIDs to generate (default 1, must be >= 1) |
 | `--json` | `-j` | Emit each UUID as a JSON object: `{uuid, version, generated_at}` |
+| `--quiet` | `-q` | Suppress all stderr output (exit codes unaffected) |
 
 ### Exit codes
 
@@ -291,6 +294,7 @@ Input: positional argument or stdin.
 | `--budget <N>` | — | Exit 1 if token count exceeds N |
 | `--model <name>` | `-m` | Tokenizer model label (default: `cl100k_base`; only cl100k_base is currently implemented) |
 | `--json` | `-j` | Emit output as `{"tokens": N, "model": "cl100k_base"}` |
+| `--quiet` | `-q` | Suppress all stderr output (exit codes unaffected) |
 
 ### Exit codes
 

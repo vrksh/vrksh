@@ -34,12 +34,14 @@ func Run() int {
 	var tzStr string
 	var nowFlag bool
 	var atStr string
+	var quietFlag bool
 
 	fs.BoolVar(&isoFlag, "iso", false, "output as ISO 8601 string instead of Unix integer")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit output as JSON: {input, unix, iso, ref?, tz?}")
 	fs.StringVar(&tzStr, "tz", "", "timezone for --iso or --json output (IANA name or +HH:MM offset)")
 	fs.BoolVar(&nowFlag, "now", false, "print current Unix timestamp and exit")
 	fs.StringVar(&atStr, "at", "", "reference timestamp for relative input (unix integer), e.g. --at 1740009600")
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	// Pre-extract any negative-relative-time argument before pflag sees it.
 	// pflag treats args starting with '-' as flags, so '-3d', '-2h', etc. would
@@ -61,6 +63,18 @@ func Run() int {
 			return printUsage(fs)
 		}
 		return shared.UsageErrorf("epoch: %s", err.Error())
+	}
+
+	// --quiet: redirect os.Stderr to /dev/null so no messages reach the caller.
+	if quietFlag {
+		if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
+			origStderr := os.Stderr
+			os.Stderr = devNull
+			defer func() {
+				os.Stderr = origStderr
+				_ = devNull.Close()
+			}()
+		}
 	}
 
 	// jsonError routes error output through stdout as JSON when --json is active,

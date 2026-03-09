@@ -41,10 +41,12 @@ func Run() int {
 	var claimName string
 	var checkExpired bool
 	var checkValid bool
+	var quietFlag bool
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit output as JSON")
 	fs.StringVarP(&claimName, "claim", "c", "", "print value of a single claim as plain text")
 	fs.BoolVarP(&checkExpired, "expired", "e", false, "exit 1 if the token is expired")
 	fs.BoolVar(&checkValid, "valid", false, "exit 1 if token is expired, not yet valid (nbf), or issued in the future (iat)")
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	// Suppress pflag's automatic printing so we control where output goes.
 	fs.SetOutput(io.Discard)
@@ -70,6 +72,19 @@ func Run() int {
 			return jsonError(shared.ExitUsage, fmt.Sprintf(format, args...))
 		}
 		return shared.UsageErrorf(format, args...)
+	}
+
+	// --quiet: redirect os.Stderr to /dev/null so no messages reach the caller.
+	// Exit codes are unaffected — only the messages are suppressed.
+	if quietFlag {
+		if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
+			origStderr := os.Stderr
+			os.Stderr = devNull
+			defer func() {
+				os.Stderr = origStderr
+				_ = devNull.Close()
+			}()
+		}
 	}
 
 	// Reject more than one positional arg early.

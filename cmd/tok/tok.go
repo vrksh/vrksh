@@ -72,9 +72,11 @@ func Run() int {
 	var jsonFlag bool
 	var budget int
 	var model string
+	var quietFlag bool
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit output as JSON")
 	fs.IntVar(&budget, "budget", 0, "exit 1 if token count exceeds N")
 	fs.StringVarP(&model, "model", "m", "cl100k_base", "tokenizer model (currently only cl100k_base is supported)")
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	// Suppress pflag's automatic printing so all output goes through shared helpers.
 	fs.SetOutput(io.Discard)
@@ -84,6 +86,18 @@ func Run() int {
 			return printUsage(fs)
 		}
 		return shared.UsageErrorf("%s", err.Error())
+	}
+
+	// --quiet: redirect os.Stderr to /dev/null so no messages reach the caller.
+	if quietFlag {
+		if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
+			origStderr := os.Stderr
+			os.Stderr = devNull
+			defer func() {
+				os.Stderr = origStderr
+				_ = devNull.Close()
+			}()
+		}
 	}
 
 	// Resolve the effective model name for output. --model affects the label

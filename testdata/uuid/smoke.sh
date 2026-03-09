@@ -78,6 +78,15 @@ assert_stderr_not_empty() {
   fi
 }
 
+assert_stderr_empty() {
+  local desc=$1 stderr=$2
+  if [ -z "$stderr" ]; then
+    ok "$desc (stderr empty)"
+  else
+    fail "$desc" "expected empty stderr, got: $stderr"
+  fi
+}
+
 assert_line_count() {
   local desc=$1 expected=$2 actual=$3
   if [ "$actual" -eq "$expected" ]; then
@@ -276,6 +285,26 @@ stdout=$("$VRK" uuid --help 2>/dev/null) || true
 exit_code=$(set +e; "$VRK" uuid --help > /dev/null 2>&1; echo $?)
 assert_exit "--help: exit 0" 0 "$exit_code"
 assert_stdout_not_empty "--help: stdout not empty" "$stdout"
+
+# ------------------------------------------------------------
+# 8. --quiet
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+# Error case (--count 0) with quiet should exit 2 and have no stderr
+stdout=$("$VRK" uuid --quiet --count 0 2>/dev/null) || true
+stderr=$(set +e; "$VRK" uuid --quiet --count 0 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" uuid --quiet --count 0 > /dev/null 2>&1; echo $?)
+assert_exit            "--quiet error: exit 2"          2        "$exit_code"
+assert_stdout_empty    "--quiet error: stdout empty"             "$stdout"
+assert_stderr_empty    "--quiet error: stderr empty"             "$stderr"
+
+# Valid generation with quiet should still produce stdout
+stdout=$("$VRK" uuid --quiet 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" uuid --quiet > /dev/null 2>&1; echo $?)
+assert_exit            "--quiet success: exit 0"        0        "$exit_code"
+assert_stdout_matches  "--quiet success: value" "$UUID_RE"       "$stdout"
 
 # ------------------------------------------------------------
 # Summary

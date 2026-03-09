@@ -35,15 +35,18 @@ os.Args[1] == "jwt"      →  jwt tool  (via: vrk jwt)
 // in internal/shared/flags.go
 import "github.com/spf13/pflag"
 
-func (f *StandardFlags) Register(fs *pflag.FlagSet) {
-    fs.BoolVarP(&f.JSON,    "json",    "j", false, "emit output as JSON")
-    fs.BoolVarP(&f.Text,    "text",    "t", false, "emit plain text, no formatting")
-    fs.BoolVarP(&f.Quiet,   "quiet",   "q", false, "suppress stderr")
-    fs.BoolVarP(&f.Fail,    "fail",    "f", false, "exit 1 if condition not met")
-    fs.StringVarP(&f.Schema,"schema",  "s", "",    "output must match this JSON schema")
-    fs.StringVarP(&f.Model, "model",   "m", "",    "override model")
-    fs.BoolVar(&f.Explain,  "explain",      false, "print action without executing (no shorthand — too dangerous)")
-    fs.BoolVar(&f.DryRun,   "dry-run",      false, "preview mutations without executing (no shorthand)")
+// StandardFlags returns a new FlagSet pre-populated with the common flags.
+// Tools call pflag.NewFlagSet per tool, then register exactly the flags they need.
+// StandardFlags() is a convenience starting point, not a mandate — tools are free
+// to register a subset. Each tool owns its own FlagSet and variable bindings.
+func StandardFlags() *pflag.FlagSet {
+    fs := pflag.NewFlagSet("vrk", pflag.ContinueOnError)
+    fs.BoolP("json",    "j", false, "emit output as JSON")
+    fs.BoolP("quiet",   "q", false, "suppress stderr output")
+    fs.BoolP("fail",    "f", false, "exit 1 if condition not met")
+    fs.Bool("dry-run",       false, "preview side effects without executing")
+    fs.Bool("explain",       false, "print what the tool would do without executing")
+    return fs
 }
 ```
 
@@ -215,7 +218,7 @@ cat data.jsonl | vrk prompt | vrk checkpoint step-2 | vrk validate
 | `input.go` | `ReadInput`, `ReadInputOptional`, `ReadInputFile` |
 | `exit.go` | `Die`, `DieUsage`, `Warn`, exit constants 0/1/2 |
 | `json.go` | `PrintJSON`, `PrintJSONL`, `JSONOutput` |
-| `flags.go` | `StandardFlags` — embed in every tool's flag struct |
+| `flags.go` | `StandardFlags()` — returns a starting-point `*pflag.FlagSet`; tools create their own FlagSet and register exactly the flags they need |
 | `kvpath.go` | `KVPath()` — respects `VRK_KV_PATH` |
 | `flag_file.go` | `CheckpointDir()` — respects `VRK_CHECKPOINT_DIR` |
 | `testutil/contract.go` | `RunContractTests` — imported by every tool's `_test.go` |
@@ -231,7 +234,7 @@ cat data.jsonl | vrk prompt | vrk checkpoint step-2 | vrk validate
 | Code | Meaning | Examples |
 |------|---------|---------|
 | 0 | Success | output produced, condition met |
-| 1 | Runtime error | invalid JWT, over budget with `--fail`, schema mismatch, API error |
+| 1 | Runtime error | invalid JWT, over budget, condition not met, schema mismatch, API error |
 | 2 | Usage error | no stdin when required, unknown flag, ambiguous argument |
 
 **Why strict:** exit codes are the API that shell scripts and agents use to make decisions. A change from exit 1 to exit 2 (or vice versa) silently breaks every pipeline that relies on that tool. Treat exit codes as a public API — version them accordingly.

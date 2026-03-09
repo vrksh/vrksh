@@ -52,17 +52,17 @@ cat response.md | vrk strip --text        # redundant here but valid
 
 ### `--fail`
 
-**Meaning:** Exit 1 if a condition is not met. Makes measurement tools into guard tools.
+**Meaning:** Exit 1 if a condition is not met. Applies to tools where measurement and guarding are separate concerns — the tool can measure something and optionally fail on it.
 
 **Rules:**
 - Must be pipeline-safe: exit 1 from `--fail` must propagate correctly through `&&` chains.
 - Stdout must still be populated on exit 1 from `--fail` (the measurement result is valid even if the condition failed). Only stderr gets the failure reason.
 - The condition being checked must be documented in `--help`.
 
+**Not all tools need `--fail`:** some tools are inherently guards. `jwt --expired` always exits 1 if expired — no `--fail` needed. `tok --budget N` is a hard guard by design — it exits 1 when the count exceeds N, no `--fail` needed. Reserve `--fail` for tools where measurement and guarding are genuinely separate.
+
 **Examples:**
 ```bash
-cat prompt.txt | vrk tok --budget 4000 --fail    # exit 1 if over 4000 tokens
-echo $TOKEN | vrk jwt --expired --fail           # exit 1 if token is expired
 cat data.txt | vrk prompt --schema s.json --fail    # exit 1 if output doesn't match schema
 ```
 
@@ -157,14 +157,11 @@ cat prompt.txt | vrk prompt --model ollama/llama3   # local via --endpoint
 ### `--budget <N>`
 
 **Meaning:** Token budget. Behaviour depends on tool:
-- On `tok`: warn or fail if stdin exceeds N tokens.
+- On `tok`: `--budget N` is a hard guard. Exits 1 if stdin exceeds N tokens, with no output. No `--fail` needed — the flag itself is the guard.
 - On `prompt`: refuse to send if stdin exceeds N tokens (integrates `tok` internally).
 
-Always used with `--fail` to make it a hard guard, or `--warn` to make it advisory.
-
 ```bash
-cat prompt.txt | vrk tok --budget 4000 --warn    # warn to stderr, continue
-cat prompt.txt | vrk tok --budget 4000 --fail    # exit 1 if over budget
+cat prompt.txt | vrk tok --budget 4000              # exit 1 if over 4000 tokens
 cat prompt.txt | vrk prompt --budget 4000 --fail    # refuse to call API if over budget
 ```
 
@@ -210,7 +207,7 @@ These are intentionally absent. Do not add them.
 | Code | Meaning | Examples |
 |------|---------|---------|
 | `0` | Success | Output produced, condition met |
-| `1` | Runtime error | Invalid JWT, over budget with `--fail`, schema mismatch, API error |
+| `1` | Runtime error | Invalid JWT, over budget, condition not met, schema mismatch, API error |
 | `2` | Usage error | No stdin when required, unknown flag, ambiguous argument, missing required flag |
 
 Exit codes must never change for a released tool. They are part of the public contract.

@@ -316,6 +316,36 @@ func TestUnknownFlag(t *testing.T) {
 	}
 }
 
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on a usage
+// error. Exit code is unaffected.
+func TestQuietSuppressesStderr(t *testing.T) {
+	stdout, stderr, code := runUUID(t, []string{"--count", "0", "--quiet"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (usage error)", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout must be empty on error, got %q", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, _, code := runUUID(t, []string{"--quiet"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	line := strings.TrimRight(stdout, "\n")
+	if !uuidRe.MatchString(line) {
+		t.Errorf("--quiet: output %q does not match UUID regex", line)
+	}
+}
+
 // --- Property tests ---
 
 func TestPropertyUUIDFormat(t *testing.T) {

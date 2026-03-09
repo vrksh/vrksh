@@ -456,6 +456,26 @@ assert_exit            "--valid+--json: exit 0"                         0       
 assert_stdout_contains "--valid+--json: has header key"                 '"header"'    "$stdout"
 
 # ------------------------------------------------------------
+# 13. --quiet
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+# Invalid JWT with quiet should exit 1 and have no stderr
+stdout=$("$VRK" jwt --quiet "notajwt" 2>/dev/null) || true
+stderr=$(set +e; "$VRK" jwt --quiet "notajwt" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" jwt --quiet "notajwt" > /dev/null 2>&1; echo $?)
+assert_exit            "--quiet error: exit 1"          1        "$exit_code"
+assert_stdout_empty    "--quiet error: stdout empty"             "$stdout"
+assert_stderr_empty    "--quiet error: stderr empty"             "$stderr"
+
+# Valid input with quiet should still produce stdout
+stdout=$("$VRK" jwt --quiet "$VALID_JWT" 2>/dev/null) || true
+exit_code=$(set +e; "$VRK" jwt --quiet "$VALID_JWT" > /dev/null 2>&1; echo $?)
+assert_exit            "--quiet success: exit 0"        0        "$exit_code"
+assert_stdout_contains "--quiet success: value" '"sub"'          "$stdout"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

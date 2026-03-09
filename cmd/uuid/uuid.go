@@ -29,16 +29,30 @@ func Run() int {
 	var v7Flag bool
 	var count int
 	var jsonFlag bool
+	var quietFlag bool
 
 	fs.BoolVar(&v7Flag, "v7", false, "generate a v7 (time-ordered) UUID instead of v4")
 	fs.IntVarP(&count, "count", "n", 1, "number of UUIDs to generate (>= 1)")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit output as JSON (JSONL when --count > 1)")
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
 			return printUsage(fs)
 		}
 		return shared.UsageErrorf("uuid: %s", err.Error())
+	}
+
+	// --quiet: redirect os.Stderr to /dev/null so no messages reach the caller.
+	if quietFlag {
+		if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
+			origStderr := os.Stderr
+			os.Stderr = devNull
+			defer func() {
+				os.Stderr = origStderr
+				_ = devNull.Close()
+			}()
+		}
 	}
 
 	if count < 1 {

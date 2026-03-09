@@ -590,6 +590,36 @@ func TestJSONError(t *testing.T) {
 	}
 }
 
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on a usage
+// error. Exit code is unaffected.
+func TestQuietSuppressesStderr(t *testing.T) {
+	// "3d" without a sign is a usage error (exit 2).
+	stdout, stderr, code := runEpoch(t, []string{"--quiet", "3d"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (usage error)", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout must be empty on error, got %q", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, _, code := runEpoch(t, []string{"--quiet", "1740009600"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if strings.TrimSpace(stdout) != "1740009600" {
+		t.Errorf("stdout = %q, want %q", strings.TrimSpace(stdout), "1740009600")
+	}
+}
+
 // --- Fuzz target ---
 
 func FuzzEpoch(f *testing.F) {

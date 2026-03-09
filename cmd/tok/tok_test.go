@@ -318,6 +318,35 @@ func Test100TokenString(t *testing.T) {
 	}
 }
 
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderrOnBudgetExceeded verifies that --quiet suppresses
+// stderr when budget is exceeded. Exit code is still 1.
+func TestQuietSuppressesStderrOnBudgetExceeded(t *testing.T) {
+	stdout, stderr, code := runTok(t, []string{"--budget", "1", "--quiet"}, "hello world")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (over budget)", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout must be empty on budget failure, got %q", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, _, code := runTok(t, []string{"--quiet"}, "hello world")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != "2\n" {
+		t.Errorf("stdout = %q, want %q", stdout, "2\n")
+	}
+}
+
 // --- property test ---
 
 func TestPropertyExitCodesOnly(t *testing.T) {

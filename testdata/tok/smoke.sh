@@ -72,6 +72,15 @@ assert_stderr_contains() {
   fi
 }
 
+assert_stderr_empty() {
+  local desc=$1 stderr=$2
+  if [ -z "$stderr" ]; then
+    ok "$desc (stderr empty)"
+  else
+    fail "$desc" "expected empty stderr, got: $stderr"
+  fi
+}
+
 assert_stdout_json_field() {
   local desc=$1 field=$2 expected=$3 actual=$4
   if command -v jq > /dev/null 2>&1; then
@@ -235,6 +244,26 @@ if echo "$stdout" | grep -q "tok"; then
 else
   fail "help: contains 'tok'" "got: $stdout"
 fi
+
+# ------------------------------------------------------------
+# 12. --quiet
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+# Over budget with quiet should exit 1 and have no stderr
+stdout=$(set +e; echo 'hello world' | "$VRK" tok --quiet --budget 1 2>/dev/null; true)
+stderr=$(set +e; echo 'hello world' | "$VRK" tok --quiet --budget 1 2>&1 >/dev/null; true)
+exit_code=$(set +e; echo 'hello world' | "$VRK" tok --quiet --budget 1 > /dev/null 2>&1; echo $?)
+assert_exit            "--quiet budget: exit 1"         1        "$exit_code"
+assert_stdout_empty    "--quiet budget: stdout empty"            "$stdout"
+assert_stderr_empty    "--quiet budget: stderr empty"            "$stderr"
+
+# Valid count with quiet should still produce stdout
+stdout=$(echo 'hello world' | "$VRK" tok --quiet 2>/dev/null) || true
+exit_code=$(set +e; echo 'hello world' | "$VRK" tok --quiet > /dev/null 2>&1; echo $?)
+assert_exit            "--quiet success: exit 0"        0        "$exit_code"
+assert_stdout_equals   "--quiet success: value" "2"              "$stdout"
 
 # ------------------------------------------------------------
 # Summary

@@ -382,6 +382,26 @@ else
 fi
 
 # ------------------------------------------------------------
+# 10. --quiet
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+# Invalid input with quiet should exit 2 and have no stderr
+stdout=$("$VRK" epoch --quiet "3d" 2>/dev/null) || true
+stderr=$(set +e; "$VRK" epoch --quiet "3d" 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" epoch --quiet "3d" > /dev/null 2>&1; echo $?)
+assert_exit            "--quiet error: exit 2"          2        "$exit_code"
+assert_stdout_empty    "--quiet error: stdout empty"             "$stdout"
+assert_stderr_empty    "--quiet error: stderr empty"             "$stderr"
+
+# Valid input with quiet should still produce stdout
+stdout=$(echo "+3d" | "$VRK" epoch --quiet --at "$ANCHOR" 2>/dev/null) || true
+exit_code=$(set +e; echo "+3d" | "$VRK" epoch --quiet --at "$ANCHOR" > /dev/null 2>&1; echo $?)
+assert_exit            "--quiet success: exit 0"        0        "$exit_code"
+assert_stdout_equals   "--quiet success: value" "1740268800"    "$stdout"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

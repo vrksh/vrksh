@@ -609,6 +609,39 @@ func TestValidFlagNbfMissing(t *testing.T) {
 	}
 }
 
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on error.
+// Exit code is unaffected.
+func TestQuietSuppressesStderr(t *testing.T) {
+	stdout, stderr, code := runJWT(t, []string{"--quiet", "notajwt"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (runtime error)", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout must be empty on error, got %q", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, stderr, code := runJWT(t, []string{"--quiet", validJWT}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
+		t.Fatalf("stdout not valid JSON: %v\ngot: %q", err, stdout)
+	}
+}
+
 func FuzzJwt(f *testing.F) {
 	f.Add(validJWT)
 	f.Add(expiredJWT)
