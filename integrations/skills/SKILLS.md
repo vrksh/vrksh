@@ -600,3 +600,104 @@ wait
 - **Concurrent writers serialise cleanly.** `kv` uses SQLite WAL mode with `PRAGMA busy_timeout=5000`. The `incr`/`decr` operations use `BEGIN IMMEDIATE` to take the write lock before reading, preventing lost updates. Running 10 parallel `vrk kv incr counter` processes always yields a final value of 10.
 - **Do not store secrets in `kv`.** The database is plaintext SQLite at `~/.vrk.db`. Use env vars or the system keychain for credentials.
 - **Stdout is always empty on error.** Errors go to stderr only.
+
+---
+
+## coax — Retry Wrapper
+
+Retries any shell command on failure. Understands exit codes, fixed and exponential
+backoff, and condition-based retry (`--until`). Stdin is buffered and re-piped to
+the command on every attempt.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--times N` | — | Number of retries (default 3); total attempts = N+1. Must be >= 1. |
+| `--backoff <spec>` | — | Delay between retries: `100ms` for fixed, `exp:100ms` for exponential |
+| `--backoff-max <d>` | — | Cap for exponential backoff; 0 = uncapped |
+| `--on <code>` | — | Retry only when exit code matches; repeatable: `--on 1 --on 2`. Default: any non-zero exit. |
+| `--until <cmd>` | — | Shell command; retry until it exits 0 (takes precedence over `--on`) |
+| `--quiet` | `-q` | Suppress coax's own retry progress lines to stderr; subprocess stderr always passes through |
+
+### Exit codes
+
+| Code | Condition |
+|------|-----------|
+| 0 | Command exits 0 on some attempt, or `--until` condition exits 0 |
+| last cmd code | All retries exhausted — coax passes through the last command's actual exit code |
+| 2 | Usage error — `--times < 1`, no command, unknown flag, bad `--backoff` format |
+
+### Backoff formats
+
+| Spec | Behaviour |
+|------|-----------|
+| (absent) | No delay |
+| `100ms` | Fixed 100ms between every retry |
+| `exp:100ms` | Exponential: 100ms, 200ms, 400ms, … |
+| `exp:100ms` + `--backoff-max 150ms` | Exponential capped: 100ms, 150ms, 150ms, … |
+
+### Examples
+
+```bash
+# Retry up to 3 times (default), exit with last command's exit code
+vrk coax -- exit 1
+
+# Retry exactly 2 times (3 total attempts)
+vrk coax --times 2 -- my-flaky-command
+
+# Retry only when exit code is 42
+vrk coax --on 42 -- my-command
+
+# Fixed 500ms between retries
+vrk coax --times 5 --backoff 500ms -- curl -sf https://api.example.com/health
+
+# Exponential backoff: 100ms, 200ms, 400ms
+vrk coax --times 3 --backoff exp:100ms -- my-command
+
+# Exponential backoff capped at 1s
+vrk coax --times 5 --backoff exp:200ms --backoff-max 1s -- my-command
+
+# Retry until a condition is satisfied (service health check)
+vrk coax --times 10 --backoff 500ms --until 'curl -sf localhost:8080/health' -- systemctl start myservice
+
+# Re-pipe stdin to each attempt
+echo '{"query":"hello"}' | vrk coax --times 3 -- curl -sf -d @- https://api.example.com/
+
+# Suppress coax progress lines (subprocess stderr still passes through)
+vrk coax --quiet --times 3 -- my-command
+```
+
+### Compose patterns
+
+```bash
+# Retry an LLM prompt call — useful when the API returns transient errors
+vrk coax --times 3 --backoff exp:1s --on 1 -- \
+  vrk prompt "Summarise this document" < doc.txt
+
+# Gate a pipeline: retry the expensive fetch, then process
+vrk coax --times 5 --backoff 2s -- \
+  curl -sf https://api.example.com/data > data.json
+cat data.json | vrk prompt "Extract key facts"
+
+# Wait for a background job to write a sentinel key, then proceed
+vrk coax --times 20 --backoff 3s \
+  --until 'vrk kv get job:status | grep -q done' \
+  -- sh -c 'sleep 1'
+
+# Retry with exit code passthrough — callers can still distinguish outcomes
+vrk coax --times 3 -- my-command
+echo "last exit: $?"
+```
+
+### Gotchas
+
+- **`--` is required** to separate coax flags from the retried command: `vrk coax --times 2 -- cmd args`. Without a command, coax exits 2 with "missing command".
+- **Commands run via `sh -c`.** The args after `--` are joined with spaces and passed to `sh -c "..."`. Shell builtins (`exit`, `test`, `[`) work, and you can use pipes and redirects inline. Pass complex commands as a single quoted argument to avoid double-wrapping: `vrk coax -- "cmd1 && cmd2"`.
+- **Exit code passthrough.** On exhaustion, coax exits with the last command's actual exit code — not a normalised 1. `vrk coax --times 2 -- exit 42` exits 42. Callers that test `$? -ne 0` still work; callers checking a specific code should account for this.
+- **`--on` with no match exits immediately.** If `--on 42` is set and the command exits 1, coax stops after the first attempt. The filter is strict — it does not fall back to "retry on any non-zero".
+- **`--until` takes precedence over `--on`.** If both are set, only the condition is checked to decide whether to retry.
+- **`--until` condition output is discarded.** The stdout and stderr of the `--until` command are suppressed — it is a side-effect check, not data.
+- **Stdin is buffered once and re-piped.** All of stdin is read at startup. Streaming stdin sources (e.g., a slow HTTP body) will block until EOF before the first attempt starts. For streaming use cases, write stdin to a file first and redirect from the file.
+- **`--quiet` suppresses only coax's own lines** — the `coax: attempt N failed` progress messages. The subprocess's own stdout and stderr are never suppressed.
+- **Stdout is always empty on error.** Coax's own error messages go to stderr only.

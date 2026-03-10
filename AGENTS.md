@@ -13,8 +13,8 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `epoch` | Convert between Unix timestamps and ISO 8601 | `--iso`, `--tz <zone>`, `--now`, `--at <ts>` |
 | `uuid` | Generate UUIDs | `--v7`, `--count <n>`, `--json` |
 | `tok` | Count tokens, enforce budget | `--budget <n>`, `--model <name>` |
-| `sse` | Parse Server-Sent Events stream to JSONL | `--data-only` |
-| `coax` | Retry a command until it succeeds | `--attempts <n>`, `--delay <d>` |
+| `sse` | Parse Server-Sent Events stream to JSONL | `--event <name>`, `--field <path>` |
+| `coax` | Retry a command until it succeeds | `--times <n>`, `--backoff <spec>`, `--on <code>`, `--until <cmd>` |
 | `prompt` | Send a prompt to an LLM, emit response | `--model`, `--system`, `--json`, `--schema` |
 | `kv` | Persistent key-value store (SQLite-backed) | subcommands: `set get del incr list` |
 
