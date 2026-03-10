@@ -464,3 +464,139 @@ curl -sN ... | vrk sse | jq 'select(.event == "content_block_delta") | .data.del
 - **Non-JSON `data:` values are emitted as strings**, not dropped. This means comment-like lines (`data: [DONE]`, `data: ping`) appear in the output as `{"event":"message","data":"[DONE]"}` — except `[DONE]` which is intercepted as the termination sentinel before emission.
 - **`--field` skips silently on missing paths or non-JSON data.** No error, no output for that record. This is intentional — real streams mix JSON and non-JSON events.
 - **Stdout is always empty on error.** Errors go to stderr only.
+
+---
+
+## kv — Persistent Key-Value Store
+
+Stores key-value pairs in `~/.vrk.db` (SQLite, WAL mode). Namespaced with `--ns`.
+Database path overridden by `VRK_KV_PATH`.
+Input: positional arguments. `kv set` reads value from stdin when the value argument is absent.
+
+### Subcommands
+
+| Subcommand | Usage | Description |
+|------------|-------|-------------|
+| `set` | `vrk kv set [flags] <key> [value]` | Store a value; reads from stdin when value arg is absent |
+| `get` | `vrk kv get [flags] <key>` | Print value; exit 1 if not found or expired |
+| `del` | `vrk kv del [flags] <key>` | Delete a key; silent if absent |
+| `list` | `vrk kv list [flags]` | List all keys in namespace, sorted alphabetically |
+| `incr` | `vrk kv incr [flags] <key>` | Increment integer value by 1 (or `--by N`); missing key starts at 0 |
+| `decr` | `vrk kv decr [flags] <key>` | Decrement integer value by 1 (or `--by N`); missing key starts at 0 |
+
+### Flags
+
+| Flag | Subcommands | Type | Default | Description |
+|------|-------------|------|---------|-------------|
+| `--ns` | all | string | `"default"` | Namespace; keyspaces are isolated |
+| `--ttl` | `set` | duration | `0` | Expiry duration (`1s`, `5m`, `24h`); 0 = no expiry |
+| `--dry-run` | `set` | bool | false | Print intent without writing to db |
+| `--by` | `incr`, `decr` | int | `1` | Delta; must be ≥ 1 |
+
+### Exit codes
+
+| Code | Condition |
+|------|-----------|
+| 0 | `set`, `del`, `list`, `incr`, `decr` — success |
+| 0 | `get` — key found and not expired |
+| 1 | `get` — key not found or expired |
+| 1 | `incr`/`decr` — stored value is not a parseable integer |
+| 1 | any — database open or write failure |
+| 2 | any — missing subcommand, unknown subcommand, unknown flag, `--by` < 1 |
+
+### Examples
+
+```bash
+# Basic set / get / del
+vrk kv set mykey myvalue
+vrk kv get mykey          # → myvalue
+vrk kv del mykey
+
+# Overwrite
+vrk kv set mykey newvalue
+vrk kv get mykey          # → newvalue
+
+# get on missing key → exit 1, stderr "key not found"
+vrk kv get nonexistent
+
+# Empty string is a valid value
+vrk kv set mykey ""
+vrk kv get mykey          # → (empty line)
+
+# Read value from stdin
+echo '{"status":"done"}' | vrk kv set result
+vrk kv get result         # → {"status":"done"}
+
+# list — sorted alphabetically, one key per line
+vrk kv list
+
+# Namespace isolation
+vrk kv set --ns myjob step 3
+vrk kv get --ns myjob step   # → 3
+vrk kv get step              # → exit 1 (namespaces are isolated)
+
+# TTL expiry
+vrk kv set expiring value --ttl 1s
+sleep 2
+vrk kv get expiring          # → exit 1
+
+# Dry run — prints intent, nothing written
+vrk kv set result done --dry-run
+# → would set result = done
+
+# incr / decr (missing key starts at 0)
+vrk kv incr counter          # → 1
+vrk kv incr counter          # → 2
+vrk kv incr counter --by 5   # → 7
+vrk kv decr counter          # → 6
+
+# incr on non-numeric value → exit 1
+vrk kv set counter notanumber
+vrk kv incr counter          # → exit 1, stderr "value is not a number"
+```
+
+### Compose patterns
+
+```bash
+# Cache an LLM response keyed by UUID
+REQ=$(vrk uuid)
+vrk prompt "Summarise this" < input.txt | vrk kv set "response:$REQ"
+vrk kv get "response:$REQ"
+
+# Per-user key from a JWT sub claim
+SUB=$(vrk jwt --claim sub "$TOKEN")
+vrk kv set "session:$SUB" "$SESSION_DATA"
+
+# Compute expiry timestamp with epoch, then use as TTL reference
+vrk kv set session:abc "$TOKEN" --ttl 3600s
+
+# Store prompt token count for auditing
+cat prompt.txt | vrk tok --json | vrk kv set last_prompt_tokens
+
+# Job progress tracking across pipeline stages
+vrk kv incr --ns job:42 steps_completed
+
+# Gate on step completion before proceeding
+DONE=$(vrk kv get --ns job:42 step_1_done 2>/dev/null) || true
+if [ "$DONE" = "1" ]; then echo "already done"; fi
+
+# 10 parallel workers, each storing results by worker ID
+for i in $(seq 1 10); do
+  vrk prompt "process batch $i" | vrk kv set --ns run:$RUN "result:$i" &
+done
+wait
+```
+
+### Gotchas
+
+- **Empty string is a valid value.** `vrk kv set mykey ""` stores and returns an empty string. `get` exits 0 and prints an empty line. This is not the same as key-not-found.
+- **Stdin value for `set`.** When the value positional argument is absent, `kv set` reads from stdin. Exactly one trailing newline is stripped (matching `echo` behaviour). This means `echo 'val' | vrk kv set key` and `vrk kv set key val` produce identical stored values.
+- **Namespaces are isolated.** `--ns a` and `--ns b` never share keys. The default namespace is `"default"`. Using `--ns` consistently is required — omitting it on `get` after setting with `--ns` always gives "key not found".
+- **`incr`/`decr` on missing key starts at 0.** The first `vrk kv incr counter` on a fresh database stores and prints `1`. The first `vrk kv decr counter` stores `-1`. This mirrors shell counter idioms.
+- **`incr`/`decr` on non-numeric value exits 1.** Stored values must be parseable as 64-bit integers. Float strings (`"1.5"`) and alphabetic strings fail with "value is not a number".
+- **TTL precision is whole seconds.** `--ttl 1500ms` rounds down to 1 second. Sub-second TTLs are not a real use case for a persistent store.
+- **`list` output is sorted alphabetically.** This is deterministic — safe to diff and assert in scripts. No namespace prefix is included.
+- **`del` on a missing key exits 0.** This matches filesystem `rm -f` semantics.
+- **Concurrent writers serialise cleanly.** `kv` uses SQLite WAL mode with `PRAGMA busy_timeout=5000`. The `incr`/`decr` operations use `BEGIN IMMEDIATE` to take the write lock before reading, preventing lost updates. Running 10 parallel `vrk kv incr counter` processes always yields a final value of 10.
+- **Do not store secrets in `kv`.** The database is plaintext SQLite at `~/.vrk.db`. Use env vars or the system keychain for credentials.
+- **Stdout is always empty on error.** Errors go to stderr only.
