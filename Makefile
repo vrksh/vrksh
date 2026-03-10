@@ -1,6 +1,6 @@
 export CGO_ENABLED=0
 
-.PHONY: build test test-v test-tool lint fuzz cross check smoke clean
+.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean
 
 # Build the binary. CGO_ENABLED=0 is mandatory - static binary promise depends on it.
 build:
@@ -17,6 +17,16 @@ test-v:
 # One tool only: make test-tool TOOL=jwt
 test-tool:
 	go test ./cmd/$(TOOL)/... -v -timeout 30s
+
+# Integration tests — make real API calls. Excluded from check.
+# Requires ANTHROPIC_API_KEY and/or OPENAI_API_KEY in the environment.
+# Each provider's tests skip automatically when its key is absent.
+# Usage:
+#   ANTHROPIC_API_KEY=sk-ant-... make test-integration
+#   OPENAI_API_KEY=sk-...       make test-integration
+#   ANTHROPIC_API_KEY=... OPENAI_API_KEY=... make test-integration
+test-integration:
+	go test -tags integration -v -timeout 60s ./cmd/prompt/...
 
 # Run the linter. Fix all warnings before committing.
 lint:

@@ -701,3 +701,129 @@ echo "last exit: $?"
 - **Stdin is buffered once and re-piped.** All of stdin is read at startup. Streaming stdin sources (e.g., a slow HTTP body) will block until EOF before the first attempt starts. For streaming use cases, write stdin to a file first and redirect from the file.
 - **`--quiet` suppresses only coax's own lines** — the `coax: attempt N failed` progress messages. The subprocess's own stdout and stderr are never suppressed.
 - **Stdout is always empty on error.** Coax's own error messages go to stderr only.
+
+---
+
+## prompt — LLM Call for Pipelines
+
+Sends a prompt to an LLM and prints the response. Defaults to Anthropic
+(`claude-sonnet-4-5`). Reads from stdin or a positional argument.
+Input: positional argument or stdin.
+
+### Flags
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--model` | `-m` | string | `claude-sonnet-4-5` | Model name; overridden by `VRK_DEFAULT_MODEL` env var |
+| `--budget <N>` | — | int | 0 | Exit 1 before calling the API if prompt exceeds N tokens (0 = disabled) |
+| `--fail` | `-f` | bool | false | Accepted; meaningful with `--schema` (exit 1 on mismatch) |
+| `--json` | `-j` | bool | false | Emit response as a JSON envelope with metadata |
+| `--schema <val>` | `-s` | string | "" | Inline JSON schema or file path; validates response keys and types |
+| `--explain` | — | bool | false | Print equivalent curl command and exit 0; no API call |
+| `--retry <N>` | — | int | 0 | Retry up to N times on schema mismatch with temperature escalation |
+
+### Exit codes
+
+| Code | Condition |
+|------|-----------|
+| 0 | Success — response on stdout |
+| 1 | Runtime error: no API key, HTTP error, budget exceeded, schema mismatch after all retries |
+| 2 | Usage error: no input in interactive terminal (no positional arg, no `--explain`), unknown flag |
+
+### Provider selection
+
+| Condition | Provider |
+|-----------|----------|
+| Only `ANTHROPIC_API_KEY` set | Anthropic |
+| Only `OPENAI_API_KEY` set | OpenAI |
+| Both set, model starts with `gpt-`, `o1`, `o3`, or `o4` | OpenAI |
+| Both set, any other model name | Anthropic |
+| Neither set (not `--explain`) | Exit 1: "no API key found: set ANTHROPIC_API_KEY or OPENAI_API_KEY" |
+
+### --json output shape
+
+```json
+{
+  "response": "pong",
+  "model": "claude-sonnet-4-5",
+  "tokens_used": 12,
+  "latency_ms": 340,
+  "request_hash": "<sha256hex>"
+}
+```
+
+`request_hash` is `sha256(model + "|" + temperature + "|" + prompt)` — stable cache key for `vrk kv`.
+
+### Examples
+
+```bash
+# Basic call — stdin form
+echo "Summarise this in one sentence." | vrk prompt
+
+# Positional arg form — same result
+vrk prompt "Summarise this in one sentence."
+
+# Pick a different model
+echo "hello" | vrk prompt --model gpt-4o
+
+# Get full metadata envelope
+echo "Reply with: pong" | vrk prompt --json
+
+# Require JSON response matching a schema
+echo "Return {name, age} for a fictional person." | vrk prompt --schema '{"name":"string","age":"number"}'
+
+# Guard against large prompts
+cat big_doc.txt | vrk prompt --budget 4000
+
+# Dry-run: see what curl would be sent without making an API call
+echo "hello" | vrk prompt --explain
+
+# Override model for a session via env var
+export VRK_DEFAULT_MODEL=claude-opus-4-5
+echo "hello" | vrk prompt
+```
+
+### Compose patterns
+
+```bash
+# Cache expensive LLM response by request hash
+RESULT=$(cat doc.txt | vrk prompt --json)
+HASH=$(echo "$RESULT" | jq -r '.request_hash')
+echo "$RESULT" | jq -r '.response' | vrk kv set "cache:$HASH"
+
+# Budget gate before sending: count tokens first, then prompt
+TOKENS=$(cat doc.txt | vrk tok)
+if [ "$TOKENS" -le 4000 ]; then
+  cat doc.txt | vrk prompt "Summarise this."
+else
+  echo "Document too large: $TOKENS tokens" >&2
+  exit 1
+fi
+
+# Or use the built-in budget flag (same effect, one command)
+cat doc.txt | vrk prompt --budget 4000 "Summarise this."
+
+# Schema-validated extraction with retry
+echo "Extract name and age from: Alice is 30." | \
+  vrk prompt --schema '{"name":"string","age":"number"}' --retry 2
+
+# Thread a request ID through a pipeline
+REQ=$(vrk uuid)
+cat payload.txt | vrk prompt "Classify this." | vrk kv set "result:$REQ"
+
+# Retry transient API errors using coax
+vrk coax --times 3 --backoff exp:1s --on 1 -- \
+  sh -c 'echo "Summarise this." | vrk prompt'
+```
+
+### Gotchas
+
+- **`--json` means metadata envelope, not "respond in JSON".** To request JSON from the LLM, use `--schema`. `--json` wraps the response in `{response, model, tokens_used, latency_ms, request_hash}`.
+- **`--budget` is a hard gate.** It fires before the API call — even if no API key is set. There is no soft warning mode; use `vrk tok --budget N` if you want the token count without stopping the pipeline.
+- **Temperature default is 0.** Responses are deterministic by default. `--retry` escalates temperature across attempts (0.0 → 0.1 → 0.2). Do not add a `--temperature` flag unless explicitly extending the tool.
+- **API keys are never in output.** The key value is scrubbed from all error messages and `--explain` output before writing to stdout or stderr. `--explain` uses `$ANTHROPIC_API_KEY` / `$OPENAI_API_KEY` as shell variable references.
+- **No conversation history.** Each call is stateless — there is no session context between invocations. For multi-turn conversations, build the context into the prompt text before calling.
+- **`io.ReadAll` blocks until EOF.** The full prompt is read before the API call. For very large inputs, consider whether the model's context window can handle the token count.
+- **`--schema` depth is top-level only.** Validation checks top-level keys and types (`string`, `number`, `boolean`, `array`, `object`). Nested schema structures are not validated.
+- **`--schema` with OpenAI uses `response_format.json_schema`.** Validation is API-enforced. With Anthropic, the schema is injected as a system prompt and the response is validated post-call.
+- **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.

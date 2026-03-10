@@ -1,63 +1,17 @@
 package tok
 
 import (
-	"bufio"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
-	_ "embed"
-
-	"github.com/pkoukk/tiktoken-go"
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
+	"github.com/vrksh/vrksh/internal/shared/tokcount"
 	"golang.org/x/term"
 )
-
-//go:embed data/cl100k_base.tiktoken
-var cl100kData []byte
-
-// embeddedBpeLoader satisfies tiktoken.BpeLoader by reading from the embedded
-// cl100k_base vocab instead of downloading from a URL. The URL argument is
-// intentionally ignored — the embedded data is always cl100k_base.
-type embeddedBpeLoader struct{}
-
-func (embeddedBpeLoader) LoadTiktokenBpe(_ string) (map[string]int, error) {
-	ranks := make(map[string]int, 100256)
-	sc := bufio.NewScanner(strings.NewReader(string(cl100kData)))
-	for sc.Scan() {
-		line := sc.Text()
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, " ", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		token, err := base64.StdEncoding.DecodeString(parts[0])
-		if err != nil {
-			continue
-		}
-		rank, err := strconv.Atoi(parts[1])
-		if err != nil {
-			continue
-		}
-		ranks[string(token)] = rank
-	}
-	return ranks, sc.Err()
-}
-
-// getEncoder returns a cl100k_base encoder backed by the embedded vocabulary.
-// tiktoken.SetBpeLoader is package-global state; calling it here is safe
-// because tok is the only package that calls tiktoken in this binary.
-func getEncoder() (*tiktoken.Tiktoken, error) {
-	tiktoken.SetBpeLoader(embeddedBpeLoader{})
-	return tiktoken.GetEncoding("cl100k_base")
-}
 
 // tokOutput is the shape emitted by --json.
 type tokOutput struct {
@@ -129,13 +83,9 @@ func Run() int {
 	}
 
 	// Count tokens.
-	var count int
-	if input != "" {
-		enc, err := getEncoder()
-		if err != nil {
-			return shared.Errorf("tok: initialising tokeniser: %v", err)
-		}
-		count = len(enc.Encode(input, nil, nil))
+	count, err := tokcount.CountTokens(input)
+	if err != nil {
+		return shared.Errorf("tok: initialising tokeniser: %v", err)
 	}
 
 	// Budget guard: always a hard check. tok does not have a --fail flag;
