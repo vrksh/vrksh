@@ -358,3 +358,109 @@ cat generated_prompt.txt | vrk tok --budget 100000 || { echo "Prompt too large";
 - **When budget is exceeded, stdout is empty.** The count is reported only on success. On exit 1, only stderr contains the message. This makes `vrk tok --budget N | next-command` safe — `next-command` receives no input when the budget check fails.
 - **`--json` does not change error format.** When budget is exceeded, stderr is always plain text regardless of `--json`. Stdout is still empty on exit 1.
 - Stdout is always empty on error — errors go to stderr only.
+
+---
+
+## sse — SSE Stream Parser
+
+Reads a raw `text/event-stream` from stdin, parses it, and emits one JSON object
+per event to stdout (JSONL). No input source other than stdin — pipe your HTTP
+stream directly into it.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--event <name>` | `-e` | Only emit events of this type; skip all others |
+| `--field <path>` | `-F` | Extract a dot-path field from the record and print as plain text |
+
+No `--json`: output is already JSONL by default.
+No `--quiet`: `sse` produces no informational stderr in normal operation.
+
+### Output format
+
+Each emitted record is a JSON object on its own line (JSONL):
+
+```json
+{"event":"message","data":{"text":"hello"}}
+{"event":"content_block_delta","data":{"delta":{"text":"hi"}}}
+```
+
+- `event`: the SSE event type. Defaults to `"message"` when no `event:` field is present.
+- `data`: the parsed JSON value from the `data:` field. If the value is not valid JSON, it is emitted as a raw string.
+
+### --field path
+
+The dot-path navigates from the top-level record (which has `event` and `data` keys):
+
+```bash
+vrk sse --field data.delta.text   # extracts the nested text token
+vrk sse --field event             # extracts the event name itself
+```
+
+- String values are printed as-is (no quotes).
+- Number and boolean values are printed as their JSON representation (`42`, `true`).
+- If the path is not found, the record is skipped silently.
+- If `data` is not a JSON object, the record is skipped silently.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success — stream parsed, `[DONE]` encountered, or stdin closed cleanly |
+| 1 | Runtime error — I/O error reading stdin |
+| 2 | Usage error — no stdin when running interactively, unknown flag |
+
+### Examples
+
+```bash
+# Parse a full SSE stream → JSONL
+curl -N https://api.example.com/stream | vrk sse
+
+# Filter to one event type
+curl -N ... | vrk sse --event content_block_delta
+
+# Extract text tokens as plain text, one per line
+curl -N ... | vrk sse --event content_block_delta --field data.delta.text
+
+# Accumulate streaming text tokens into a single string
+curl -N ... | vrk sse --event content_block_delta --field data.delta.text | tr -d '\n'
+
+# Pipe from a saved SSE log
+cat stream.log | vrk sse --event message
+```
+
+### Compose patterns
+
+```bash
+# Anthropic streaming: extract text tokens then join
+curl -sN https://api.anthropic.com/v1/messages \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model":"claude-sonnet-4-6","max_tokens":256,"stream":true,"messages":[{"role":"user","content":"hi"}]}' \
+  | vrk sse --event content_block_delta --field data.delta.text \
+  | tr -d '\n'
+
+# Store each token in kv as it arrives (live streaming to state)
+curl -sN ... | vrk sse --event content_block_delta --field data.delta.text \
+  | while read -r token; do vrk kv set last_token "$token"; done
+
+# Count events by type
+curl -sN ... | vrk sse --field event | sort | uniq -c
+
+# Pipe sse output into jq for further filtering
+curl -sN ... | vrk sse | jq 'select(.event == "content_block_delta") | .data.delta.text'
+```
+
+### Gotchas
+
+- **Trailing blank line required for dispatch.** SSE blocks are only dispatched when a blank line is encountered. If stdin closes mid-block (no trailing `\n\n`), the pending block is silently dropped. Real HTTP streaming servers always send the trailing blank line.
+- **`[DONE]` stops the stream regardless of `--event`.** The `[DONE]` sentinel (used by Anthropic and OpenAI) is a protocol signal, not a data event. It terminates parsing immediately even if an `--event` filter is active.
+- **No stdin in a terminal exits 2.** Running `vrk sse` interactively with no pipe is a usage error. Pipe a stream or redirect a file.
+- **SSE space stripping follows the spec.** Exactly one leading space is stripped from field values after the colon: `data: hello` → `hello`, `data:  hello` → ` hello` (one stripped, one remains).
+- **Multi-line `data:` fields are concatenated with `\n`.** Two consecutive `data:` lines in one block join as `val1\nval2`. The resulting string is then parsed as JSON if valid, otherwise kept as a raw string.
+- **`data:` with no value contributes an empty string** to the multi-line accumulation buffer. This is per the SSE spec.
+- **Non-JSON `data:` values are emitted as strings**, not dropped. This means comment-like lines (`data: [DONE]`, `data: ping`) appear in the output as `{"event":"message","data":"[DONE]"}` — except `[DONE]` which is intercepted as the termination sentinel before emission.
+- **`--field` skips silently on missing paths or non-JSON data.** No error, no output for that record. This is intentional — real streams mix JSON and non-JSON events.
+- **Stdout is always empty on error.** Errors go to stderr only.
