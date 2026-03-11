@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/vrksh/vrksh/cmd/coax"
 	"github.com/vrksh/vrksh/cmd/epoch"
@@ -40,7 +41,11 @@ func main() {
 			fmt.Print(manifestJSON)
 			os.Exit(0)
 		case "--skills":
-			fmt.Print(skillsDoc)
+			if len(os.Args) > 2 {
+				fmt.Print(skillsSection(os.Args[2]))
+			} else {
+				fmt.Print(skillsDoc)
+			}
 			os.Exit(0)
 		}
 	}
@@ -64,4 +69,30 @@ func main() {
 		os.Exit(2)
 	}
 	os.Exit(fn())
+}
+
+// skillsSection returns the SKILLS.md section for a single tool.
+// Sections start with "## <tool>" and end before the next "## " heading.
+// Falls back to the full document if the tool is not found.
+func skillsSection(tool string) string {
+	prefix := "## " + tool
+	lines := strings.Split(skillsDoc, "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.HasPrefix(line, prefix) {
+			start = i
+			break
+		}
+	}
+	if start == -1 {
+		return skillsDoc
+	}
+	end := len(lines)
+	for i := start + 1; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "## ") {
+			end = i
+			break
+		}
+	}
+	return strings.Join(lines[start:end], "\n") + "\n"
 }
