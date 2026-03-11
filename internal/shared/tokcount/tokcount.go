@@ -65,3 +65,30 @@ func CountTokens(text string) (int, error) {
 	}
 	return len(enc.Encode(text, nil, nil)), nil
 }
+
+// EncodeTokens returns the cl100k_base token ID slice for text.
+// Returns nil for empty text without touching the encoder.
+func EncodeTokens(text string) ([]int, error) {
+	if text == "" {
+		return nil, nil
+	}
+	enc, err := getEncoder()
+	if err != nil {
+		return nil, err
+	}
+	return enc.Encode(text, nil, nil), nil
+}
+
+// DecodeTokens converts a slice of cl100k_base token IDs back to text.
+// Returns "" for an empty slice. Decode is always valid for IDs produced by
+// EncodeTokens — no error is possible.
+func DecodeTokens(ids []int) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	enc, err := getEncoder()
+	if err != nil {
+		return ""
+	}
+	return string(enc.Decode(ids))
+}

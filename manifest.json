@@ -8,6 +8,7 @@
     {"name": "sse",    "description": "SSE stream parser — text/event-stream to JSONL"},
     {"name": "coax",   "description": "Retry wrapper — --times, --backoff, --on, --until"},
     {"name": "prompt", "description": "LLM prompt — --model, --budget, --schema, --fail"},
-    {"name": "kv",     "description": "Key-value store — set/get/del/list, SQLite-backed"}
+    {"name": "kv",     "description": "Key-value store — set/get/del/list, SQLite-backed"},
+    {"name": "chunk",  "description": "Token-aware text splitter — JSONL chunks within a token budget"}
   ]
 }

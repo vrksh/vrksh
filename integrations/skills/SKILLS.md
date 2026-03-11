@@ -827,3 +827,114 @@ vrk coax --times 3 --backoff exp:1s --on 1 -- \
 - **`--schema` depth is top-level only.** Validation checks top-level keys and types (`string`, `number`, `boolean`, `array`, `object`). Nested schema structures are not validated.
 - **`--schema` with OpenAI uses `response_format.json_schema`.** Validation is API-enforced. With Anthropic, the schema is injected as a system prompt and the response is validated post-call.
 - **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.
+
+---
+
+## chunk — Token-Aware Text Splitter
+
+Splits text from stdin into chunks, each within a token budget. Emits JSONL.
+Uses cl100k_base tokenization (exact for GPT-4 family, ~95% accurate for Claude).
+Input: positional argument or stdin.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--size N` | — | Max tokens per chunk (required, must be >= 1) |
+| `--overlap N` | — | Token overlap between adjacent chunks (default 0; must be < --size) |
+| `--by <mode>` | — | Chunking strategy; only `paragraph` is currently supported |
+
+### Output format
+
+One JSONL record per chunk:
+
+```json
+{"index":0,"text":"...","tokens":998}
+{"index":1,"text":"...","tokens":1000}
+{"index":2,"text":"...","tokens":312}
+```
+
+- `index`: 0-based, sequential across all emitted records
+- `text`: decoded token window — may split mid-word at token boundaries (see Gotchas)
+- `tokens`: exact cl100k_base token count for the emitted text; never exceeds `--size`
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (including empty input — no records emitted) |
+| 1 | Runtime error — I/O error reading stdin, tokenizer failure |
+| 2 | Usage error — `--size` absent or < 1, `--overlap` >= `--size`, unknown `--by` mode, unknown flag |
+
+### Splitting modes
+
+**Default (no `--by`):** Sliding window over token IDs. Step = `size - overlap`. Each window is decoded back to text. The invariant `tokens <= size` is structurally guaranteed.
+
+**`--by paragraph`:** Splits text at double-newlines (`\n\n`), then greedily packs paragraphs into chunks. A paragraph that exceeds `--size` tokens falls back to token-level splitting. Overlap is applied by prepending the last `--overlap` token IDs from the previous chunk at the start of the next.
+
+### Examples
+
+```bash
+# Split a file into 1000-token chunks
+cat doc.txt | vrk chunk --size 1000
+
+# Overlapping chunks — useful for RAG to avoid losing context at boundaries
+cat doc.txt | vrk chunk --size 1000 --overlap 100
+
+# Respect paragraph boundaries
+cat doc.txt | vrk chunk --size 1000 --by paragraph
+
+# Positional arg form — identical to stdin
+vrk chunk --size 1000 "some text to split"
+
+# Empty input → exit 0, no output
+printf '' | vrk chunk --size 1000
+
+# Count chunks produced
+cat doc.txt | vrk chunk --size 500 | wc -l
+
+# Extract just the text fields
+cat doc.txt | vrk chunk --size 500 | jq -r '.text'
+
+# Verify invariant holds
+cat doc.txt | vrk chunk --size 500 | jq -e '[.tokens] | max <= 500'
+```
+
+### Compose patterns
+
+```bash
+# Embed each chunk separately — classic RAG pipeline
+cat corpus.txt | vrk chunk --size 512 --overlap 64 | while read -r line; do
+  text=$(echo "$line" | jq -r '.text')
+  idx=$(echo "$line" | jq -r '.index')
+  echo "$text" | vrk prompt "Embed this passage." | vrk kv set "embed:$idx"
+done
+
+# Budget-safe chunked summarisation
+cat long_doc.txt | vrk chunk --size 3000 | jq -r '.text' | while read -r chunk; do
+  echo "$chunk" | vrk tok --budget 3000 && echo "$chunk" | vrk prompt "Summarise."
+done
+
+# Store all chunks in kv, keyed by document ID and chunk index
+DOC_ID=$(vrk uuid)
+cat doc.txt | vrk chunk --size 1000 | while read -r line; do
+  idx=$(echo "$line" | jq -r '.index')
+  text=$(echo "$line" | jq -r '.text')
+  vrk kv set "doc:${DOC_ID}:chunk:${idx}" "$text"
+done
+
+# Paragraph-aware chunking with overlap for better boundary handling
+cat article.txt | vrk chunk --size 800 --overlap 80 --by paragraph | jq '.text'
+```
+
+### Gotchas
+
+- **`--size` is required.** There is no default. Omitting it exits 2: `chunk: --size is required`.
+- **Chunks may split mid-word.** The default mode works at the token-ID level. Tiktoken token boundaries do not always align with word boundaries, so a chunk boundary can fall in the middle of a word. The decoded text is emitted as-is — boundaries are never adjusted, because adjusting them would change token counts and risk breaking the size invariant.
+- **`--by paragraph` uses double newline as the separator.** A single newline is not a paragraph break. If your text uses single newlines as paragraph separators, pre-process it with `sed` or `awk` before piping to `chunk`.
+- **`--by paragraph` oversized paragraphs fall back to token-level split.** A paragraph that exceeds `--size` tokens is split at token boundaries, not at sentence or word boundaries. The mid-word split caveat applies.
+- **`--overlap` is in tokens, matching `--size` units.** Overlap is not a percentage.
+- **Empty input exits 0 with no output.** `printf '' | vrk chunk --size 1000` emits nothing and exits 0. This is intentional — empty input is not an error.
+- **`tokens` field is exact.** It reflects the actual token count of the emitted `text`, not an approximation. Use it for downstream budget checks.
+- **cl100k_base is approximate for Claude (~95% accurate).** Set `--size` at 90% of the model's actual context limit to absorb the error margin.
+- **Stdout is always empty on error.** Errors go to stderr only.

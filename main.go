@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/vrksh/vrksh/cmd/chunk"
 	"github.com/vrksh/vrksh/cmd/coax"
 	"github.com/vrksh/vrksh/cmd/epoch"
 	"github.com/vrksh/vrksh/cmd/jwt"
@@ -24,6 +25,7 @@ var skillsDoc string
 var manifestJSON string
 
 var tools = map[string]func() int{
+	"chunk":  chunk.Run,
 	"jwt":    jwt.Run,
 	"epoch":  epoch.Run,
 	"uuid":   uuid.Run,
