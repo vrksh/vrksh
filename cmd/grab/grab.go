@@ -18,10 +18,12 @@ import (
 	"github.com/vrksh/vrksh/internal/shared/tokcount"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
-	"golang.org/x/term"
 
 	"github.com/vrksh/vrksh/internal/shared/plaintext"
 )
+
+// isTerminal is a var so tests can override TTY detection without a real fd.
+var isTerminal = shared.IsTerminal
 
 const userAgent = "vrk/0 (https://vrk.sh)"
 
@@ -106,7 +108,7 @@ func Run() int {
 	if len(args) > 0 {
 		rawURL = args[0]
 	} else {
-		if term.IsTerminal(int(os.Stdin.Fd())) {
+		if isTerminal(int(os.Stdin.Fd())) {
 			return shared.UsageErrorf("grab: no URL provided")
 		}
 		b, err := io.ReadAll(os.Stdin)

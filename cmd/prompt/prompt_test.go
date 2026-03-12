@@ -21,7 +21,7 @@ func runPrompt(t *testing.T, env map[string]string, args []string, stdin string)
 	origStdout := os.Stdout
 	origStderr := os.Stderr
 	origArgs := os.Args
-	origIsTerminal := stdinIsTerminal
+	origIsTerminal := isTerminal
 
 	// Save and restore env vars that the test may override.
 	envKeys := []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "VRK_DEFAULT_MODEL", "VRK_LLM_KEY", "VRK_LLM_URL"}
@@ -35,7 +35,7 @@ func runPrompt(t *testing.T, env map[string]string, args []string, stdin string)
 		os.Stdout = origStdout
 		os.Stderr = origStderr
 		os.Args = origArgs
-		stdinIsTerminal = origIsTerminal
+		isTerminal = origIsTerminal
 		for k, v := range origEnv {
 			if v == "" {
 				_ = os.Unsetenv(k)
@@ -193,9 +193,9 @@ func TestBudgetHardGate(t *testing.T) {
 // TestNoStdinInteractive checks that when stdin is a terminal (simulated) and
 // no positional arg and no --explain, Run() returns exit 2.
 func TestNoStdinInteractive(t *testing.T) {
-	orig := stdinIsTerminal
-	stdinIsTerminal = func() bool { return true }
-	t.Cleanup(func() { stdinIsTerminal = orig })
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	t.Cleanup(func() { isTerminal = orig })
 
 	_, _, code := runPrompt(t, map[string]string{}, []string{}, "")
 	if code != 2 {
@@ -585,9 +585,9 @@ func TestJSONUsageErrorsToStdout(t *testing.T) {
 	})
 
 	t.Run("no input on TTY", func(t *testing.T) {
-		orig := stdinIsTerminal
-		stdinIsTerminal = func() bool { return true }
-		t.Cleanup(func() { stdinIsTerminal = orig })
+		orig := isTerminal
+		isTerminal = func(int) bool { return true }
+		t.Cleanup(func() { isTerminal = orig })
 		stdout, stderr, code := runPrompt(t, map[string]string{}, []string{"--json"}, "")
 		assertJSONUsageError(t, "no input on TTY", stdout, stderr, code)
 	})

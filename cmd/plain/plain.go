@@ -13,14 +13,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
 	"github.com/vrksh/vrksh/internal/shared/plaintext"
-	"golang.org/x/term"
 )
 
-// isTerminal wraps term.IsTerminal so tests can override it without touching
-// the real file descriptor.
-var isTerminal = func(fd int) bool {
-	return term.IsTerminal(fd)
-}
+// isTerminal is a var so tests can override TTY detection without a real fd.
+var isTerminal = shared.IsTerminal
 
 // plainOutput is the shape emitted by --json on success.
 type plainOutput struct {

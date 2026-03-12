@@ -10,8 +10,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
 	"github.com/vrksh/vrksh/internal/shared/tokcount"
-	"golang.org/x/term"
 )
+
+// isTerminal is a var so tests can override TTY detection without a real fd.
+var isTerminal = shared.IsTerminal
 
 // tokOutput is the shape emitted by --json.
 type tokOutput struct {
@@ -69,7 +71,7 @@ func Run() int {
 	if len(args) > 0 {
 		input = strings.Join(args, " ")
 	} else {
-		if term.IsTerminal(int(os.Stdin.Fd())) {
+		if isTerminal(int(os.Stdin.Fd())) {
 			return shared.UsageErrorf("tok: no input: pipe text to stdin or pass as argument")
 		}
 		b, err := io.ReadAll(os.Stdin)

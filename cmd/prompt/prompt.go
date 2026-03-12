@@ -18,14 +18,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
 	"github.com/vrksh/vrksh/internal/shared/tokcount"
-	"golang.org/x/term"
 )
 
-// stdinIsTerminal is a package-level variable so tests can override it to
-// simulate interactive terminal detection without needing a real TTY.
-var stdinIsTerminal = func() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
-}
+// isTerminal is a var so tests can override TTY detection without a real fd.
+var isTerminal = shared.IsTerminal
 
 type provider int
 
@@ -616,7 +612,7 @@ func Run() int {
 	// TTY detection: if stdin is a terminal and no positional arg and no --explain,
 	// there is no input — that is a usage error.
 	args := fs.Args()
-	if stdinIsTerminal() && len(args) == 0 && !explainFlag {
+	if isTerminal(int(os.Stdin.Fd())) && len(args) == 0 && !explainFlag {
 		if jsonFlag {
 			return shared.PrintJSONError(map[string]any{"error": "prompt: no input: pipe text to stdin or pass as argument", "code": 2})
 		}
@@ -638,7 +634,7 @@ func Run() int {
 	var promptText string
 	if len(args) > 0 {
 		promptText = strings.Join(args, " ")
-	} else if !stdinIsTerminal() {
+	} else if !isTerminal(int(os.Stdin.Fd())) {
 		b, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return shared.Errorf("prompt: reading stdin: %v", err)

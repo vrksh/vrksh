@@ -11,8 +11,10 @@ import (
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
-	"golang.org/x/term"
 )
+
+// isTerminal is a var so tests can override TTY detection without a real fd.
+var isTerminal = shared.IsTerminal
 
 // sseRecord is the shape emitted to stdout for each parsed SSE event.
 type sseRecord struct {
@@ -40,7 +42,7 @@ func Run() int {
 
 	// TTY detection: if stdin is a character device (interactive terminal) and no
 	// positional args were given, the user ran vrk sse with no piped stream.
-	if term.IsTerminal(int(os.Stdin.Fd())) {
+	if isTerminal(int(os.Stdin.Fd())) {
 		return shared.UsageErrorf("sse: no input: pipe an SSE stream to stdin")
 	}
 
