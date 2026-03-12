@@ -511,11 +511,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 9 ] \
-  && { echo "PASS: --manifest lists 9 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 9)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 10 ] \
+  && { echo "PASS: --manifest lists 10 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 10)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
@@ -527,7 +527,7 @@ skills=$($VRK --skills)
   && { echo "PASS: --skills returns non-empty output"; PASS=$((PASS+1)); } \
   || { echo "FAIL: --skills returned empty output"; FAIL=$((FAIL+1)); }
 # spot-check that each tool section header is present
-for tool in jwt epoch uuid tok sse coax prompt kv chunk; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab; do
   echo "$skills" | grep -q "## $tool" \
     && { echo "PASS: --skills contains section for '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --skills missing section for '$tool'"; FAIL=$((FAIL+1)); }
@@ -735,6 +735,43 @@ explain_out=$(echo "$first_chunk_text" | $VRK prompt --explain 2>/dev/null) || e
 [ -n "$explain_out" ] \
   && { echo "PASS: chunk | prompt --explain: first chunk accepted by prompt"; PASS=$((PASS+1)); } \
   || { echo "FAIL: chunk | prompt --explain: empty output"; FAIL=$((FAIL+1)); }
+
+# ---------------------------------------------------------------------------
+# Section 17 — grab pipeline composition
+# ---------------------------------------------------------------------------
+echo "--- Section 17: grab pipelines ---"
+
+# ── grab | tok: token count of fetched content is a positive integer ──────────
+grab_tok=$(set +e; $VRK grab https://example.com 2>/dev/null | $VRK tok 2>/dev/null; echo $?)
+grab_tok_count=$(set +e; $VRK grab https://example.com 2>/dev/null | $VRK tok 2>/dev/null; true)
+[ -n "$grab_tok_count" ] && [ "$grab_tok_count" -gt 0 ] 2>/dev/null \
+  && { echo "PASS: grab | tok: token count > 0 ($grab_tok_count)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: grab | tok: unexpected count '$grab_tok_count'"; FAIL=$((FAIL+1)); }
+
+# ── grab --json: all required fields present ──────────────────────────────────
+grab_json=$($VRK grab https://example.com --json 2>/dev/null) || grab_json=""
+for field in url title content fetched_at status token_estimate; do
+  echo "$grab_json" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); exit(0 if '$field' in d else 1)" 2>/dev/null \
+    && { echo "PASS: grab --json has field '$field'"; PASS=$((PASS+1)); } \
+    || { echo "FAIL: grab --json missing field '$field'"; FAIL=$((FAIL+1)); }
+done
+
+# ── grab | chunk: fetched content can be split into chunks ────────────────────
+grab_chunks=$($VRK grab https://example.com 2>/dev/null | $VRK chunk --size 50 2>/dev/null)
+grab_chunk_count=$(echo "$grab_chunks" | grep -c '^{' 2>/dev/null || echo 0)
+[ "$grab_chunk_count" -ge 1 ] \
+  && { echo "PASS: grab | chunk: produced $grab_chunk_count chunk(s)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: grab | chunk: expected >= 1 chunk, got $grab_chunk_count"; FAIL=$((FAIL+1)); }
+
+# ── grab invalid URL exits 2 (usage error, not runtime error) ─────────────────
+ec=$(set +e; $VRK grab not-a-url 2>/dev/null; echo $?)
+assert_exit "grab: invalid URL exits 2" 2 "$ec"
+
+# ── grab stdout empty on error ────────────────────────────────────────────────
+grab_err_stdout=$(set +e; $VRK grab not-a-url 2>/dev/null; true)
+[ -z "$grab_err_stdout" ] \
+  && { echo "PASS: grab: invalid URL — stdout empty"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: grab: invalid URL — stdout not empty: $grab_err_stdout"; FAIL=$((FAIL+1)); }
 
 # ---------------------------------------------------------------------------
 # Results

@@ -938,3 +938,109 @@ cat article.txt | vrk chunk --size 800 --overlap 80 --by paragraph | jq '.text'
 - **`tokens` field is exact.** It reflects the actual token count of the emitted `text`, not an approximation. Use it for downstream budget checks.
 - **cl100k_base is approximate for Claude (~95% accurate).** Set `--size` at 90% of the model's actual context limit to absorb the error margin.
 - **Stdout is always empty on error.** Errors go to stderr only.
+
+---
+
+## grab — URL Fetcher
+
+Fetches a URL and returns clean markdown (default), plain text, or raw HTML.
+Applies Readability-style content extraction — strips navigation, ads, boilerplate.
+Input: positional argument or stdin.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--text` | `-t` | Plain prose output, no markdown syntax |
+| `--raw` | — | Raw HTML, no processing or extraction |
+| `--json` | `-j` | Emit a JSON envelope with metadata |
+
+`--text`, `--raw`, and `--json` are mutually exclusive. Combining any two exits 2.
+No `--quiet` — `grab` produces no informational stderr in normal operation.
+
+### --json output shape
+
+```json
+{"url":"https://example.com","title":"Example Domain","content":"# Example Domain\n\n...","fetched_at":1740000000,"status":200,"token_estimate":180}
+```
+
+- `url`: final URL after any redirects
+- `title`: text content of `<title>` element (empty string if absent)
+- `content`: extracted content in the active mode (markdown by default)
+- `fetched_at`: Unix timestamp (integer seconds) of when the response was received
+- `status`: HTTP status code (always 200 on exit 0)
+- `token_estimate`: cl100k_base token count of `content` (~95% accurate for Claude)
+
+### Exit codes
+
+| Code | Condition |
+|------|-----------|
+| 0 | Success — output on stdout |
+| 1 | Fetch failed: DNS error, connection refused, timeout |
+| 1 | HTTP status >= 400 |
+| 1 | More than 5 redirect hops |
+| 2 | No URL provided (interactive terminal or empty stdin) |
+| 2 | Invalid URL format (no scheme, non-http/https scheme, unparseable) |
+| 2 | Unknown flag |
+| 2 | Mutually exclusive flags combined |
+
+### Examples
+
+```bash
+# Fetch a page as clean markdown (default)
+vrk grab https://example.com
+
+# Plain text — no markdown syntax
+vrk grab https://example.com --text
+
+# Raw HTML — no processing
+vrk grab https://example.com --raw
+
+# JSON envelope with metadata
+vrk grab https://example.com --json
+
+# Pipe a URL via stdin
+echo https://example.com | vrk grab
+
+# Count tokens in fetched content
+vrk grab https://example.com | vrk tok
+
+# Chunk fetched content for RAG
+vrk grab https://example.com | vrk chunk --size 1000
+```
+
+### Compose patterns
+
+```bash
+# Fetch, count tokens, guard before sending to LLM
+vrk grab https://example.com | vrk tok --budget 8000 && \
+  vrk grab https://example.com | vrk prompt "Summarise this page."
+
+# Store fetched content in kv keyed by URL
+PAGE=$(vrk grab https://example.com --json)
+vrk kv set "page:$(echo "$PAGE" | jq -r '.url')" "$(echo "$PAGE" | jq -r '.content')"
+
+# Fetch multiple URLs, extract JSON metadata for each
+cat urls.txt | xargs -I{} vrk grab {} --json | jq '.title'
+
+# RAG pipeline: fetch → chunk → store chunks
+DOC_ID=$(vrk uuid)
+vrk grab https://example.com | vrk chunk --size 512 --overlap 64 | while read -r chunk; do
+  idx=$(echo "$chunk" | jq -r '.index')
+  text=$(echo "$chunk" | jq -r '.text')
+  vrk kv set "doc:${DOC_ID}:chunk:${idx}" "$text"
+done
+
+# Retry a flaky fetch
+vrk coax --times 3 --backoff exp:1s -- vrk grab https://example.com
+```
+
+### Gotchas
+
+- **Best-effort extraction, not full Readability.** `grab` extracts content using a simple scoring heuristic. Output quality varies by page structure: well-formed articles with semantic HTML (`<main>`, `<article>`, `<p>`) extract cleanly. Complex layouts (SPAs, dashboards, heavily nested tables) may include noise or miss content. For reliable extraction, prefer pages with semantic HTML.
+- **JavaScript is not executed.** `grab` makes a static HTTP request. Pages that render content client-side via JavaScript will return the pre-render HTML skeleton, not the final page content.
+- **Invalid URL is a usage error (exit 2), not a runtime error (exit 1).** A URL with no scheme (`example.com`) or a non-http/https scheme (`ftp://`) exits 2 — the caller gave bad input. A valid URL that fails to fetch (DNS, timeout, 404) exits 1.
+- **Non-HTML responses pass through unchanged.** If the server returns `Content-Type: application/json` or any non-`text/html` type, the raw body is emitted to stdout without extraction. `--text` is a no-op for non-HTML. `--json` still wraps the raw body in the envelope.
+- **Max 5 redirect hops.** Chains longer than 5 redirects exit 1 with "too many redirects (> 5)". Cookies are never stored between redirects or invocations.
+- **`token_estimate` uses cl100k_base (~95% accurate for Claude).** The estimate reflects the extracted `content` field, not the raw HTML. Set downstream budgets at 90% of the actual model limit to absorb the error margin.
+- **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.

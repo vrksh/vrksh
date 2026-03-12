@@ -12,6 +12,7 @@ linters:
     - ineffassign
     - staticcheck
     - misspell
+    - bodyclose
     - exhaustive
   settings:
     exhaustive:

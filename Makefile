@@ -59,6 +59,8 @@ smoke: build
 		echo "--- $$f ---"; \
 		VRK=./vrk bash $$f || exit 1; \
 	done
+	@echo "--- cmd/grab/grab_smoke_test.go ---"
+	VRK=$(CURDIR)/vrk go test -tags smoke ./cmd/grab/... -v -timeout 60s
 
 # Remove build artifacts
 clean:
