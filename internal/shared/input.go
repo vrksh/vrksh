@@ -23,11 +23,14 @@ func ReadInput(args []string) (string, error) {
 }
 
 // ReadInputOptional behaves like ReadInput but returns ("", nil) when stdin is
-// empty or contains only whitespace — use for tools that have a meaningful
-// default when no input is given. Real I/O errors are still propagated.
+// empty, whitespace-only, or an interactive terminal — use for tools that have
+// a meaningful default when no input is given. Real I/O errors are still propagated.
 func ReadInputOptional(args []string) (string, error) {
 	if len(args) > 0 {
 		return strings.Join(args, " "), nil
+	}
+	if IsTerminal(int(os.Stdin.Fd())) {
+		return "", nil
 	}
 	b, err := io.ReadAll(os.Stdin)
 	if err != nil {
@@ -46,9 +49,13 @@ func ReadInputOptional(args []string) (string, error) {
 // ReadInputLines reads stdin as a sequence of lines and returns them as a slice.
 // If positional args are provided, each arg is treated as a line.
 // The trailing empty element produced by a final newline is dropped.
+// Returns an empty slice when stdin is an interactive terminal with no args.
 func ReadInputLines(args []string) ([]string, error) {
 	if len(args) > 0 {
 		return args, nil
+	}
+	if IsTerminal(int(os.Stdin.Fd())) {
+		return []string{}, nil
 	}
 	b, err := io.ReadAll(os.Stdin)
 	if err != nil {
@@ -73,8 +80,12 @@ func ScanLines(r io.Reader) *bufio.Scanner {
 }
 
 // readFromStdin reads all of stdin, strips exactly one trailing newline, and
-// returns an error if the result is empty or whitespace-only.
+// returns an error if the result is empty, whitespace-only, or stdin is an
+// interactive terminal (which would otherwise block waiting for keyboard input).
 func readFromStdin() (string, error) {
+	if IsTerminal(int(os.Stdin.Fd())) {
+		return "", fmt.Errorf("no input: provide as argument or via stdin")
+	}
 	b, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return "", fmt.Errorf("reading stdin: %w", err)

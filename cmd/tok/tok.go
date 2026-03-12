@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
@@ -44,17 +43,8 @@ func Run() int {
 		return shared.UsageErrorf("%s", err.Error())
 	}
 
-	// --quiet: redirect os.Stderr to /dev/null so no messages reach the caller.
-	if quietFlag {
-		if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
-			origStderr := os.Stderr
-			os.Stderr = devNull
-			defer func() {
-				os.Stderr = origStderr
-				_ = devNull.Close()
-			}()
-		}
-	}
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	// Resolve the effective model name for output. --model affects the label
 	// in --json output; all models currently count with cl100k_base.
@@ -62,26 +52,19 @@ func Run() int {
 		model = "cl100k_base"
 	}
 
+	// TTY guard: an interactive terminal with no args is a usage error. An empty
+	// stdin pipe is intentional (0 tokens) and must pass through normally.
+	// ReadInputOptional can't distinguish the two — so we check explicitly first.
+	if len(fs.Args()) == 0 && isTerminal(int(os.Stdin.Fd())) {
+		return shared.UsageErrorf("tok: no input: pipe text to stdin or pass as argument")
+	}
+
 	// Read input: positional args joined with a space, or full stdin.
-	// tok needs the full input (io.ReadAll is correct here — not a record processor).
-	// TTY detection: if stdin is a character device and no args were provided,
-	// the user ran vrk tok interactively with no pipe — that is a usage error.
-	var input string
-	args := fs.Args()
-	if len(args) > 0 {
-		input = strings.Join(args, " ")
-	} else {
-		if isTerminal(int(os.Stdin.Fd())) {
-			return shared.UsageErrorf("tok: no input: pipe text to stdin or pass as argument")
-		}
-		b, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return shared.Errorf("tok: reading stdin: %v", err)
-		}
-		input = string(b)
-		// Strip exactly one trailing newline — echo appends one, printf does not.
-		// Do not TrimSpace: leading/trailing whitespace is content.
-		input = strings.TrimSuffix(input, "\n")
+	// tok needs the full text before counting — ReadInputOptional handles the
+	// one-trailing-newline strip and returns "" for an empty pipe (→ 0 tokens).
+	input, err := shared.ReadInputOptional(fs.Args())
+	if err != nil {
+		return shared.Errorf("tok: %v", err)
 	}
 
 	// Count tokens.

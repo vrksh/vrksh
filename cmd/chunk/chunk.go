@@ -61,21 +61,19 @@ func Run() int {
 		return shared.UsageErrorf("chunk: unknown --by mode: %q; supported: paragraph", by)
 	}
 
-	// Read input: positional arg or stdin.
-	// chunk needs the full text before splitting — io.ReadAll is correct here.
-	var input string
-	args := fs.Args()
-	if len(args) > 0 {
-		input = strings.Join(args, " ")
-	} else {
-		if isTerminal(int(os.Stdin.Fd())) {
-			return shared.UsageErrorf("chunk: no input: pipe text to stdin or pass as argument")
-		}
-		b, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return shared.Errorf("chunk: reading stdin: %v", err)
-		}
-		input = strings.TrimSuffix(string(b), "\n")
+	// TTY guard: an interactive terminal with no args is a usage error. An empty
+	// stdin pipe is intentional (0 chunks) and must pass through normally.
+	// ReadInputOptional can't distinguish the two — so we check explicitly first.
+	if len(fs.Args()) == 0 && isTerminal(int(os.Stdin.Fd())) {
+		return shared.UsageErrorf("chunk: no input: pipe text to stdin or pass as argument")
+	}
+
+	// Read input: positional args joined with a space, or full stdin.
+	// chunk needs the full text before splitting — ReadInputOptional handles the
+	// one-trailing-newline strip and returns "" for an empty pipe (→ 0 chunks).
+	input, err := shared.ReadInputOptional(fs.Args())
+	if err != nil {
+		return shared.Errorf("chunk: %v", err)
 	}
 
 	// Empty input → no chunks, exit 0.

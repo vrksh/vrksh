@@ -43,17 +43,8 @@ func Run() int {
 		return shared.UsageErrorf("uuid: %s", err.Error())
 	}
 
-	// --quiet: redirect os.Stderr to /dev/null so no messages reach the caller.
-	if quietFlag {
-		if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
-			origStderr := os.Stderr
-			os.Stderr = devNull
-			defer func() {
-				os.Stderr = origStderr
-				_ = devNull.Close()
-			}()
-		}
-	}
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	if count < 1 {
 		return shared.UsageErrorf("uuid: count must be >= 1")

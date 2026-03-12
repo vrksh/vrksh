@@ -65,17 +65,8 @@ func Run() int {
 		return shared.UsageErrorf("epoch: %s", err.Error())
 	}
 
-	// --quiet: redirect os.Stderr to /dev/null so no messages reach the caller.
-	if quietFlag {
-		if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
-			origStderr := os.Stderr
-			os.Stderr = devNull
-			defer func() {
-				os.Stderr = origStderr
-				_ = devNull.Close()
-			}()
-		}
-	}
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	// usageErrorf and errorf route errors through stdout as JSON when --json is
 	// active, keeping stderr empty so downstream consumers see only structured data.
