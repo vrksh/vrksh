@@ -19,6 +19,8 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 	"golang.org/x/term"
+
+	"github.com/vrksh/vrksh/internal/shared/plaintext"
 )
 
 const userAgent = "vrk/0 (https://vrk.sh)"
@@ -216,7 +218,7 @@ func Run() int {
 
 	var content string
 	if textFlag {
-		content = renderText(mainNode)
+		content = plaintext.StripMarkdown(renderMarkdown(mainNode, base))
 	} else {
 		content = renderMarkdown(mainNode, base)
 	}
@@ -496,60 +498,6 @@ func renderMdNode(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) 
 func renderChildrenMd(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		renderMdNode(c, sb, inPre, base)
-	}
-}
-
-// renderText converts an HTML subtree to plain prose (no markup).
-func renderText(root *html.Node) string {
-	var sb strings.Builder
-	renderTextNode(root, &sb, false)
-	result := collapseNewlines(sb.String())
-	return strings.TrimSpace(result)
-}
-
-func renderTextNode(n *html.Node, sb *strings.Builder, inPre bool) {
-	if n.Type == html.ElementNode && skipTags[n.DataAtom] {
-		return
-	}
-	switch n.Type {
-	case html.TextNode:
-		if inPre {
-			sb.WriteString(n.Data)
-		} else {
-			normalized := strings.Join(strings.Fields(n.Data), " ")
-			if normalized != "" {
-				sb.WriteString(normalized)
-				sb.WriteString(" ")
-			}
-		}
-		return
-	case html.ElementNode:
-		// handled below
-	default:
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			renderTextNode(c, sb, inPre)
-		}
-		return
-	}
-
-	switch n.DataAtom { //nolint:exhaustive // default: handles all unrecognized atoms
-	case atom.P, atom.H1, atom.H2, atom.H3, atom.H4, atom.H5, atom.H6,
-		atom.Li, atom.Blockquote, atom.Pre, atom.Div, atom.Section:
-		sb.WriteString("\n\n")
-		isPre := n.DataAtom == atom.Pre
-		renderChildrenText(n, sb, isPre)
-		sb.WriteString("\n\n")
-	case atom.Br:
-		sb.WriteString("\n")
-	default:
-		isPre := inPre
-		renderChildrenText(n, sb, isPre)
-	}
-}
-
-func renderChildrenText(n *html.Node, sb *strings.Builder, inPre bool) {
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		renderTextNode(c, sb, inPre)
 	}
 }
 

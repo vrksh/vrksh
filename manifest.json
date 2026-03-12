@@ -10,6 +10,7 @@
     {"name": "prompt", "description": "LLM prompt — --model, --budget, --schema, --fail"},
     {"name": "kv",     "description": "Key-value store — set/get/del/list, SQLite-backed"},
     {"name": "chunk",  "description": "Token-aware text splitter — JSONL chunks within a token budget"},
-    {"name": "grab",   "description": "URL fetcher — clean markdown, plain text, or raw HTML"}
+    {"name": "grab",   "description": "URL fetcher — clean markdown, plain text, or raw HTML"},
+    {"name": "plain",  "description": "Markdown stripper — removes syntax, keeps prose"}
   ]
 }

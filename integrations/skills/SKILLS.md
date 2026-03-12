@@ -1069,4 +1069,80 @@ vrk coax --times 3 --backoff exp:1s -- vrk grab https://example.com
 - **Non-HTML responses pass through unchanged.** If the server returns `Content-Type: application/json` or any non-`text/html` type, the raw body is emitted to stdout without extraction. `--text` is a no-op for non-HTML. `--json` still wraps the raw body in the envelope.
 - **Max 5 redirect hops.** Chains longer than 5 redirects exit 1 with "too many redirects (> 5)". Cookies are never stored between redirects or invocations.
 - **`token_estimate` uses cl100k_base (~95% accurate for Claude).** The estimate reflects the extracted `content` field, not the raw HTML. Set downstream budgets at 90% of the actual model limit to absorb the error margin.
+- **`--text` output is whitespace-normalised.** `grab --text` runs the HTML extractor then `vrk plain`'s markdown stripper. Consecutive blank lines are collapsed to one, and multiple spaces on a line are collapsed to one. The prose content is unchanged, but whitespace structure may differ from the raw page.
 - **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.
+
+---
+
+## plain — Markdown Stripper
+
+Strips markdown formatting from stdin. Preserves all content — only syntax is removed.
+Reads from stdin only (no positional argument form).
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--json` | `-j` | JSON envelope: `{"text":"…","input_bytes":N,"output_bytes":M}` |
+
+No `--quiet`. `plain` produces no informational stderr in normal operation.
+
+### --json output shape
+
+```json
+{"text":"hello world","input_bytes":20,"output_bytes":11}
+```
+
+- `text`: stripped plain text
+- `input_bytes`: raw bytes read from stdin (including any trailing newline from `echo`)
+- `output_bytes`: byte length of the stripped text (not including the trailing newline added on stdout)
+
+### Exit codes
+
+| Code | Condition |
+|------|-----------|
+| 0 | Success (including empty input) |
+| 1 | I/O error reading stdin |
+| 2 | No input in interactive terminal |
+| 2 | Unknown flag |
+
+### Examples
+
+```bash
+# Strip formatting from a README
+vrk plain < README.md
+
+# Strip bold/italic/links from inline markdown
+echo '**bold** _italic_ [link](https://example.com)' | vrk plain
+# → bold italic link
+
+# JSON envelope with byte counts
+echo '**hello** _world_' | vrk plain --json
+# → {"text":"hello world","input_bytes":18,"output_bytes":11}
+
+# Empty input exits 0 with no output
+printf '' | vrk plain
+```
+
+### Compose patterns
+
+```bash
+# Strip markdown before sending to a model that expects plain text
+vrk plain < doc.md | vrk prompt "summarise this"
+
+# Check token count of stripped prose
+vrk plain < README.md | vrk tok
+
+# Strip markdown from a fetched page
+vrk grab https://example.com | vrk plain
+
+# Fetch plain text in one step (HTML extraction + markdown strip)
+vrk grab https://example.com --text
+```
+
+### Gotchas
+
+- **`plain` uses goldmark's AST** — it handles nested emphasis, reference-style links, and fenced code blocks correctly. Character-level regex strippers do not.
+- **Raw HTML embedded in markdown is dropped silently.** Block-level `<div>` and inline `<span>` tags and their content are not extracted. For HTML-heavy input, use `grab --text` instead (which runs the HTML extractor first, then `StripMarkdown`).
+- **Output whitespace may differ from input.** Consecutive blank lines are collapsed to one. Leading and trailing whitespace is trimmed.
+- **Empty stdin exits 0 with empty output** — this is not an error. Only an interactive terminal (no pipe) exits 2.

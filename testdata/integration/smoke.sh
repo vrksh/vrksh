@@ -511,11 +511,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 10 ] \
-  && { echo "PASS: --manifest lists 10 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 10)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 11 ] \
+  && { echo "PASS: --manifest lists 11 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 11)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
