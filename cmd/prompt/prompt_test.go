@@ -2,7 +2,10 @@ package prompt
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -21,7 +24,7 @@ func runPrompt(t *testing.T, env map[string]string, args []string, stdin string)
 	origIsTerminal := stdinIsTerminal
 
 	// Save and restore env vars that the test may override.
-	envKeys := []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "VRK_DEFAULT_MODEL"}
+	envKeys := []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "VRK_DEFAULT_MODEL", "VRK_LLM_KEY", "VRK_LLM_URL"}
 	origEnv := make(map[string]string, len(envKeys))
 	for _, k := range envKeys {
 		origEnv[k] = os.Getenv(k)
@@ -282,5 +285,243 @@ func TestExplainNeverLeaksKey(t *testing.T) {
 		if strings.Contains(stderr, key) {
 			t.Errorf("key=%q: stderr contains the key value", key)
 		}
+	}
+}
+
+// --- custom endpoint tests ---
+
+// mockOpenAIResponse is a valid OpenAI chat completions response used across endpoint tests.
+const mockOpenAIResponse = `{"choices":[{"message":{"role":"assistant","content":"pong"},"finish_reason":"stop"}],"model":"llama3.2","usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}`
+
+// newMockServer returns an httptest.Server that always responds with mockOpenAIResponse.
+func newMockServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mockOpenAIResponse))
+	}))
+}
+
+// TestEndpointPathAppend is a unit test for resolveEndpoint covering the five
+// cases from the spec. No server needed.
+func TestEndpointPathAppend(t *testing.T) {
+	cases := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"", "", false},
+		{"http://localhost:11434", "http://localhost:11434/v1/chat/completions", false},
+		{"http://localhost:11434/v1", "http://localhost:11434/v1/chat/completions", false},
+		{"http://localhost:11434/v1/chat/completions", "http://localhost:11434/v1/chat/completions", false},
+		{"not a url", "", true},
+	}
+	for _, c := range cases {
+		got, err := resolveEndpoint(c.input)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("resolveEndpoint(%q): want error, got nil (result=%q)", c.input, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("resolveEndpoint(%q): unexpected error: %v", c.input, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("resolveEndpoint(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
+// TestEndpointInvalidURL checks that a bad --endpoint value exits 2.
+func TestEndpointInvalidURL(t *testing.T) {
+	_, _, code := runPrompt(t, map[string]string{}, []string{"--endpoint", "not a url"}, "hello")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (invalid endpoint URL)", code)
+	}
+}
+
+// TestEndpointNoModel checks that --endpoint without --model (and no VRK_DEFAULT_MODEL) exits 2.
+func TestEndpointNoModel(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	_, stderr, code := runPrompt(t, map[string]string{}, []string{"--endpoint", srv.URL}, "hello")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (--model required)", code)
+	}
+	if !strings.Contains(stderr, "--model") {
+		t.Errorf("stderr does not mention --model: %q", stderr)
+	}
+}
+
+// TestEndpointFlagExplain checks that --endpoint + --explain prints curl to the
+// resolved URL and makes no HTTP request.
+func TestEndpointFlagExplain(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", srv.URL + "/v1", "--model", "llama3.2", "--explain"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "/v1/chat/completions") {
+		t.Errorf("curl output does not contain /v1/chat/completions:\n%s", stdout)
+	}
+	if called {
+		t.Error("--explain made an HTTP request; it should not")
+	}
+}
+
+// TestEndpointExplainNoModel checks that --endpoint + --explain without --model
+// exits 0 (explain bypasses the model guard — it is for debugging, not execution).
+func TestEndpointExplainNoModel(t *testing.T) {
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", "http://localhost:11434/v1", "--explain"}, "hello")
+	if code != 0 {
+		t.Fatalf("--explain without --model: exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "chat/completions") {
+		t.Errorf("--explain stdout does not contain endpoint URL:\n%s", stdout)
+	}
+}
+
+// TestEndpointPrecedence checks that --endpoint takes priority over both
+// ANTHROPIC_API_KEY and OPENAI_API_KEY — the request must hit the mock server.
+func TestEndpointPrecedence(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	env := map[string]string{
+		"ANTHROPIC_API_KEY": "fake-anthropic",
+		"OPENAI_API_KEY":    "fake-openai",
+	}
+	stdout, _, code := runPrompt(t, env, []string{"--endpoint", srv.URL, "--model", "llama3.2"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "pong") {
+		t.Errorf("stdout does not contain mock response 'pong': %q", stdout)
+	}
+}
+
+// TestEndpointNoAuthHeader checks that when VRK_LLM_KEY is not set, no
+// Authorization header is sent to the endpoint.
+func TestEndpointNoAuthHeader(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mockOpenAIResponse))
+	}))
+	defer srv.Close()
+
+	_, _, code := runPrompt(t, map[string]string{}, []string{"--endpoint", srv.URL, "--model", "llama3.2"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if gotAuth != "" {
+		t.Errorf("Authorization header present, want none: %q", gotAuth)
+	}
+}
+
+// TestEndpointWithAPIKey checks that VRK_LLM_KEY is sent as the Bearer token.
+func TestEndpointWithAPIKey(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mockOpenAIResponse))
+	}))
+	defer srv.Close()
+
+	_, _, code := runPrompt(t, map[string]string{"VRK_LLM_KEY": "testkey"},
+		[]string{"--endpoint", srv.URL, "--model", "llama3.2"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if gotAuth != "Bearer testkey" {
+		t.Errorf("Authorization = %q, want %q", gotAuth, "Bearer testkey")
+	}
+}
+
+// TestVRKLLMURLEnv checks that VRK_LLM_URL (without --endpoint flag) routes the
+// request to the given server.
+func TestVRKLLMURLEnv(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdout, _, code := runPrompt(t, map[string]string{"VRK_LLM_URL": srv.URL},
+		[]string{"--model", "llama3.2"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "pong") {
+		t.Errorf("stdout does not contain mock response 'pong': %q", stdout)
+	}
+}
+
+// TestEndpointRealCall checks that a successful endpoint call returns exit 0 and
+// the response text on stdout.
+func TestEndpointRealCall(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", srv.URL, "--model", "llama3.2"}, "Reply with: pong")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "pong") {
+		t.Errorf("stdout does not contain 'pong': %q", stdout)
+	}
+}
+
+// TestEndpointRealCallJSON checks the --json envelope shape for endpoint calls.
+func TestEndpointRealCallJSON(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", srv.URL, "--model", "llama3.2", "--json"}, "Reply with: pong")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var out struct {
+		Response   string `json:"response"`
+		Model      string `json:"model"`
+		TokensUsed int    `json:"tokens_used"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &out); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %s", err, stdout)
+	}
+	if out.Response != "pong" {
+		t.Errorf("response = %q, want %q", out.Response, "pong")
+	}
+	if out.Model != "llama3.2" {
+		t.Errorf("model = %q, want %q", out.Model, "llama3.2")
+	}
+	if out.TokensUsed != 6 {
+		t.Errorf("tokens_used = %d, want 6", out.TokensUsed)
+	}
+}
+
+// TestEndpointUnreachable checks that an endpoint with nothing listening exits 1
+// with an error on stderr.
+func TestEndpointUnreachable(t *testing.T) {
+	_, stderr, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", "http://localhost:9", "--model", "llama3.2"}, "hello")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	lower := strings.ToLower(stderr)
+	if !strings.Contains(lower, "connection refused") && !strings.Contains(lower, "request failed") && !strings.Contains(lower, "failed") {
+		t.Errorf("stderr does not mention connection failure: %q", stderr)
 	}
 }

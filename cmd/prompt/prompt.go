@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -417,6 +418,142 @@ func printExplain(w io.Writer, prov provider, model, prompt string, schema map[s
 	return 0
 }
 
+// resolveEndpoint normalises a raw endpoint string into a full chat completions URL.
+// Empty input is a no-op (returns "", nil). Malformed URLs return an error.
+// Path rules:
+//   - empty or "/" → append /v1/chat/completions
+//   - already ends with /chat/completions → use as-is
+//   - anything else (e.g. /v1) → append /chat/completions
+func resolveEndpoint(raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" {
+		return "", fmt.Errorf("invalid endpoint URL")
+	}
+	p := u.Path
+	switch {
+	case p == "" || p == "/":
+		u.Path = "/v1/chat/completions"
+	case strings.HasSuffix(p, "/chat/completions"):
+		// already correct — use as-is
+	default:
+		u.Path = strings.TrimRight(p, "/") + "/chat/completions"
+	}
+	return u.String(), nil
+}
+
+// openAICompatRequest is the body sent to any OpenAI-compatible chat completions endpoint.
+type openAICompatRequest struct {
+	Model          string          `json:"model"`
+	MaxTokens      int             `json:"max_tokens"`
+	Temp           float64         `json:"temperature"`
+	Stream         bool            `json:"stream"`
+	Messages       []openAIMessage `json:"messages"`
+	ResponseFormat *openAIRespFmt  `json:"response_format,omitempty"`
+}
+
+// callOpenAICompatible sends a request to an OpenAI-compatible endpoint and returns
+// the assistant reply text, total token count, and any error.
+// Auth: reads VRK_LLM_KEY and sets Authorization: Bearer only if non-empty.
+// Never uses OPENAI_API_KEY or ANTHROPIC_API_KEY.
+func callOpenAICompatible(endpointURL, model, prompt string, schema map[string]string) (string, int, error) {
+	req := openAICompatRequest{
+		Model:     model,
+		MaxTokens: 4096,
+		Temp:      0,
+		Stream:    false,
+		Messages:  []openAIMessage{{Role: "user", Content: prompt}},
+	}
+	if schema != nil {
+		req.ResponseFormat = &openAIRespFmt{Type: "json_object"}
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("marshaling request: %w", err)
+	}
+
+	httpReq, err := http.NewRequest("POST", endpointURL, bytes.NewReader(body))
+	if err != nil {
+		return "", 0, fmt.Errorf("creating request: %w", err)
+	}
+	httpReq.Header.Set("content-type", "application/json")
+	if key := os.Getenv("VRK_LLM_KEY"); key != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+key)
+	}
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return "", 0, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", 0, fmt.Errorf("reading response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		safeBody := scrubKey(string(respBody), os.Getenv("VRK_LLM_KEY"))
+		return "", 0, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Usage struct {
+			TotalTokens int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	d := json.NewDecoder(bytes.NewReader(respBody))
+	d.UseNumber()
+	if err := d.Decode(&result); err != nil {
+		return "", 0, fmt.Errorf("decoding response: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return "", 0, fmt.Errorf("empty choices in response")
+	}
+	return result.Choices[0].Message.Content, result.Usage.TotalTokens, nil
+}
+
+// printExplainEndpoint writes a curl command for a custom endpoint to w.
+// The Authorization header line is included only when VRK_LLM_KEY is set,
+// and is shown as $VRK_LLM_KEY — the actual value is never printed.
+func printExplainEndpoint(w io.Writer, endpointURL, model, prompt string, schema map[string]string) int {
+	bw := bufio.NewWriter(w)
+
+	body := map[string]interface{}{
+		"model":       model,
+		"max_tokens":  4096,
+		"temperature": 0,
+		"stream":      false,
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+	}
+	if schema != nil {
+		body["response_format"] = map[string]string{"type": "json_object"}
+	}
+	bodyJSON, _ := json.Marshal(body)
+
+	_, _ = fmt.Fprintf(bw, "curl %s \\\n", endpointURL)
+	if os.Getenv("VRK_LLM_KEY") != "" {
+		_, _ = fmt.Fprintf(bw, "  -H \"Authorization: Bearer $VRK_LLM_KEY\" \\\n")
+	}
+	_, _ = fmt.Fprintf(bw, "  -H \"content-type: application/json\" \\\n")
+	_, _ = fmt.Fprintf(bw, "  -d '%s'\n", string(bodyJSON))
+
+	if err := bw.Flush(); err != nil {
+		return shared.Errorf("prompt: flushing output: %v", err)
+	}
+	return 0
+}
+
 // Run is the entry point for vrk prompt. Returns 0 (success), 1 (runtime
 // error), or 2 (usage error). Never calls os.Exit.
 func Run() int {
@@ -430,6 +567,7 @@ func Run() int {
 		schemaArg   string
 		explainFlag bool
 		retryCount  int
+		endpoint    string
 	)
 
 	fs.StringVarP(&modelFlag, "model", "m", "", "LLM model (default: claude-sonnet-4-5 or VRK_DEFAULT_MODEL)")
@@ -439,6 +577,7 @@ func Run() int {
 	fs.StringVarP(&schemaArg, "schema", "s", "", "JSON schema string or file path for response validation")
 	fs.BoolVar(&explainFlag, "explain", false, "print equivalent curl command and exit, no API call")
 	fs.IntVar(&retryCount, "retry", 0, "retry N times on schema mismatch with temperature escalation")
+	fs.StringVar(&endpoint, "endpoint", "", "OpenAI-compatible API base URL (e.g. http://localhost:11434/v1)")
 
 	// Suppress pflag's auto-printing so all output goes through shared helpers.
 	fs.SetOutput(io.Discard)
@@ -449,6 +588,18 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
+
+	// VRK_LLM_URL is the env-var alternative to --endpoint; flag takes precedence.
+	if endpoint == "" {
+		endpoint = os.Getenv("VRK_LLM_URL")
+	}
+
+	// Validate and normalise the endpoint URL before doing anything else.
+	resolvedEndpoint, err := resolveEndpoint(endpoint)
+	if err != nil {
+		return shared.UsageErrorf("invalid endpoint URL")
+	}
+	endpoint = resolvedEndpoint
 
 	model := resolveModel(modelFlag)
 
@@ -492,6 +643,54 @@ func Run() int {
 		if count > budget {
 			return shared.Errorf("prompt: %d tokens exceeds budget of %d", count, budget)
 		}
+	}
+
+	// Custom endpoint path — bypasses all provider detection.
+	// --endpoint (or VRK_LLM_URL) always uses OpenAI chat completions format.
+	if endpoint != "" {
+		if explainFlag {
+			return printExplainEndpoint(os.Stdout, endpoint, model, promptText, schema)
+		}
+		// Local model names cannot be guessed — require an explicit --model.
+		if model == "" {
+			return shared.UsageErrorf("prompt: --model is required when using --endpoint")
+		}
+
+		start := time.Now()
+		responseText, tokensUsed, callErr := callOpenAICompatible(endpoint, model, promptText, schema)
+		if callErr != nil {
+			safeErr := scrubKey(callErr.Error(), os.Getenv("VRK_LLM_KEY"))
+			return shared.Errorf("prompt: %s", safeErr)
+		}
+		latencyMs := time.Since(start).Milliseconds()
+
+		bw := bufio.NewWriter(os.Stdout)
+		if jsonFlag {
+			out := promptOutput{
+				Response:    responseText,
+				Model:       model,
+				TokensUsed:  tokensUsed,
+				LatencyMs:   latencyMs,
+				RequestHash: requestHash(model, 0, promptText),
+			}
+			enc := json.NewEncoder(bw)
+			if encErr := enc.Encode(out); encErr != nil {
+				_ = bw.Flush()
+				return shared.Errorf("prompt: encoding JSON output: %v", encErr)
+			}
+		} else {
+			if _, writeErr := fmt.Fprint(bw, responseText); writeErr != nil {
+				_ = bw.Flush()
+				return shared.Errorf("prompt: writing output: %v", writeErr)
+			}
+			if len(responseText) == 0 || responseText[len(responseText)-1] != '\n' {
+				_, _ = fmt.Fprintln(bw)
+			}
+		}
+		if flushErr := bw.Flush(); flushErr != nil {
+			return shared.Errorf("prompt: flushing output: %v", flushErr)
+		}
+		return 0
 	}
 
 	// Read API keys so we can select provider.

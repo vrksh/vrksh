@@ -715,6 +715,7 @@ Input: positional argument or stdin.
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--model` | `-m` | string | `claude-sonnet-4-5` | Model name; overridden by `VRK_DEFAULT_MODEL` env var |
+| `--endpoint <url>` | — | string | `""` | OpenAI-compatible API base URL; overrides provider detection |
 | `--budget <N>` | — | int | 0 | Exit 1 before calling the API if prompt exceeds N tokens (0 = disabled) |
 | `--fail` | `-f` | bool | false | Accepted; meaningful with `--schema` (exit 1 on mismatch) |
 | `--json` | `-j` | bool | false | Emit response as a JSON envelope with metadata |
@@ -730,15 +731,19 @@ Input: positional argument or stdin.
 | 1 | Runtime error: no API key, HTTP error, budget exceeded, schema mismatch after all retries |
 | 2 | Usage error: no input in interactive terminal (no positional arg, no `--explain`), unknown flag |
 
-### Provider selection
+### Provider resolution order
 
-| Condition | Provider |
-|-----------|----------|
-| Only `ANTHROPIC_API_KEY` set | Anthropic |
-| Only `OPENAI_API_KEY` set | OpenAI |
-| Both set, model starts with `gpt-`, `o1`, `o3`, or `o4` | OpenAI |
-| Both set, any other model name | Anthropic |
-| Neither set (not `--explain`) | Exit 1: "no API key found: set ANTHROPIC_API_KEY or OPENAI_API_KEY" |
+| Priority | Condition | Behaviour |
+|----------|-----------|-----------|
+| 1 | `--endpoint` flag set | OpenAI-compatible format to that URL |
+| 2 | `VRK_LLM_URL` env var set | OpenAI-compatible format to that URL |
+| 3 | Only `ANTHROPIC_API_KEY` set | Anthropic API |
+| 4 | Only `OPENAI_API_KEY` set | OpenAI API |
+| 5 | Both keys set, model starts with `gpt-`/`o1`/`o3`/`o4` | OpenAI API |
+| 6 | Both keys set, any other model | Anthropic API |
+| — | No key and no endpoint (not `--explain`) | Exit 1: "no API key found" |
+
+When `--endpoint` or `VRK_LLM_URL` is set, `--model` is required (exit 2 if absent and `VRK_DEFAULT_MODEL` is not set). `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are ignored for custom endpoint requests.
 
 ### --json output shape
 
@@ -781,6 +786,27 @@ echo "hello" | vrk prompt --explain
 # Override model for a session via env var
 export VRK_DEFAULT_MODEL=claude-opus-4-5
 echo "hello" | vrk prompt
+
+# Custom endpoint (Ollama, LM Studio, vLLM, LocalAI, Jan)
+echo "hello" | vrk prompt --endpoint http://localhost:11434/v1 --model llama3.2
+VRK_LLM_URL=http://localhost:11434/v1 vrk prompt --model llama3.2
+```
+
+### Custom endpoints (--endpoint / VRK_LLM_URL)
+
+Works with any OpenAI-compatible server: Ollama, LM Studio, vLLM, LocalAI, Jan.
+
+`--endpoint` always uses OpenAI chat completions format, never Anthropic format.
+`--endpoint` takes precedence over `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`.
+`--model` is required when using `--endpoint` (exit 2 if absent and `VRK_DEFAULT_MODEL` not set).
+
+**Auth:** set `VRK_LLM_KEY` if the server requires a Bearer token. Omit it for local models that need no auth. `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are never used for custom endpoints.
+
+**Gotcha:** if the server returns a non-standard response shape, `prompt` exits 1 with the raw response body in the error. Use `--explain` to inspect the exact request being sent.
+
+**Manual verification (requires Ollama running locally):**
+```bash
+VRK_LLM_URL=http://localhost:11434/v1 echo 'Reply with: pong' | vrk prompt --model llama3.2
 ```
 
 ### Compose patterns

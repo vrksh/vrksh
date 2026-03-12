@@ -107,6 +107,47 @@ out=$("$BIN" prompt --help 2>/dev/null) || true
 echo "$out" | grep -q "model\|budget\|explain" || fail "--help: flags missing from output" "got: $out"
 pass "--help lists flags"
 
+# --- --endpoint ---
+echo ""
+echo "--- --endpoint ---"
+
+# --endpoint + --explain exits 0 and shows /v1/chat/completions in curl URL
+out=$(echo 'hello' | "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
+echo "$out" | grep -q "/v1/chat/completions" || fail "--endpoint --explain: URL missing /v1/chat/completions" "got: $out"
+pass "--endpoint --explain shows resolved chat/completions URL"
+
+# --endpoint + --explain does not leak VRK_LLM_KEY value
+out=$(echo 'hello' | env VRK_LLM_KEY=supersecretkeyabc123 "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
+if echo "$out" | grep -q "supersecretkeyabc123"; then
+  fail "--endpoint --explain: leaked VRK_LLM_KEY" "key appeared in output"
+fi
+pass "--endpoint --explain does not leak VRK_LLM_KEY value"
+
+# --endpoint + --explain with VRK_LLM_KEY set includes $VRK_LLM_KEY reference
+out=$(echo 'hello' | env VRK_LLM_KEY=somekey "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
+echo "$out" | grep -q 'VRK_LLM_KEY' || fail "--endpoint --explain with key: missing \$VRK_LLM_KEY in output" "got: $out"
+pass "--endpoint --explain shows \$VRK_LLM_KEY reference when key is set"
+
+# --endpoint + --explain without VRK_LLM_KEY omits Authorization header line
+out=$(echo 'hello' | env -u VRK_LLM_KEY "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
+if echo "$out" | grep -q "Authorization"; then
+  fail "--endpoint --explain without key: Authorization header present, want absent" "got: $out"
+fi
+pass "--endpoint --explain omits Authorization header when VRK_LLM_KEY not set"
+
+# --endpoint without --model exits 2
+echo 'hello' | "$BIN" prompt --endpoint http://localhost:11434/v1 2>/dev/null && fail "--endpoint no --model: expected exit 2" "" || true
+out=$(echo 'hello' | "$BIN" prompt --endpoint http://localhost:11434/v1 2>&1) || true
+if echo "$out" | grep -q "\-\-model"; then
+  pass "--endpoint without --model exits 2 with --model message"
+else
+  fail "--endpoint without --model: stderr missing --model" "got: $out"
+fi
+
+# invalid --endpoint exits 2
+echo 'hello' | "$BIN" prompt --endpoint "not a url" 2>/dev/null && fail "--endpoint bad URL: expected exit 2" "" || true
+pass "--endpoint invalid URL exits 2"
+
 # --- summary ---
 echo ""
 echo "All smoke tests passed."
