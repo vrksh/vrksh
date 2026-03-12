@@ -91,6 +91,12 @@ func Run() int {
 	// Budget guard: always a hard check. tok does not have a --fail flag;
 	// --budget alone is the guard. A budget that silently passes is useless.
 	if budget > 0 && count > budget {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{
+				"error": fmt.Sprintf("tok: %d tokens exceeds budget of %d", count, budget),
+				"code":  1,
+			})
+		}
 		return shared.Errorf("tok: %d tokens exceeds budget of %d", count, budget)
 	}
 

@@ -565,3 +565,26 @@ func TestPropertyExitCodesOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestJSONErrorToStdout(t *testing.T) {
+	// grab with --json and a 404 must route the error to stdout as JSON; stderr empty.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	stdout, stderr, code := runGrab(t, []string{srv.URL, "--json"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+}

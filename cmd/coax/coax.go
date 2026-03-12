@@ -23,6 +23,8 @@ func Run() int {
 	var onCodes []int
 	fs.IntSliceVar(&onCodes, "on", []int{}, "retry only when exit code matches; repeatable: --on 1 --on 2 (default: any non-zero)")
 	untilCmd := fs.String("until", "", "shell command; retry until it exits 0")
+	var jsonFlag bool
+	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit errors as JSON")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if err == pflag.ErrHelp {
@@ -32,16 +34,25 @@ func Run() int {
 	}
 
 	if *times < 1 {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": "--times must be >= 1", "code": 2})
+		}
 		return shared.UsageErrorf("--times must be >= 1")
 	}
 
 	cmdArgs := fs.Args()
 	if len(cmdArgs) == 0 {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": "missing command: use -- to separate command from coax flags", "code": 2})
+		}
 		return shared.UsageErrorf("missing command: use -- to separate command from coax flags")
 	}
 
 	isExp, baseDelay, err := parseBackoff(*backoffSpec)
 	if err != nil {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": fmt.Sprintf("--backoff: %v", err), "code": 2})
+		}
 		return shared.UsageErrorf("--backoff: %v", err)
 	}
 

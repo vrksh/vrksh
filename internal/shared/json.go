@@ -25,3 +25,20 @@ func PrintJSONL(items []any) error {
 	}
 	return nil
 }
+
+// PrintJSONError writes the fields map as compact JSON to stdout and returns
+// the exit code. It reads "code" from the map (accepts int or float64); defaults to 1.
+// All error output goes to stdout so stderr stays empty when --json is active.
+func PrintJSONError(fields map[string]any) int {
+	code := 1
+	if c, ok := fields["code"]; ok {
+		switch v := c.(type) {
+		case int:
+			code = v
+		case float64:
+			code = int(v)
+		}
+	}
+	_ = json.NewEncoder(os.Stdout).Encode(fields)
+	return code
+}

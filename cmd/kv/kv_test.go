@@ -2,6 +2,7 @@ package kv
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -460,5 +461,30 @@ func TestIncrConcurrent(t *testing.T) {
 	}
 	if val != fmt.Sprintf("%d", n) {
 		t.Errorf("counter = %q, want %q", val, fmt.Sprintf("%d", n))
+	}
+}
+
+func TestJSONErrorToStdout(t *testing.T) {
+	// kv get on a missing key with --json must route the error to stdout as JSON.
+	db := newTempDB(t)
+	stdout, stderr, code := runKV(t, db, []string{"get", "--json", "nonexistent"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+	if key, _ := obj["key"].(string); key != "nonexistent" {
+		t.Errorf("key = %q, want %q", key, "nonexistent")
+	}
+	if c, _ := obj["code"].(float64); int(c) != 1 {
+		t.Errorf("code = %v, want 1", obj["code"])
 	}
 }

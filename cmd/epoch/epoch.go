@@ -77,14 +77,20 @@ func Run() int {
 		}
 	}
 
-	// jsonError routes error output through stdout as JSON when --json is active,
-	// keeping stderr empty so downstream consumers see only structured data.
+	// usageErrorf and errorf route errors through stdout as JSON when --json is
+	// active, keeping stderr empty so downstream consumers see only structured data.
 	usageErrorf := func(format string, args ...any) int {
 		if jsonFlag {
-			_ = shared.PrintJSON(map[string]any{"error": fmt.Sprintf(format, args...), "code": shared.ExitUsage})
-			return shared.ExitUsage
+			return shared.PrintJSONError(map[string]any{"error": fmt.Sprintf(format, args...), "code": shared.ExitUsage})
 		}
 		return shared.UsageErrorf(format, args...)
+	}
+
+	errorf := func(format string, args ...any) int {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": fmt.Sprintf(format, args...), "code": shared.ExitError})
+		}
+		return shared.Errorf(format, args...)
 	}
 
 	// --tz without --iso or --json: timezone has no meaning for a plain Unix integer.
@@ -143,7 +149,7 @@ func Run() int {
 		var readErr error
 		input, readErr = shared.ReadInputOptional(nil)
 		if readErr != nil {
-			return shared.Errorf("epoch: %v", readErr)
+			return errorf("epoch: %v", readErr)
 		}
 	}
 

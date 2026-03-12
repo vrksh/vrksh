@@ -657,3 +657,25 @@ func FuzzEpoch(f *testing.F) {
 		}
 	})
 }
+
+func TestJSONErrorToStdout(t *testing.T) {
+	// "next tuesday" is an unsupported format → exit 2.
+	// With --json, the error must go to stdout as JSON; stderr must be empty.
+	stdout, stderr, code := runEpoch(t, []string{"next tuesday", "--json"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+	if c, _ := obj["code"].(float64); int(c) != 2 {
+		t.Errorf("code = %v, want 2", obj["code"])
+	}
+}

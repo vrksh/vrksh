@@ -657,3 +657,21 @@ func FuzzJwt(f *testing.F) {
 		}
 	})
 }
+
+func TestJSONErrorToStdout(t *testing.T) {
+	// Invalid JWT with --json must route the error to stdout as JSON; stderr empty.
+	stdout, stderr, code := runJWT(t, []string{"--json", "notajwt"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+}

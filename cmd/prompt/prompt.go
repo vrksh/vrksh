@@ -586,6 +586,13 @@ func Run() int {
 		if errors.Is(err, pflag.ErrHelp) {
 			return printUsage(fs)
 		}
+		// jsonFlag is not yet populated — pre-scan raw args so flag-parse errors
+		// still route to stdout as JSON when --json/-j was requested.
+		for _, a := range os.Args[1:] {
+			if a == "--json" || a == "-j" {
+				return shared.PrintJSONError(map[string]any{"error": err.Error(), "code": 2})
+			}
+		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
 
@@ -597,6 +604,9 @@ func Run() int {
 	// Validate and normalise the endpoint URL before doing anything else.
 	resolvedEndpoint, err := resolveEndpoint(endpoint)
 	if err != nil {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": "invalid endpoint URL", "code": 2})
+		}
 		return shared.UsageErrorf("invalid endpoint URL")
 	}
 	endpoint = resolvedEndpoint
@@ -607,6 +617,9 @@ func Run() int {
 	// there is no input — that is a usage error.
 	args := fs.Args()
 	if stdinIsTerminal() && len(args) == 0 && !explainFlag {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": "prompt: no input: pipe text to stdin or pass as argument", "code": 2})
+		}
 		return shared.UsageErrorf("prompt: no input: pipe text to stdin or pass as argument")
 	}
 
@@ -641,6 +654,12 @@ func Run() int {
 			return shared.Errorf("prompt: counting tokens: %v", err)
 		}
 		if count > budget {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: %d tokens exceeds budget of %d", count, budget),
+					"code":  1,
+				})
+			}
 			return shared.Errorf("prompt: %d tokens exceeds budget of %d", count, budget)
 		}
 	}
@@ -653,6 +672,9 @@ func Run() int {
 		}
 		// Local model names cannot be guessed — require an explicit --model.
 		if model == "" {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{"error": "prompt: --model is required when using --endpoint", "code": 2})
+			}
 			return shared.UsageErrorf("prompt: --model is required when using --endpoint")
 		}
 
@@ -660,6 +682,12 @@ func Run() int {
 		responseText, tokensUsed, callErr := callOpenAICompatible(endpoint, model, promptText, schema)
 		if callErr != nil {
 			safeErr := scrubKey(callErr.Error(), os.Getenv("VRK_LLM_KEY"))
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: %s", safeErr),
+					"code":  1,
+				})
+			}
 			return shared.Errorf("prompt: %s", safeErr)
 		}
 		latencyMs := time.Since(start).Milliseconds()
@@ -705,6 +733,12 @@ func Run() int {
 		var err error
 		prov, apiKey, err = selectProvider(model, anthropicKey, openaiKey)
 		if err != nil {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: %v", err),
+					"code":  1,
+				})
+			}
 			return shared.Errorf("prompt: %v", err)
 		}
 	} else {
@@ -767,6 +801,12 @@ func Run() int {
 
 		if callErr != nil {
 			safeErr := scrubKey(callErr.Error(), apiKey)
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: %s", safeErr),
+					"code":  1,
+				})
+			}
 			return shared.Errorf("prompt: %s", safeErr)
 		}
 
@@ -778,6 +818,12 @@ func Run() int {
 			if attempt < retryCount {
 				fmt.Fprintf(os.Stderr, "prompt: attempt %d failed schema validation, retrying...\n", attempt+1)
 				continue
+			}
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: response does not match schema after %d attempts", retryCount+1),
+					"code":  1,
+				})
 			}
 			return shared.Errorf("prompt: response does not match schema after %d attempts", retryCount+1)
 		}

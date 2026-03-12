@@ -2,6 +2,7 @@ package coax
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -288,5 +289,26 @@ func TestPropertyNeverPanics(t *testing.T) {
 	}
 	for _, args := range cases {
 		runCoax(t, args, "") // just must not panic
+	}
+}
+
+func TestJSONErrorToStdout(t *testing.T) {
+	// --times 0 is a usage error; with --json it must go to stdout as JSON.
+	stdout, stderr, code := runCoax(t, []string{"--times", "0", "--json", "--", "exit", "1"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+	if c, _ := obj["code"].(float64); int(c) != 2 {
+		t.Errorf("code = %v, want 2", obj["code"])
 	}
 }

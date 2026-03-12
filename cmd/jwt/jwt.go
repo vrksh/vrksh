@@ -29,8 +29,7 @@ type jwtEnvelope struct {
 // Used when --json is active so that all output — including errors — goes
 // to stdout as structured JSON and stderr stays empty.
 func jsonError(code int, msg string) int {
-	_ = shared.PrintJSON(map[string]any{"error": msg, "code": code})
-	return code
+	return shared.PrintJSONError(map[string]any{"error": msg, "code": code})
 }
 
 // Run is the entry point for vrk jwt. Returns 0 (success), 1 (runtime error),

@@ -525,3 +525,70 @@ func TestEndpointUnreachable(t *testing.T) {
 		t.Errorf("stderr does not mention connection failure: %q", stderr)
 	}
 }
+
+func TestJSONErrorToStdout(t *testing.T) {
+	// No API key with --json must route the error to stdout as JSON; stderr empty.
+	stdout, stderr, code := runPrompt(t, map[string]string{}, []string{"--json"}, "hello")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
+	}
+	if c, _ := obj["code"].(float64); int(c) != 1 {
+		t.Errorf("code = %v, want 1", obj["code"])
+	}
+}
+
+// TestJSONUsageErrorsToStdout verifies that usage errors (exit 2) also route to
+// stdout as JSON when --json is set, leaving stderr empty.
+func TestJSONUsageErrorsToStdout(t *testing.T) {
+	assertJSONUsageError := func(t *testing.T, label, stdout, stderr string, code int) {
+		t.Helper()
+		if code != 2 {
+			t.Fatalf("%s: exit code = %d, want 2", label, code)
+		}
+		if stderr != "" {
+			t.Errorf("%s: stderr must be empty when --json active, got %q", label, stderr)
+		}
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+			t.Fatalf("%s: stdout is not valid JSON: %v\ngot: %q", label, err, stdout)
+		}
+		if _, ok := obj["error"]; !ok {
+			t.Errorf("%s: JSON missing key \"error\"", label)
+		}
+		if c, _ := obj["code"].(float64); int(c) != 2 {
+			t.Errorf("%s: code = %v, want 2", label, obj["code"])
+		}
+	}
+
+	t.Run("invalid endpoint URL", func(t *testing.T) {
+		stdout, stderr, code := runPrompt(t, map[string]string{},
+			[]string{"--json", "--endpoint", "not a url"}, "hello")
+		assertJSONUsageError(t, "invalid endpoint URL", stdout, stderr, code)
+	})
+
+	t.Run("missing --model with endpoint", func(t *testing.T) {
+		srv := newMockServer(t)
+		defer srv.Close()
+		stdout, stderr, code := runPrompt(t, map[string]string{},
+			[]string{"--json", "--endpoint", srv.URL}, "hello")
+		assertJSONUsageError(t, "missing --model", stdout, stderr, code)
+	})
+
+	t.Run("no input on TTY", func(t *testing.T) {
+		orig := stdinIsTerminal
+		stdinIsTerminal = func() bool { return true }
+		t.Cleanup(func() { stdinIsTerminal = orig })
+		stdout, stderr, code := runPrompt(t, map[string]string{}, []string{"--json"}, "")
+		assertJSONUsageError(t, "no input on TTY", stdout, stderr, code)
+	})
+}

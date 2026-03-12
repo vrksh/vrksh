@@ -219,21 +219,45 @@ func TestBudgetPipelineOutputEmpty(t *testing.T) {
 }
 
 func TestBudgetExceededWithJSON(t *testing.T) {
-	// --json must NOT change the error format when budget is exceeded.
-	// Errors always go to stderr as plain text regardless of output flags.
+	// --budget 1 with "hello world" (2 tokens) triggers a budget error.
+	// When --json is set, the error must go to stdout as JSON; stderr must be empty.
+	stdout, stderr, code := runTok(t, []string{"--budget", "1", "--json"}, "hello world")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (over budget)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--json: stderr must be empty on error, got %q", stderr)
+	}
+	if stdout == "" {
+		t.Fatal("--json: stdout must contain JSON error, got empty")
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("--json: stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("--json: JSON missing key \"error\"")
+	}
+	if c, _ := obj["code"].(float64); int(c) != 1 {
+		t.Errorf("--json: code = %v, want 1", obj["code"])
+	}
+}
+
+func TestJSONErrorToStdout(t *testing.T) {
+	// Canonical contract test: --json routes budget errors to stdout as JSON.
 	stdout, stderr, code := runTok(t, []string{"--budget", "1", "--json"}, "hello world")
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if stdout != "" {
-		t.Errorf("stdout must be empty on budget failure, got %q", stdout)
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
 	}
-	// stderr must be plain text, not JSON.
-	if strings.HasPrefix(strings.TrimSpace(stderr), "{") {
-		t.Errorf("stderr looks like JSON — errors must be plain text: %q", stderr)
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
 	}
-	if !strings.Contains(stderr, "2 tokens exceeds budget of 1") {
-		t.Errorf("stderr = %q, want it to contain %q", stderr, "2 tokens exceeds budget of 1")
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing key \"error\"")
 	}
 }
 

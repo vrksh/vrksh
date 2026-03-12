@@ -335,6 +335,8 @@ func kvGet(args []string) int {
 	fs := pflag.NewFlagSet("kv-get", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	ns := fs.String("ns", "default", "namespace")
+	var jsonFlag bool
+	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit errors as JSON")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -356,6 +358,13 @@ func kvGet(args []string) int {
 
 	value, err := getVal(db, *ns, key)
 	if errors.Is(err, errNotFound) {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{
+				"error": "key not found",
+				"key":   key,
+				"code":  1,
+			})
+		}
 		return shared.Errorf("kv get: key not found")
 	}
 	if err != nil {
@@ -437,6 +446,8 @@ func kvIncrDecr(args []string, name string, sign int64) int {
 	fs.SetOutput(io.Discard)
 	ns := fs.String("ns", "default", "namespace")
 	by := fs.Int64("by", 1, "delta (must be >= 1)")
+	var jsonFlag bool
+	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit errors as JSON")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -462,6 +473,13 @@ func kvIncrDecr(args []string, name string, sign int64) int {
 
 	newVal, err := incrVal(db, *ns, key, sign*(*by))
 	if errors.Is(err, errNotANumber) {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{
+				"error": "value is not a number",
+				"key":   key,
+				"code":  1,
+			})
+		}
 		return shared.Errorf("kv %s: value is not a number", name)
 	}
 	if err != nil {
