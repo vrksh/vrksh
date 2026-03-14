@@ -1319,3 +1319,114 @@ done
 - **Schema is a subset check** — extra keys in a record are not an error. Only keys declared in the schema are validated.
 - **Large integers are safe** — records are decoded with `UseNumber()` so integers above 2^53 retain full precision.
 - **Empty lines in the stream are skipped** — they do not count toward `total`.
+
+---
+
+## mask — Secret Redactor
+
+Redacts secrets from stdin using entropy-based detection and built-in pattern
+matching. Passes text through with secrets replaced by `[REDACTED]`. Streaming
+line-by-line — safe on large inputs. Best-effort — not a security boundary.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--pattern <regex>` | — | Additional pattern; repeatable. Entire match → `[REDACTED]` |
+| `--entropy <float>` | — | Shannon entropy threshold (default: 4.0; lower = more aggressive) |
+| `--json` | `-j` | Append metadata record after text output |
+
+### Built-in patterns
+
+Applied before entropy scanning. The key prefix is preserved; the value is replaced.
+
+| Name | Matches |
+|------|---------|
+| `bearer` | `Bearer <token>` (case-insensitive) |
+| `password` | `password=<value>` or `password:<value>` |
+| `secret` | `secret=<value>` or `secret:<value>` |
+| `api_key` | `api_key=<value>`, `api-key=<value>`, etc. |
+| `token` | `token=<value>` or `token:<value>` |
+
+### Entropy scanning
+
+Tokens shorter than 8 characters are never entropy-checked. Tokens that already
+contain `[REDACTED]` (from pattern substitution) are skipped. Shannon entropy is
+calculated per whitespace-delimited token: `H = -sum(p * log2(p))`.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success — filter ran, text (redacted or not) written to stdout |
+| 1 | I/O error with `--json` active — `{"error":"...","code":1}` written to stdout |
+| 2 | Usage error — interactive terminal, unknown flag, invalid `--pattern` regex |
+
+### `--json` output shape
+
+Text lines are written first (streaming); the metadata record is appended after EOF:
+
+```json
+{"_vrk":"mask","lines":N,"redacted":N,"patterns_matched":["bearer","entropy"]}
+```
+
+- `lines`: total lines processed
+- `redacted`: lines where ≥ 1 substitution was made
+- `patterns_matched`: deduplicated list — built-in names (`"bearer"`, `"entropy"`, …) or literal regex strings for `--pattern` values
+
+### `--json` error shape
+
+```json
+{"error":"<message>","code":1}
+```
+
+Written to stdout; stderr is empty. `Run()` returns 1. The envelope `code` and
+`$?` always match — an agent can safely check either.
+
+### Examples
+
+```bash
+# Strip Bearer token from an Authorization header
+echo 'Authorization: Bearer sk-ant-abc123def456' | vrk mask
+# → Authorization: Bearer [REDACTED]
+
+# Strip a password field
+echo 'password=hunter2' | vrk mask
+# → password=[REDACTED]
+
+# Clean text passes through unchanged
+echo 'no secrets here' | vrk mask
+# → no secrets here
+
+# Custom pattern for a known key prefix
+echo 'key: sk-ant-AAAA' | vrk mask --pattern 'sk-ant-[A-Za-z0-9]+'
+# → key: [REDACTED]
+
+# Lower entropy threshold to catch repetitive secrets
+echo 'sk-ant-AAABBBCCC111222333444555' | vrk mask --entropy 3.0
+# → [REDACTED]
+
+# Multi-line: only secret lines are changed
+printf 'line1\nBearer abc123xyz\nline3\n' | vrk mask
+# → line1
+#    Bearer [REDACTED]
+#    line3
+
+# --json: metadata record appended after text output
+echo 'token: sk-abc123XYZ' | vrk mask --json
+# → token: [REDACTED]
+#   {"_vrk":"mask","lines":1,"redacted":1,"patterns_matched":["token"]}
+
+# Pipeline: scrub LLM output before storing
+vrk prompt "summarise this" < doc.txt | vrk mask | vrk kv set summary
+```
+
+### Gotchas
+
+- **Best-effort only — not a security boundary.** Do not rely on `mask` as a compliance or audit control. Use it to reduce accidental exposure in logs and pipelines.
+- **UUIDs and SHA-256 hashes are high-entropy — expect false positives.** A UUID like `550e8400-e29b-41d4-a716-446655440000` (36 chars, entropy ≈ 3.8) may or may not be redacted depending on the threshold. SHA-256 hex strings will almost always be redacted at the default 4.0 threshold.
+- **Short passwords are below the 8-char token floor — expect false negatives.** `hunter2` (7 chars) is never entropy-checked. Pattern-based detection (`password=hunter2`) still catches it, but a bare short password with no keyword prefix will not be redacted.
+- **Token floor is 8 characters.** Tokens shorter than 8 chars are skipped by entropy analysis regardless of `--entropy` setting.
+- **`--pattern` replaces the entire match.** Unlike built-in patterns (which preserve the key prefix via a capture group), `--pattern` replaces the whole regex match with `[REDACTED]`. To preserve a prefix, use a lookahead or adjust the pattern to match only the value portion.
+- **`patterns_matched` uses literal regex strings for `--pattern` values.** The field `"sk-ant-[A-Za-z0-9]+"` in `patterns_matched` means that exact regex fired, not a named category.
+- **Ordering in `patterns_matched`:** built-ins in declaration order (bearer → password → secret → api_key → token), then `"entropy"`, then custom `--pattern` values in argument order.

@@ -14,6 +14,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/jwt"
 	"github.com/vrksh/vrksh/cmd/kv"
 	"github.com/vrksh/vrksh/cmd/links"
+	"github.com/vrksh/vrksh/cmd/mask"
 	"github.com/vrksh/vrksh/cmd/plain"
 	"github.com/vrksh/vrksh/cmd/prompt"
 	"github.com/vrksh/vrksh/cmd/sse"
@@ -40,6 +41,7 @@ var tools = map[string]func() int{
 	"prompt":   prompt.Run,
 	"kv":       kv.Run,
 	"links":    links.Run,
+	"mask":     mask.Run,
 	"plain":    plain.Run,
 	"validate": validate.Run,
 }
