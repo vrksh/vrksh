@@ -13,6 +13,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/grab"
 	"github.com/vrksh/vrksh/cmd/jwt"
 	"github.com/vrksh/vrksh/cmd/kv"
+	"github.com/vrksh/vrksh/cmd/links"
 	"github.com/vrksh/vrksh/cmd/plain"
 	"github.com/vrksh/vrksh/cmd/prompt"
 	"github.com/vrksh/vrksh/cmd/sse"
@@ -37,6 +38,7 @@ var tools = map[string]func() int{
 	"coax":   coax.Run,
 	"prompt": prompt.Run,
 	"kv":     kv.Run,
+	"links":  links.Run,
 	"plain":  plain.Run,
 }
 

@@ -1145,4 +1145,105 @@ vrk grab https://example.com --text
 - **`plain` uses goldmark's AST** — it handles nested emphasis, reference-style links, and fenced code blocks correctly. Character-level regex strippers do not.
 - **Raw HTML embedded in markdown is dropped silently.** Block-level `<div>` and inline `<span>` tags and their content are not extracted. For HTML-heavy input, use `grab --text` instead (which runs the HTML extractor first, then `StripMarkdown`).
 - **Output whitespace may differ from input.** Consecutive blank lines are collapsed to one. Leading and trailing whitespace is trimmed.
+
+---
+
+## links — Hyperlink Extractor
+
+Extracts all hyperlinks from markdown, HTML, or plain text as JSONL.
+One record per link: `{"text":"...","url":"...","line":N}`.
+Input from stdin only. Empty input exits 0 with no output.
+
+### Record shape
+
+```
+{"text":"Homebrew","url":"https://brew.sh","line":1}
+```
+
+`text` is the anchor text (Markdown or HTML) or the URL itself for bare URLs.
+`line` is the 1-based line number in the input.
+
+### Supported input formats (auto-detected)
+
+| Format | Example | Notes |
+|--------|---------|-------|
+| Markdown inline | `[text](url)` | Standard inline link |
+| Markdown reference | `[text][label]` + `[label]: url` | Resolved at usage site; definition line not emitted |
+| HTML anchor | `<a href="url">text</a>` | Case-insensitive; inner tags stripped from text |
+| Bare URL | `https://...` or `http://...` | text == url; only when not inside another pattern |
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--bare` | `-b` | Output URLs only, one per line |
+| `--json` | `-j` | Append `{"_vrk":"links","count":N}` after all records |
+
+### --json output shapes
+
+| Flags | Shape |
+|-------|-------|
+| `--json` alone | link records + `{"_vrk":"links","count":N}` |
+| `--bare --json` | bare URL lines + `{"_vrk":"links","count":N}` |
+| Any error + `--json` | `{"error":"msg","code":N}` on stdout; stderr empty |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success — links found or not, including empty input |
+| 1 | I/O error reading stdin |
+| 2 | Usage error — interactive terminal with no stdin, unknown flag |
+
+### Examples
+
+```bash
+# Extract links from a markdown file
+cat README.md | vrk links
+
+# Get URLs only — one per line
+cat README.md | vrk links --bare
+
+# With metadata count
+cat README.md | vrk links --json | tail -1
+
+# Extract from fetched HTML
+vrk grab https://example.com | vrk links
+
+# Spider links: fetch a page and extract all URLs
+vrk grab https://example.com | vrk links --bare | while read url; do echo "$url"; done
+
+# Count links in a document
+cat README.md | vrk links --json | tail -1 | jq '.count'
+```
+
+### Compose patterns
+
+```bash
+# Audit dead links — extract URLs then check each one
+cat docs.md | vrk links --bare | while read url; do
+  vrk grab "$url" > /dev/null && echo "ok $url" || echo "dead $url"
+done
+
+# Seed a crawl queue with links from multiple pages
+for url in "${PAGES[@]}"; do
+  vrk grab "$url" | vrk links --bare
+done | sort -u > crawl-queue.txt
+
+# Extract links and store in kv for later processing
+cat README.md | vrk links | while read -r rec; do
+  url=$(printf '%s' "$rec" | jq -r '.url')
+  vrk kv set "link:$url" "$rec"
+done
+
+# Combine with plain for clean markdown → links pipeline
+vrk grab https://example.com | vrk plain | vrk links
+```
+
+### Gotchas
+
+- **Relative URLs are emitted as-is** — `href="/about"` produces `{"url":"/about",...}`. The caller knows the base URL; `links` does not resolve relative hrefs.
+- **Markdown ref definitions are not emitted as links** — `[label]: url` lines are collected internally but only appear in output when a `[text][label]` usage references them. The emitted `line` is the line of the usage, not the definition.
+- **Multi-line `<a>` tags are not supported** — the tool processes line by line. An `<a href="...">` that spans multiple lines will not be matched.
+- **No deduplication** — the same URL appearing twice produces two records. Pipe through `sort -u` or `jq -r '.url'` if you need unique URLs.
 - **Empty stdin exits 0 with empty output** — this is not an error. Only an interactive terminal (no pipe) exits 2.

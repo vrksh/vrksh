@@ -17,6 +17,10 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `coax` | Retry a command until it succeeds | `--times <n>`, `--backoff <spec>`, `--on <code>`, `--until <cmd>` |
 | `prompt` | Send a prompt to an LLM, emit response | `--model`, `--system`, `--json`, `--schema` |
 | `kv` | Persistent key-value store (SQLite-backed) | subcommands: `set get del incr list` |
+| `chunk` | Split text into token-bounded chunks | `--size <n>`, `--overlap <n>`, `--by <mode>` |
+| `grab` | Fetch a URL as clean markdown or plain text | `--text`, `--raw`, `--json` |
+| `plain` | Strip markdown syntax, keep prose | `--json` |
+| `links` | Extract hyperlinks from markdown, HTML, or plain text as JSONL | `--bare`, `--json` |
 
 ---
 

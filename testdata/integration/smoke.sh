@@ -511,11 +511,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 11 ] \
-  && { echo "PASS: --manifest lists 11 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 11)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 12 ] \
+  && { echo "PASS: --manifest lists 12 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 12)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
@@ -527,14 +527,14 @@ skills=$($VRK --skills)
   && { echo "PASS: --skills returns non-empty output"; PASS=$((PASS+1)); } \
   || { echo "FAIL: --skills returned empty output"; FAIL=$((FAIL+1)); }
 # spot-check that each tool section header is present
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab links; do
   echo "$skills" | grep -q "## $tool" \
     && { echo "PASS: --skills contains section for '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --skills missing section for '$tool'"; FAIL=$((FAIL+1)); }
 done
 
 # vrk --skills <tool>: filtered output contains only that tool's section
-for tool in jwt tok kv; do
+for tool in jwt tok kv links; do
   section=$($VRK --skills "$tool")
   echo "$section" | grep -q "## $tool" \
     && { echo "PASS: --skills $tool section header present"; PASS=$((PASS+1)); } \
@@ -772,6 +772,60 @@ grab_err_stdout=$(set +e; $VRK grab not-a-url 2>/dev/null; true)
 [ -z "$grab_err_stdout" ] \
   && { echo "PASS: grab: invalid URL — stdout empty"; PASS=$((PASS+1)); } \
   || { echo "FAIL: grab: invalid URL — stdout not empty: $grab_err_stdout"; FAIL=$((FAIL+1)); }
+
+# ---------------------------------------------------------------------------
+# Section 18: links pipelines
+# ---------------------------------------------------------------------------
+echo "--- Section 18: links pipelines ---"
+
+# ── grab | links: produces at least one link record ───────────────────────
+links_out=$($VRK grab https://example.com 2>/dev/null | $VRK links 2>/dev/null)
+links_count=$(echo "$links_out" | grep -c '^{' 2>/dev/null || echo 0)
+[ "$links_count" -ge 1 ] \
+  && { echo "PASS: grab | links: produced $links_count link(s)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: grab | links: expected >= 1 link, got $links_count"; FAIL=$((FAIL+1)); }
+
+# ── grab | links: every record has non-empty url and line >= 1 ────────────
+bad=$(echo "$links_out" | python3 -c "
+import sys, json
+bad = 0
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    rec = json.loads(line)
+    if '_vrk' in rec: continue
+    if not rec.get('url') or rec.get('line', 0) < 1:
+        bad += 1
+print(bad)
+" 2>/dev/null || echo 1)
+[ "$bad" -eq 0 ] \
+  && { echo "PASS: grab | links: all records have non-empty url and line >= 1"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: grab | links: $bad record(s) have empty url or line < 1"; FAIL=$((FAIL+1)); }
+
+# ── grab | links --bare and --json from same fetch (cache avoids two fetches) ─
+grab_cache=$(mktemp)
+$VRK grab https://example.com 2>/dev/null > "$grab_cache"
+
+bare_out=$($VRK links --bare < "$grab_cache" 2>/dev/null)
+bare_count=$(echo "$bare_out" | grep -c 'http' 2>/dev/null || echo 0)
+[ "$bare_count" -ge 1 ] \
+  && { echo "PASS: grab | links --bare: produced $bare_count URL(s)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: grab | links --bare: expected >= 1 URL"; FAIL=$((FAIL+1)); }
+
+json_out=$($VRK links --json < "$grab_cache" 2>/dev/null)
+meta=$(echo "$json_out" | tail -1)
+echo "$meta" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); sys.exit(0 if d.get('_vrk')=='links' and isinstance(d.get('count'),int) else 1)" \
+  && { echo "PASS: grab | links --json: trailing metadata record valid"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: grab | links --json: trailing metadata malformed: $meta"; FAIL=$((FAIL+1)); }
+
+# Same cached input → counts must agree.
+bare_n=$(echo "$bare_out" | wc -l | tr -d ' ')
+json_n=$(echo "$meta" | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['count'])" 2>/dev/null || echo -1)
+[ "$bare_n" -eq "$json_n" ] \
+  && { echo "PASS: grab | links: --bare count ($bare_n) matches --json count ($json_n)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: grab | links: --bare count ($bare_n) != --json count ($json_n)"; FAIL=$((FAIL+1)); }
+
+rm -f "$grab_cache"
 
 # ---------------------------------------------------------------------------
 # Results
