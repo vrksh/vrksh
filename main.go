@@ -19,6 +19,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/sse"
 	"github.com/vrksh/vrksh/cmd/tok"
 	"github.com/vrksh/vrksh/cmd/uuid"
+	"github.com/vrksh/vrksh/cmd/validate"
 )
 
 //go:embed integrations/skills/SKILLS.md
@@ -28,18 +29,19 @@ var skillsDoc string
 var manifestJSON string
 
 var tools = map[string]func() int{
-	"chunk":  chunk.Run,
-	"grab":   grab.Run,
-	"jwt":    jwt.Run,
-	"epoch":  epoch.Run,
-	"uuid":   uuid.Run,
-	"tok":    tok.Run,
-	"sse":    sse.Run,
-	"coax":   coax.Run,
-	"prompt": prompt.Run,
-	"kv":     kv.Run,
-	"links":  links.Run,
-	"plain":  plain.Run,
+	"chunk":    chunk.Run,
+	"grab":     grab.Run,
+	"jwt":      jwt.Run,
+	"epoch":    epoch.Run,
+	"uuid":     uuid.Run,
+	"tok":      tok.Run,
+	"sse":      sse.Run,
+	"coax":     coax.Run,
+	"prompt":   prompt.Run,
+	"kv":       kv.Run,
+	"links":    links.Run,
+	"plain":    plain.Run,
+	"validate": validate.Run,
 }
 
 func main() {

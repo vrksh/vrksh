@@ -1247,3 +1247,75 @@ vrk grab https://example.com | vrk plain | vrk links
 - **Multi-line `<a>` tags are not supported** — the tool processes line by line. An `<a href="...">` that spans multiple lines will not be matched.
 - **No deduplication** — the same URL appearing twice produces two records. Pipe through `sort -u` or `jq -r '.url'` if you need unique URLs.
 - **Empty stdin exits 0 with empty output** — this is not an error. Only an interactive terminal (no pipe) exits 2.
+
+---
+
+## validate — JSONL Schema Validator
+
+Validates JSONL records against a simplified type schema. Valid lines pass through
+to stdout unchanged. Invalid lines are warned to stderr and skipped (or cause exit 1
+with `--strict`). Input: stdin only (no positional argument — schema comes from `--schema`).
+
+### Schema format
+
+`{"key":"type"}` map. Supported types: `string | number | boolean | array | object`.
+Schema keys are **required fields** — a record missing a schema key is invalid.
+Extra keys in the record that are not in the schema are **ignored** (subset check).
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--schema <spec>` | `-s` | Inline JSON schema or file path (required) |
+| `--strict` | — | Exit 1 on first invalid line (no shorthand — `-s` is taken) |
+| `--fix` | — | Attempt to repair invalid lines via `vrk prompt` before re-validating |
+| `--json` | `-j` | Append metadata record `{"_vrk":"validate","total":N,"passed":N,"failed":N}` at end |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All lines valid, OR invalid lines found but `--strict` not set |
+| 1 | `--strict` and at least one invalid line; or I/O error (with `--json`: error record to stdout) |
+| 2 | `--schema` missing or invalid, unknown schema type, unknown flag |
+
+### Examples
+
+```bash
+# Validate a single record
+echo '{"name":"alice","age":30}' | vrk validate --schema '{"name":"string","age":"number"}'
+# → {"name":"alice","age":30}  (stdout, exit 0)
+
+# Invalid record — warned to stderr, nothing on stdout
+echo '{"name":"alice","age":"wrong"}' | vrk validate --schema '{"name":"string","age":"number"}'
+# → (empty stdout, stderr: "warning: validation failed: age expected number, got string", exit 0)
+
+# --strict: exit 1 on first invalid
+cat records.jsonl | vrk validate --schema '{"name":"string"}' --strict
+
+# File-based schema
+vrk validate --schema ./schema.json < records.jsonl
+
+# --json: append metadata record at end
+cat records.jsonl | vrk validate --schema '{"name":"string"}' --json
+# → <valid records>
+#   {"_vrk":"validate","total":10,"passed":9,"failed":1}
+
+# Pipeline: validate → token count
+echo '{"name":"alice","age":30}' | vrk validate --schema '{"name":"string","age":"number"}' | vrk tok
+
+# Pipeline: validate then store only valid records in kv
+cat records.jsonl | vrk validate --schema '{"name":"string"}' | while read -r rec; do
+  vrk kv set "record:$(echo "$rec" | jq -r '.name')" "$rec"
+done
+```
+
+### Gotchas
+
+- **`--strict` has no shorthand** — `-s` is reserved for `--schema`. Use `--strict` in full.
+- **`--fix` requires an API key** — it shells out to `vrk prompt` to repair invalid lines. If no API key is configured, `--fix` degrades silently: the line stays invalid and a warning is emitted to stderr. It never exits 2 for a missing key — that would be a pipeline footgun.
+- **`--json` on empty input still emits the metadata record** — `{"_vrk":"validate","total":0,"passed":0,"failed":0}`. This is consistent with other `--json` tools.
+- **`--json` + `--fix`: repaired lines count as `passed`** — there is no separate `repaired` counter.
+- **Schema is a subset check** — extra keys in a record are not an error. Only keys declared in the schema are validated.
+- **Large integers are safe** — records are decoded with `UseNumber()` so integers above 2^53 retain full precision.
+- **Empty lines in the stream are skipped** — they do not count toward `total`.

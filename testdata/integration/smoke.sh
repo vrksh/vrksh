@@ -511,11 +511,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 12 ] \
-  && { echo "PASS: --manifest lists 12 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 12)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 13 ] \
+  && { echo "PASS: --manifest lists 13 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 13)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
@@ -527,8 +527,8 @@ skills=$($VRK --skills)
   && { echo "PASS: --skills returns non-empty output"; PASS=$((PASS+1)); } \
   || { echo "FAIL: --skills returned empty output"; FAIL=$((FAIL+1)); }
 # spot-check that each tool section header is present
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab links; do
-  echo "$skills" | grep -q "## $tool" \
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab links validate; do
+  grep -q "## $tool" <<< "$skills" \
     && { echo "PASS: --skills contains section for '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --skills missing section for '$tool'"; FAIL=$((FAIL+1)); }
 done
@@ -826,6 +826,48 @@ json_n=$(echo "$meta" | python3 -c "import sys,json; print(json.loads(sys.stdin.
   || { echo "FAIL: grab | links: --bare count ($bare_n) != --json count ($json_n)"; FAIL=$((FAIL+1)); }
 
 rm -f "$grab_cache"
+
+# ---------------------------------------------------------------------------
+# Section 19 — validate pipeline composition
+# ---------------------------------------------------------------------------
+echo "--- Section 19: validate pipelines ---"
+
+SCHEMA_VAL='{"name":"string","age":"number"}'
+
+# validate passes a valid record through to stdout unchanged.
+val_out=$(echo '{"name":"alice","age":30}' | $VRK validate --schema "$SCHEMA_VAL" 2>/dev/null)
+[ "$val_out" = '{"name":"alice","age":30}' ] \
+  && { echo "PASS: validate passes valid record"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: validate valid record: got $val_out"; FAIL=$((FAIL+1)); }
+
+# validate | tok: output is a positive integer.
+tok_val=$(echo '{"name":"alice","age":30}' | $VRK validate --schema "$SCHEMA_VAL" | $VRK tok 2>/dev/null)
+echo "$tok_val" | grep -qE '^[1-9][0-9]*$' \
+  && { echo "PASS: validate | tok produces token count ($tok_val)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: validate | tok: expected positive integer, got '$tok_val'"; FAIL=$((FAIL+1)); }
+
+# Invalid record: stdout empty, stderr has warning, exit 0.
+val_stdout=$(set +e; echo '{"name":"alice","age":"wrong"}' | $VRK validate --schema "$SCHEMA_VAL" 2>/dev/null; true)
+val_exit=$(set +e; echo '{"name":"alice","age":"wrong"}' | $VRK validate --schema "$SCHEMA_VAL" >/dev/null 2>&1; echo $?)
+[ -z "$val_stdout" ] \
+  && { echo "PASS: validate invalid record — stdout empty"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: validate invalid record leaked to stdout: $val_stdout"; FAIL=$((FAIL+1)); }
+[ "$val_exit" -eq 0 ] \
+  && { echo "PASS: validate invalid record — exit 0 (warn mode)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: validate invalid record — exit $val_exit, want 0"; FAIL=$((FAIL+1)); }
+
+# --strict: exit 1 on first invalid line.
+strict_exit=$(set +e; echo '{"name":"alice","age":"wrong"}' | $VRK validate --schema "$SCHEMA_VAL" --strict >/dev/null 2>&1; echo $?)
+[ "$strict_exit" -eq 1 ] \
+  && { echo "PASS: validate --strict exits 1 on invalid"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: validate --strict exited $strict_exit, want 1"; FAIL=$((FAIL+1)); }
+
+# --json metadata record present as last line.
+json_out=$(echo '{"name":"alice","age":30}' | $VRK validate --schema "$SCHEMA_VAL" --json 2>/dev/null)
+meta_line=$(echo "$json_out" | tail -1)
+echo "$meta_line" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); sys.exit(0 if d.get('_vrk')=='validate' and isinstance(d.get('total'),int) else 1)" \
+  && { echo "PASS: validate --json metadata record valid"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: validate --json metadata malformed: $meta_line"; FAIL=$((FAIL+1)); }
 
 # ---------------------------------------------------------------------------
 # Results
