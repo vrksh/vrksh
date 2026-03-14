@@ -1430,3 +1430,96 @@ vrk prompt "summarise this" < doc.txt | vrk mask | vrk kv set summary
 - **`--pattern` replaces the entire match.** Unlike built-in patterns (which preserve the key prefix via a capture group), `--pattern` replaces the whole regex match with `[REDACTED]`. To preserve a prefix, use a lookahead or adjust the pattern to match only the value portion.
 - **`patterns_matched` uses literal regex strings for `--pattern` values.** The field `"sk-ant-[A-Za-z0-9]+"` in `patterns_matched` means that exact regex fired, not a named category.
 - **Ordering in `patterns_matched`:** built-ins in declaration order (bearer → password → secret → api_key → token), then `"entropy"`, then custom `--pattern` values in argument order.
+
+---
+
+## emit — Structured Logger
+
+Wraps stdin lines as JSONL log records with timestamps and levels.
+Input: positional argument or stdin (line-by-line streaming).
+emit is JSONL-native — every output line is already a JSON object. No `--json` flag.
+
+### Flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--level <level>` | `-l` | `info` | Log level for all lines: debug, info, warn, error |
+| `--tag <tag>` | — | — | Add `"tag"` field to every record |
+| `--msg <msg>` | — | — | Override message; stdin treated as JSON to merge extra fields |
+| `--parse-level` | — | — | Auto-detect level from line prefix; strip prefix from msg |
+
+### Output shape
+
+```
+{"ts":"2026-03-01T10:00:00.123Z","level":"info","msg":"<text>"}
+{"ts":"...","level":"error","tag":"agent-run","msg":"<text>"}
+{"ts":"...","level":"error","msg":"Job failed","job_id":"abc"}
+```
+
+Field order is deterministic: `ts` → `level` → `tag` (if set) → `msg` → merged extra fields (alphabetical).
+Timestamps are UTC RFC3339 with exactly 3 millisecond digits, always ending in `Z`.
+
+### --parse-level detection
+
+Recognised prefixes (case-insensitive): `ERROR`, `WARN`, `WARNING`, `INFO`, `DEBUG`.
+The prefix must be at a word boundary: followed by `:`, ` `, `\t`, or end of line.
+After matching: prefix + optional colon + leading whitespace are stripped from the message.
+Unknown prefix → falls back to the `--level` value (default `info`).
+
+```
+"ERROR: disk full"   → level=error, msg="disk full"
+"WARN low memory"    → level=warn,  msg="low memory"
+"DEBUGGER: verbose"  → level=info,  msg="DEBUGGER: verbose"  (no match — not a word boundary)
+"[ERROR] crash"      → level=info,  msg="[ERROR] crash"      (no match — bracket prefix)
+```
+
+### --msg + JSON stdin merge
+
+When `--msg` is set, each stdin line is attempted as a JSON object. If valid, its fields are
+merged into the record after `msg` (alphabetically sorted). Non-JSON lines are silently ignored
+(no extra fields added — the record still emits with the `--msg` value). Core fields
+(`ts`, `level`, `tag`, `msg`) in stdin JSON are always suppressed; the flag-provided values win.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | I/O error (scanner error, stdout write error) |
+| 2 | Usage error — interactive stdin, unknown flag, invalid `--level` value |
+
+### Examples
+
+```bash
+# Wrap script output as structured logs
+./deploy.sh 2>&1 | vrk emit --tag deploy
+
+# Wrap with error level
+echo 'Job failed' | vrk emit --level error
+
+# Add a tag to every record
+echo 'Starting job' | vrk emit --level info --tag agent-run
+
+# Merge JSON context into a record
+echo '{"job_id":"abc"}' | vrk emit --level error --msg "Job failed"
+# → {"ts":"...","level":"error","msg":"Job failed","job_id":"abc"}
+
+# Auto-detect level from log prefix
+printf 'ERROR: disk full\nWARN: low memory\nall good\n' | vrk emit --parse-level
+
+# Single message as positional arg
+vrk emit 'Starting job'
+
+# Pipeline: emit LLM output as structured log, then store
+vrk prompt "run analysis" | vrk emit --parse-level --tag llm | vrk kv set last-run
+```
+
+### Gotchas
+
+- **JSONL-native — no `--json` flag.** Every output line is already a JSON record. I/O errors go to stderr as plain text (exit 1).
+- **Empty lines are silently skipped** — no record is emitted, no error. `echo '' | vrk emit` exits 0 with no output.
+- **`--tag ""` omits the field** — passing an empty string is the same as not passing `--tag`.
+- **`--parse-level` + `--msg`**: level is still detected from the raw line prefix; `--msg` overrides the message. The two flags are independent.
+- **Extra fields from `--msg` JSON merge are alphabetically sorted** — predictable order for agents parsing the output.
+- **Large integers are preserved** — `json.RawMessage` stores exact bytes; no float64 precision loss on merge.
+- **`WARNING` and `WARN` both map to level `"warn"`** — the output level string is always the short form.

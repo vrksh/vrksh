@@ -9,6 +9,7 @@ import (
 
 	"github.com/vrksh/vrksh/cmd/chunk"
 	"github.com/vrksh/vrksh/cmd/coax"
+	"github.com/vrksh/vrksh/cmd/emit"
 	"github.com/vrksh/vrksh/cmd/epoch"
 	"github.com/vrksh/vrksh/cmd/grab"
 	"github.com/vrksh/vrksh/cmd/jwt"
@@ -31,6 +32,7 @@ var manifestJSON string
 
 var tools = map[string]func() int{
 	"chunk":    chunk.Run,
+	"emit":     emit.Run,
 	"grab":     grab.Run,
 	"jwt":      jwt.Run,
 	"epoch":    epoch.Run,
