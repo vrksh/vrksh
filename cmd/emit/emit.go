@@ -41,6 +41,16 @@ var validLevels = map[string]bool{
 	"error": true,
 }
 
+// fieldKey* are pre-marshaled JSON key bytes including the trailing colon.
+// Computed once at package init to avoid repeated json.Marshal allocations in
+// buildRecord, which is called for every input line in high-volume log streams.
+var (
+	fieldKeyTS    = []byte(`"ts":`)
+	fieldKeyLevel = []byte(`"level":`)
+	fieldKeyTag   = []byte(`"tag":`)
+	fieldKeyMsg   = []byte(`"msg":`)
+)
+
 // Run is the entry point for vrk emit. Returns 0, 1, or 2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("emit", pflag.ContinueOnError)
@@ -176,20 +186,35 @@ func tryDecodeJSON(line string) map[string]json.RawMessage {
 // field order: ts → level → tag (if non-empty) → msg → extra fields (alphabetical).
 // Core field names (ts, level, tag, msg) in extra are silently suppressed so
 // the flag-provided values always win.
+//
+// Core field keys are written using pre-marshaled fieldKey* byte slices to
+// avoid one json.Marshal allocation per fixed key per record.
 func buildRecord(level, tag, msg string, extra map[string]json.RawMessage) []byte {
 	ts := time.Now().UTC().Format("2006-01-02T15:04:05.000") + "Z"
 
 	var buf bytes.Buffer
 	buf.WriteByte('{')
-	appendStringField(&buf, "ts", ts)
+
+	tsBytes, _ := json.Marshal(ts)
+	buf.Write(fieldKeyTS)
+	buf.Write(tsBytes)
+
 	buf.WriteByte(',')
-	appendStringField(&buf, "level", level)
+	levelBytes, _ := json.Marshal(level)
+	buf.Write(fieldKeyLevel)
+	buf.Write(levelBytes)
+
 	if tag != "" {
 		buf.WriteByte(',')
-		appendStringField(&buf, "tag", tag)
+		tagBytes, _ := json.Marshal(tag)
+		buf.Write(fieldKeyTag)
+		buf.Write(tagBytes)
 	}
+
 	buf.WriteByte(',')
-	appendStringField(&buf, "msg", msg)
+	msgBytes, _ := json.Marshal(msg)
+	buf.Write(fieldKeyMsg)
+	buf.Write(msgBytes)
 
 	if len(extra) > 0 {
 		coreFields := map[string]bool{"ts": true, "level": true, "tag": true, "msg": true}
@@ -211,15 +236,6 @@ func buildRecord(level, tag, msg string, extra map[string]json.RawMessage) []byt
 
 	buf.WriteByte('}')
 	return buf.Bytes()
-}
-
-// appendStringField writes a JSON "key":"value" pair to buf.
-func appendStringField(buf *bytes.Buffer, key, value string) {
-	kBytes, _ := json.Marshal(key)
-	vBytes, _ := json.Marshal(value)
-	buf.Write(kBytes)
-	buf.WriteByte(':')
-	buf.Write(vBytes)
 }
 
 // printUsage writes usage information to stdout and returns 0.

@@ -352,6 +352,7 @@ cat generated_prompt.txt | vrk tok --budget 100000 || { echo "Prompt too large";
 
 ### Gotchas
 
+- **`--model` is a label, not a tokenizer switch.** Passing `--model claude-3-opus` or any other value still uses cl100k_base internally — the flag exists for forward compatibility and `--json` output labelling. Only `cl100k_base` is currently implemented; any other string is accepted without error but does not change which tokenizer runs.
 - **cl100k_base is approximate for Claude (~95% accurate).** The exact Claude tokenizer is not publicly available. Set `--budget` at 90% of the model's actual context limit to absorb the error margin.
 - **`--budget` is the only guard flag on `tok`** — it exits 1 when exceeded. `tok` has no `--fail` flag; passing it is a usage error (exit 2).
 - **Empty pipe is 0 tokens, not an error.** `cat /dev/null | vrk tok` exits 0 and prints `0`. Only running `vrk tok` interactively in a terminal (no pipe) exits 2.
