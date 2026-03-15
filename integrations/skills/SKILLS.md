@@ -1740,6 +1740,67 @@ echo 'hello' | vrk digest | vrk kv set last_hash
 
 ---
 
+## base — Encoding Converter
+
+Encodes and decodes between base64, base64url, hex, and base32.
+Input: positional argument or stdin.
+
+### Subcommands
+
+| Subcommand | Required flag | Description |
+|------------|---------------|-------------|
+| `encode` | `--to <encoding>` | Encode input to the target format |
+| `decode` | `--from <encoding>` | Decode input from the source format |
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--to <encoding>` | — | Target encoding for `encode`: `base64`, `base64url`, `hex`, `base32` |
+| `--from <encoding>` | — | Source encoding for `decode`: same set |
+| `--quiet` | `-q` | Suppress stderr; exit codes unaffected |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (including empty input) |
+| 1 | Runtime error — invalid input data for the chosen decoding |
+| 2 | Usage error — no subcommand, missing `--to`/`--from`, unsupported encoding name, unknown flag, interactive TTY with no input |
+
+### Examples
+
+```bash
+# Encode
+echo 'hello' | vrk base encode --to base64      # aGVsbG8=
+echo 'hello' | vrk base encode --to base64url   # aGVsbG8  (no padding)
+echo 'hello' | vrk base encode --to hex         # 68656c6c6f
+echo 'hello' | vrk base encode --to base32      # NBSWY3DP
+
+# Decode
+echo 'aGVsbG8=' | vrk base decode --from base64
+echo '68656c6c6f' | vrk base decode --from hex
+
+# Binary round-trip
+printf '\x00\x01\x02\xff' | vrk base encode --to hex   # 000102ff
+printf '\x00\x01\x02\xff' | vrk base encode --to hex | vrk base decode --from hex
+
+# Pipeline: encode a secret for safe transport, then decode at destination
+echo "$SECRET" | vrk base encode --to base64url
+echo "$ENCODED" | vrk base decode --from base64url
+```
+
+### Gotchas
+
+- **`base` strips one trailing newline from stdin before encoding.** `echo 'hello' | vrk base encode --to hex` encodes `hello` (5 bytes), not `hello\n` (6 bytes). Use `printf 'hello\n'` if you need to encode the newline itself. This differs intentionally from `vrk digest`, which does not strip — `base` is an encoding tool where callers expect string semantics.
+- **Multi-line wrapped base64 is not supported.** Input like `base64 -w76` output (line-wrapped) will fail decoding. Strip internal newlines first: `tr -d '\n' | vrk base decode --from base64`.
+- **base64url uses no padding and URL-safe alphabet.** The output uses `-` and `_` instead of `+` and `/`, with no trailing `=`. This is the correct format for JWT headers and URL query parameters.
+- **hex output is lowercase.** `echo 'hello' | vrk base encode --to hex` produces `68656c6c6f`, not `68656C6C6F`. Decoders are case-sensitive — use the output of `vrk base encode --to hex` as the input to `vrk base decode --from hex`.
+- **base32 output is uppercase.** Decoding is case-sensitive; lowercase base32 input exits 1.
+- **`--quiet` does not suppress the no-subcommand error.** That error fires before flag parsing; `--quiet` takes effect only inside a subcommand.
+
+---
+
 ## Breaking changes
 
 ### digest — stdin no longer strips trailing newline (streaming fix)

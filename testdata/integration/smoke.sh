@@ -537,11 +537,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 18 ] \
-  && { echo "PASS: --manifest lists 18 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 18)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 19 ] \
+  && { echo "PASS: --manifest lists 19 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 19)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
@@ -1183,6 +1183,35 @@ ec=$(set +e; $VRK digest --file "$f_a" --file "$f_c" --compare >/dev/null 2>&1; 
 assert_exit "digest --compare mismatch exits 0" 0 "$ec"
 
 unset VRK_KV_PATH
+
+# ---------------------------------------------------------------------------
+# base: encoding pipeline
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== base: encoding pipeline ==="
+
+# Encode then decode through each encoding in a single pipeline.
+# Decode writes raw bytes with no added newline; $() capture gives "hello".
+got=$(echo 'hello' | $VRK base encode --to hex | $VRK base decode --from hex)
+assert_stdout "base encode/decode hex pipeline" "hello" "$got"
+
+got=$(echo 'hello' | $VRK base encode --to base64 | $VRK base decode --from base64)
+assert_stdout "base encode/decode base64 pipeline" "hello" "$got"
+
+got=$(echo 'hello' | $VRK base encode --to base64url | $VRK base decode --from base64url)
+assert_stdout "base encode/decode base64url pipeline" "hello" "$got"
+
+got=$(echo 'hello' | $VRK base encode --to base32 | $VRK base decode --from base32)
+assert_stdout "base encode/decode base32 pipeline" "hello" "$got"
+
+# Compose with other tools: hex-encode a JWT claim extracted by vrk jwt, then decode it back.
+TEST_JWT="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwibmFtZSI6IkFsaWNlIn0.abc"
+claim=$(echo "$TEST_JWT" | $VRK jwt --claim sub 2>/dev/null || true)
+if [ -n "$claim" ]; then
+  encoded=$(echo "$claim" | $VRK base encode --to hex)
+  decoded=$(echo "$encoded" | $VRK base decode --from hex)
+  assert_stdout "base + jwt claim round-trip" "user123" "$decoded"
+fi
 
 # ---------------------------------------------------------------------------
 # Results
