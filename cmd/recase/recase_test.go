@@ -337,6 +337,46 @@ func TestQuiet(t *testing.T) {
 	}
 }
 
+// TestPositionalArgSingle verifies that a single positional arg is accepted
+// without piped stdin, even when stdin is a TTY.
+func TestPositionalArgSingle(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	defer func() { isTerminal = orig }()
+
+	stdout, _, code := runRecase(t, []string{"--to", "kebab", "hello_world"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	got := strings.TrimRight(stdout, "\n")
+	if got != "hello-world" {
+		t.Errorf("got %q, want %q", got, "hello-world")
+	}
+}
+
+// TestPositionalArgMultiple verifies that multiple positional args are each
+// treated as one input line, producing one output line per arg.
+func TestPositionalArgMultiple(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	defer func() { isTerminal = orig }()
+
+	stdout, _, code := runRecase(t, []string{"--to", "camel", "hello_world", "foo_bar"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2; stdout=%q", len(lines), stdout)
+	}
+	if lines[0] != "helloWorld" {
+		t.Errorf("lines[0] = %q, want %q", lines[0], "helloWorld")
+	}
+	if lines[1] != "fooBar" {
+		t.Errorf("lines[1] = %q, want %q", lines[1], "fooBar")
+	}
+}
+
 // TestProperty verifies the round-trip invariant: for any identifier-friendly
 // convention, joining words and splitting back produces the original word list.
 func TestProperty(t *testing.T) {

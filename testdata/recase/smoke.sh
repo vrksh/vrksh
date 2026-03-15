@@ -132,6 +132,18 @@ assert_exit "empty stdin exit 0" "0" "$exit_code"
 assert_eq "empty stdin no output" "" "$out"
 
 # ---------------------------------------------------------------------------
+# Positional arg form
+# ---------------------------------------------------------------------------
+
+# Single positional arg — no pipe required.
+got=$($VRK recase --to kebab hello_world)
+assert_eq "positional arg: hello_world → kebab" "hello-world" "$got"
+
+# Multiple positional args — one output line per arg.
+got=$($VRK recase --to camel hello_world foo_bar)
+assert_eq "positional args: two lines out" "$(printf 'helloWorld\nfooBar')" "$got"
+
+# ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
 

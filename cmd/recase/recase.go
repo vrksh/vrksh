@@ -86,19 +86,28 @@ func Run() int {
 		return shared.UsageErrorf("%s", msg)
 	}
 
-	// TTY guard: interactive terminal with no piped input → usage error.
-	if isTerminal(int(os.Stdin.Fd())) {
-		if jsonFlag {
-			return shared.PrintJSONError(map[string]any{
-				"error": "recase: no input: pipe text to stdin",
-				"code":  2,
-			})
+	// Positional args take priority over stdin. Each arg is treated as one input
+	// line so `vrk recase --to camel hello_world` works without a pipe.
+	// TTY guard only applies when no positional arg is provided.
+	posArgs := fs.Args()
+	var reader io.Reader
+	if len(posArgs) > 0 {
+		reader = strings.NewReader(strings.Join(posArgs, "\n"))
+	} else {
+		if isTerminal(int(os.Stdin.Fd())) {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": "recase: no input: pipe text to stdin",
+					"code":  2,
+				})
+			}
+			return shared.UsageErrorf("recase: no input: pipe text to stdin")
 		}
-		return shared.UsageErrorf("recase: no input: pipe text to stdin")
+		reader = os.Stdin
 	}
 
 	enc := json.NewEncoder(os.Stdout)
-	err := scanLines(os.Stdin, func(line string) error {
+	err := scanLines(reader, func(line string) error {
 		output, from, convErr := convertLine(line, toFlag)
 		if convErr != nil {
 			return convErr
