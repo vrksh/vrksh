@@ -21,6 +21,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `grab` | Fetch a URL as clean markdown or plain text | `--text`, `--raw`, `--json` |
 | `plain` | Strip markdown syntax, keep prose | `--json` |
 | `links` | Extract hyperlinks from markdown, HTML, or plain text as JSONL | `--bare`, `--json` |
+| `throttle` | Rate-limit lines from stdin | `--rate <N/s\|N/m>`, `--burst N`, `--tokens-field <f>`, `--json` |
 
 ---
 

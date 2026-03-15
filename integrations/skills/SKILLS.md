@@ -1524,3 +1524,58 @@ vrk prompt "run analysis" | vrk emit --parse-level --tag llm | vrk kv set last-r
 - **Extra fields from `--msg` JSON merge are alphabetically sorted** — predictable order for agents parsing the output.
 - **Large integers are preserved** — `json.RawMessage` stores exact bytes; no float64 precision loss on merge.
 - **`WARNING` and `WARN` both map to level `"warn"`** — the output level string is always the short form.
+
+## throttle — Rate Limiter
+
+Delays lines from stdin to match a rate constraint. Prevents hitting API rate
+limits when calling LLMs or external services in a loop. Input: stdin only.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--rate <N/s\|N/m>` | `-r` | Rate limit — required. N must be a positive integer |
+| `--burst N` | — | Emit first N lines without delay, then rate-limit the rest |
+| `--tokens-field <field>` | — | Rate by token count of a JSONL field value (dot-path) |
+| `--json` | `-j` | Append `{"_vrk":"throttle","rate":"...","lines":N,"elapsed_ms":N}` after all lines |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (including empty input) |
+| 1 | I/O error, token count failure, invalid JSON with `--tokens-field` |
+| 2 | Usage error — missing `--rate`, rate ≤ 0, bad format, unknown flag, TTY stdin |
+
+### Examples
+
+```bash
+# Limit to 5 lines per second
+seq 100 | vrk throttle --rate 5/s
+
+# 1 line per second (60/m)
+seq 10 | vrk throttle --rate 60/m
+
+# First 3 lines immediately, then 1/s
+seq 10 | vrk throttle --rate 1/s --burst 3
+
+# Rate by token count of a JSONL field (10 tokens/s)
+printf '{"prompt":"hi"}\n{"prompt":"hello world"}\n' | vrk throttle --rate 10/s --tokens-field prompt
+
+# Emit metadata trailer
+seq 5 | vrk throttle --rate 2/s --json
+# → <5 lines>
+# → {"_vrk":"throttle","rate":"2/s","lines":5,"elapsed_ms":2500}
+
+# Combine with prompt to stay under an API rate limit
+cat prompts.jsonl | vrk throttle --rate 10/m | vrk prompt --model gpt-4o
+```
+
+### Gotchas
+
+- **`--rate` is required** — omitting it exits 2 with a usage error. There is no default rate.
+- **N must be a positive integer** — `--rate 0.5/s` exits 2 with "positive integer" error. Use `--rate 1/m` for sub-1/s rates.
+- **Empty lines are skipped** — a truly empty line (`""`) produces no output. A whitespace-only line (`"   "`) is content and passes through unchanged.
+- **`--burst` counts lines, not tokens** — with `--tokens-field`, burst still applies per-line regardless of token count.
+- **`--tokens-field` on non-JSON input exits 1** — use only with JSONL streams. Bad JSON or a missing field is a fatal error, not a skip.
+- **`elapsed_ms` is wall time from first to last line** — it includes all sleep time. Use it for pipeline instrumentation, not performance tuning.

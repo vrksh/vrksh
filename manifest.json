@@ -15,6 +15,7 @@
     {"name": "plain",    "description": "Markdown stripper — removes syntax, keeps prose"},
     {"name": "validate", "description": "JSONL schema validator — --schema, --strict, --fix, --json"},
     {"name": "mask",     "description": "Secret redactor — entropy + pattern-based, streaming"},
-    {"name": "emit",     "description": "Structured logger — wraps stdin lines as JSONL log records"}
+    {"name": "emit",     "description": "Structured logger — wraps stdin lines as JSONL log records"},
+    {"name": "throttle", "description": "Rate limiter for pipes — --rate N/s or N/m"}
   ]
 }
