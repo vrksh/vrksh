@@ -74,26 +74,32 @@ func Run() int {
 		return shared.UsageErrorf("%s", err.Error())
 	}
 
-	// TTY guard: interactive terminal with no piped input → usage error.
-	if isTerminal(int(os.Stdin.Fd())) {
-		if jsonFlag {
-			return shared.PrintJSONError(map[string]any{
-				"error": "links: no input: pipe text to stdin",
-				"code":  2,
-			})
+	var raw []byte
+	if args := fs.Args(); len(args) > 0 {
+		raw = []byte(strings.Join(args, " "))
+	} else {
+		// TTY guard: interactive terminal with no piped input → usage error.
+		if isTerminal(int(os.Stdin.Fd())) {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": "links: no input: pipe text to stdin",
+					"code":  2,
+				})
+			}
+			return shared.UsageErrorf("links: no input: pipe text to stdin")
 		}
-		return shared.UsageErrorf("links: no input: pipe text to stdin")
-	}
 
-	raw, err := readAll(os.Stdin)
-	if err != nil {
-		if jsonFlag {
-			return shared.PrintJSONError(map[string]any{
-				"error": fmt.Sprintf("links: reading stdin: %v", err),
-				"code":  1,
-			})
+		var err error
+		raw, err = readAll(os.Stdin)
+		if err != nil {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("links: reading stdin: %v", err),
+					"code":  1,
+				})
+			}
+			return shared.Errorf("links: reading stdin: %v", err)
 		}
-		return shared.Errorf("links: reading stdin: %v", err)
 	}
 
 	// Empty input is valid — exit 0, no output (plus metadata if --json).

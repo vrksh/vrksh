@@ -88,6 +88,28 @@ func parseRecords(t *testing.T, stdout string) []map[string]any {
 	return records
 }
 
+func TestPositionalArg(t *testing.T) {
+	// Positional arg bypasses stdin entirely — TTY guard must not fire.
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	defer func() { isTerminal = orig }()
+
+	stdout, _, code := runLinks(t, []string{"See [link](https://example.com)"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	recs := parseRecords(t, stdout)
+	if len(recs) != 1 {
+		t.Fatalf("got %d records, want 1; stdout=%q", len(recs), stdout)
+	}
+	if recs[0]["url"] != "https://example.com" {
+		t.Errorf("url = %q, want %q", recs[0]["url"], "https://example.com")
+	}
+	if recs[0]["text"] != "link" {
+		t.Errorf("text = %q, want %q", recs[0]["text"], "link")
+	}
+}
+
 func TestMarkdownInlineLink(t *testing.T) {
 	stdout, _, code := runLinks(t, nil, "See [Homebrew](https://brew.sh) for install.\n")
 	if code != 0 {

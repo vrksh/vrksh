@@ -41,26 +41,32 @@ func Run() int {
 		return shared.UsageErrorf("%s", err.Error())
 	}
 
-	// TTY guard: no piped input and nothing passed via args → usage error.
-	if isTerminal(int(os.Stdin.Fd())) {
-		if jsonFlag {
-			return shared.PrintJSONError(map[string]any{
-				"error": "plain: no input: pipe markdown to stdin",
-				"code":  2,
-			})
+	var rawBytes []byte
+	if args := fs.Args(); len(args) > 0 {
+		rawBytes = []byte(strings.Join(args, " "))
+	} else {
+		// TTY guard: no piped input and nothing passed via args → usage error.
+		if isTerminal(int(os.Stdin.Fd())) {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": "plain: no input: pipe markdown to stdin",
+					"code":  2,
+				})
+			}
+			return shared.UsageErrorf("plain: no input: pipe markdown to stdin")
 		}
-		return shared.UsageErrorf("plain: no input: pipe markdown to stdin")
-	}
 
-	rawBytes, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		if jsonFlag {
-			return shared.PrintJSONError(map[string]any{
-				"error": fmt.Sprintf("plain: reading stdin: %v", err),
-				"code":  1,
-			})
+		var err error
+		rawBytes, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("plain: reading stdin: %v", err),
+					"code":  1,
+				})
+			}
+			return shared.Errorf("plain: reading stdin: %v", err)
 		}
-		return shared.Errorf("plain: reading stdin: %v", err)
 	}
 
 	inputBytes := len(rawBytes)

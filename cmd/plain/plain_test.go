@@ -70,6 +70,21 @@ func runPlain(t *testing.T, args []string, stdinContent string) (stdout, stderr 
 	return outBuf.String(), errBuf.String(), code
 }
 
+func TestPositionalArg(t *testing.T) {
+	// Positional arg bypasses stdin entirely — TTY guard must not fire.
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	defer func() { isTerminal = orig }()
+
+	stdout, _, code := runPlain(t, []string{"**bold**"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if strings.TrimSpace(stdout) != "bold" {
+		t.Errorf("stdout = %q, want %q", strings.TrimSpace(stdout), "bold")
+	}
+}
+
 func TestPlainBold(t *testing.T) {
 	stdout, _, code := runPlain(t, nil, "**hello**\n")
 	if code != 0 {
