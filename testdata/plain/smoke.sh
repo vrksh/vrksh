@@ -1,104 +1,155 @@
 #!/usr/bin/env bash
-# Smoke tests for vrk plain — run against the built binary.
+# testdata/plain/smoke.sh
+#
+# End-to-end smoke tests for vrk plain.
 # Run after make build to verify real process behaviour: exit codes, stdout/stderr
 # separation, and pipeline composition that unit tests cannot exercise.
 #
 # Usage:
 #   ./testdata/plain/smoke.sh              # run against ./vrk in repo root
 #   VRK=./vrk ./testdata/plain/smoke.sh   # explicit binary path
+
 set -euo pipefail
 
 VRK="${VRK:-./vrk}"
-BINARY="$VRK"
 PASS=0
 FAIL=0
 
-assert_eq() {
-    local label="$1" got="$2" want="$3"
-    if [[ "$got" == "$want" ]]; then
-        printf 'PASS: %s\n' "$label"
-        PASS=$((PASS + 1))
-    else
-        printf 'FAIL: %s\n  got:  %s\n  want: %s\n' "$label" "$(printf '%q' "$got")" "$(printf '%q' "$want")"
-        FAIL=$((FAIL + 1))
-    fi
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+
+ok() {
+  echo "  PASS  $1"
+  PASS=$((PASS + 1))
+}
+
+fail() {
+  echo "  FAIL  $1"
+  echo "        $2"
+  FAIL=$((FAIL + 1))
 }
 
 assert_exit() {
-    local label="$1" got="$2" want="$3"
-    if [[ "$got" == "$want" ]]; then
-        printf 'PASS: %s (exit %s)\n' "$label" "$got"
-        PASS=$((PASS + 1))
-    else
-        printf 'FAIL: %s (exit %s, want %s)\n' "$label" "$got" "$want"
-        FAIL=$((FAIL + 1))
-    fi
+  local desc=$1 expected=$2 actual=$3
+  if [ "$actual" -eq "$expected" ]; then
+    ok "$desc (exit $expected)"
+  else
+    fail "$desc" "expected exit $expected, got exit $actual"
+  fi
 }
 
-# --- basic stripping ---
+assert_stdout_equals() {
+  local desc=$1 expected=$2 actual=$3
+  if [ "$actual" = "$expected" ]; then
+    ok "$desc"
+  else
+    fail "$desc" "expected '$expected', got '$actual'"
+  fi
+}
 
-got=$(echo '**hello** _world_' | "$BINARY" plain)
-assert_eq "bold_italic" "$got" "hello world"
+assert_stdout_contains() {
+  local desc=$1 pattern=$2 actual=$3
+  if echo "$actual" | grep -q "$pattern"; then
+    ok "$desc (contains '$pattern')"
+  else
+    fail "$desc" "stdout did not contain '$pattern'. got: $actual"
+  fi
+}
 
-got=$(echo '# Heading' | "$BINARY" plain)
-assert_eq "heading" "$got" "Heading"
+assert_stdout_empty() {
+  local desc=$1 actual=$2
+  if [ -z "$actual" ]; then
+    ok "$desc (stdout empty)"
+  else
+    fail "$desc" "expected empty stdout, got: $actual"
+  fi
+}
 
-got=$(printf -- '- item one\n- item two' | "$BINARY" plain)
-assert_eq "list" "$got" "$(printf 'item one\nitem two')"
+echo "vrk plain — smoke tests"
+echo "binary: $VRK"
+echo ""
 
-got=$(echo '[link text](https://example.com)' | "$BINARY" plain)
-assert_eq "link" "$got" "link text"
+# ------------------------------------------------------------
+# 1. Basic markdown stripping
+# ------------------------------------------------------------
+echo "--- 1. basic stripping ---"
 
-got=$(echo '`code snippet`' | "$BINARY" plain)
-assert_eq "inline_code" "$got" "code snippet"
+got=$(echo '**hello** _world_' | "$VRK" plain)
+assert_stdout_equals "bold and italic stripped"   "hello world"                   "$got"
 
-got=$(echo '> blockquote text' | "$BINARY" plain)
-assert_eq "blockquote" "$got" "blockquote text"
+got=$(echo '# Heading' | "$VRK" plain)
+assert_stdout_equals "heading stripped"           "Heading"                       "$got"
 
-# --- empty stdin ---
+got=$(printf -- '- item one\n- item two' | "$VRK" plain)
+assert_stdout_equals "list items stripped"        "$(printf 'item one\nitem two')" "$got"
 
-got=$(printf '' | "$BINARY" plain)
+got=$(echo '[link text](https://example.com)' | "$VRK" plain)
+assert_stdout_equals "link: text kept, URL dropped"  "link text"                 "$got"
+
+got=$(echo '`code snippet`' | "$VRK" plain)
+assert_stdout_equals "inline code stripped"       "code snippet"                  "$got"
+
+got=$(echo '> blockquote text' | "$VRK" plain)
+assert_stdout_equals "blockquote stripped"        "blockquote text"               "$got"
+
+# ------------------------------------------------------------
+# 2. Empty stdin
+# ------------------------------------------------------------
+echo ""
+echo "--- 2. empty stdin ---"
+
+got=$(printf '' | "$VRK" plain)
 exit_code=$?
-assert_exit "empty_stdin_exit" "$exit_code" "0"
-assert_eq   "empty_stdin_output" "$got" ""
+assert_exit        "empty stdin: exit 0"    0  "$exit_code"
+assert_stdout_empty "empty stdin: no output"   "$got"
 
-# --- --json: valid JSON with expected fields ---
+# ------------------------------------------------------------
+# 3. --json output
+# ------------------------------------------------------------
+echo ""
+echo "--- 3. --json output ---"
 
-json_out=$(echo '**hello**' | "$BINARY" plain --json)
+json_out=$(echo '**hello**' | "$VRK" plain --json)
 
-# text field must equal "hello"
 text_val=$(printf '%s' "$json_out" | grep -o '"text":"[^"]*"' | sed 's/"text":"//;s/"//')
-assert_eq "json_text_field" "$text_val" "hello"
+assert_stdout_equals "json: text field value"  "hello"  "$text_val"
 
-# input_bytes must be present and positive
 has_input=$(printf '%s' "$json_out" | grep -c '"input_bytes"' || true)
-assert_eq "json_has_input_bytes" "$has_input" "1"
+assert_stdout_equals "json: input_bytes present"  "1"  "$has_input"
 
-# output_bytes must be present and positive
 has_output=$(printf '%s' "$json_out" | grep -c '"output_bytes"' || true)
-assert_eq "json_has_output_bytes" "$has_output" "1"
+assert_stdout_equals "json: output_bytes present"  "1"  "$has_output"
 
-# --- --json: exit 0 ---
-
-echo '**hello**' | "$BINARY" plain --json > /dev/null
+echo '**hello**' | "$VRK" plain --json > /dev/null
 exit_code=$?
-assert_exit "json_exit_0" "$exit_code" "0"
+assert_exit "json: exit 0" 0 "$exit_code"
 
-# --- --help exits 0 ---
+# ------------------------------------------------------------
+# 4. --help and usage errors
+# ------------------------------------------------------------
+echo ""
+echo "--- 4. --help and usage errors ---"
 
-"$BINARY" plain --help > /dev/null
+"$VRK" plain --help > /dev/null
 exit_code=$?
-assert_exit "help_exit_0" "$exit_code" "0"
-
-# --- unknown flag exits 2 ---
+assert_exit "--help: exit 0" 0 "$exit_code"
 
 set +e
-"$BINARY" plain --bogus < /dev/null > /dev/null 2>&1
+"$VRK" plain --bogus < /dev/null > /dev/null 2>&1
 exit_code=$?
 set -e
-assert_exit "unknown_flag_exit_2" "$exit_code" "2"
+assert_exit "unknown flag: exit 2" 2 "$exit_code"
 
-# --- summary ---
+# ------------------------------------------------------------
+# Summary
+# ------------------------------------------------------------
+echo ""
+echo "---"
+echo "Results: $PASS passed, $FAIL failed"
+echo ""
 
-printf '\nResults: %d passed, %d failed\n' "$PASS" "$FAIL"
-[[ $FAIL -eq 0 ]]
+if [ "$FAIL" -gt 0 ]; then
+  exit 1
+fi
+exit 0

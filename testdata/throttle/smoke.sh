@@ -1,206 +1,253 @@
 #!/usr/bin/env bash
-# Smoke tests for vrk throttle — run against the built binary.
+# testdata/throttle/smoke.sh
+#
+# End-to-end smoke tests for vrk throttle.
 # Run after make build to verify real process behaviour: exit codes, stdout/stderr
 # separation, and pipeline composition that unit tests cannot exercise.
 #
 # Usage:
 #   ./testdata/throttle/smoke.sh              # run against ./vrk in repo root
 #   VRK=./vrk ./testdata/throttle/smoke.sh   # explicit binary path
+
 set -euo pipefail
 
 VRK="${VRK:-./vrk}"
 PASS=0
 FAIL=0
 
-assert_eq() {
-    local label="$1" got="$2" want="$3"
-    if [[ "$got" == "$want" ]]; then
-        printf 'PASS: %s\n' "$label"
-        PASS=$((PASS + 1))
-    else
-        printf 'FAIL: %s\n  got:  %s\n  want: %s\n' "$label" "$(printf '%q' "$got")" "$(printf '%q' "$want")"
-        FAIL=$((FAIL + 1))
-    fi
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+
+ok() {
+  echo "  PASS  $1"
+  PASS=$((PASS + 1))
+}
+
+fail() {
+  echo "  FAIL  $1"
+  echo "        $2"
+  FAIL=$((FAIL + 1))
 }
 
 assert_exit() {
-    local label="$1" got="$2" want="$3"
-    if [[ "$got" == "$want" ]]; then
-        printf 'PASS: %s (exit %s)\n' "$label" "$got"
-        PASS=$((PASS + 1))
-    else
-        printf 'FAIL: %s (exit %s, want %s)\n' "$label" "$got" "$want"
-        FAIL=$((FAIL + 1))
-    fi
+  local desc=$1 expected=$2 actual=$3
+  if [ "$actual" -eq "$expected" ]; then
+    ok "$desc (exit $expected)"
+  else
+    fail "$desc" "expected exit $expected, got exit $actual"
+  fi
 }
 
-assert_contains() {
-    local label="$1" haystack="$2" needle="$3"
-    if [[ "$haystack" == *"$needle"* ]]; then
-        printf 'PASS: %s\n' "$label"
-        PASS=$((PASS + 1))
-    else
-        printf 'FAIL: %s\n  output does not contain: %s\n  got: %s\n' "$label" "$(printf '%q' "$needle")" "$(printf '%q' "$haystack")"
-        FAIL=$((FAIL + 1))
-    fi
+assert_stdout_equals() {
+  local desc=$1 expected=$2 actual=$3
+  if [ "$actual" = "$expected" ]; then
+    ok "$desc"
+  else
+    fail "$desc" "expected '$expected', got '$actual'"
+  fi
+}
+
+assert_stdout_contains() {
+  local desc=$1 pattern=$2 actual=$3
+  if echo "$actual" | grep -q "$pattern"; then
+    ok "$desc (contains '$pattern')"
+  else
+    fail "$desc" "stdout did not contain '$pattern'. got: $actual"
+  fi
+}
+
+assert_stdout_empty() {
+  local desc=$1 actual=$2
+  if [ -z "$actual" ]; then
+    ok "$desc (stdout empty)"
+  else
+    fail "$desc" "expected empty stdout, got: $actual"
+  fi
 }
 
 assert_line_count() {
-    local label="$1" got="$2" want="$3"
-    local count
-    if [[ -z "$got" ]]; then
-        count=0
-    else
-        # printf '%s\n' restores the trailing newline stripped by $() so that
-        # wc -l counts all lines including the last one correctly.
-        count=$(printf '%s\n' "$got" | wc -l | tr -d ' ')
-    fi
-    if [[ "$count" == "$want" ]]; then
-        printf 'PASS: %s (lines=%s)\n' "$label" "$count"
-        PASS=$((PASS + 1))
-    else
-        printf 'FAIL: %s (lines=%s, want %s)\n  got: %s\n' "$label" "$count" "$want" "$(printf '%q' "$got")"
-        FAIL=$((FAIL + 1))
-    fi
+  local desc=$1 expected=$2 actual=$3
+  local count
+  if [ -z "$actual" ]; then
+    count=0
+  else
+    # printf '%s\n' restores the trailing newline stripped by $() so that
+    # wc -l counts all lines including the last one correctly.
+    count=$(printf '%s\n' "$actual" | wc -l | tr -d ' ')
+  fi
+  if [ "$count" -eq "$expected" ]; then
+    ok "$desc ($expected line(s))"
+  else
+    fail "$desc" "expected $expected line(s), got $count. stdout: $actual"
+  fi
 }
 
-# --- Basic pass-through ---
+echo "vrk throttle — smoke tests"
+echo "binary: $VRK"
+echo ""
+
+# ------------------------------------------------------------
+# 1. Basic pass-through
+# ------------------------------------------------------------
+echo "--- 1. basic pass-through ---"
 
 got=$(printf 'a\nb\nc\n' | "$VRK" throttle --rate 100/s)
 exit_code=$?
-assert_exit "basic_exit_0"       "$exit_code" "0"
-assert_line_count "basic_3_lines" "$got" "3"
-assert_eq "basic_line1" "$(printf '%s' "$got" | head -1)" "a"
-assert_eq "basic_line3" "$(printf '%s' "$got" | tail -1)" "c"
+assert_exit       "3-line input: exit 0"   0  "$exit_code"
+assert_line_count "3-line input: 3 lines"  3  "$got"
 
-# --- Content unchanged ---
+first=$(printf '%s\n' "$got" | head -1)
+last=$(printf '%s\n' "$got" | tail -1)
+assert_stdout_equals "first line unchanged"  "a"  "$first"
+assert_stdout_equals "last line unchanged"   "c"  "$last"
 
 got=$(echo 'hello' | "$VRK" throttle --rate 100/s)
-assert_eq "content_unchanged" "$got" "hello"
+assert_stdout_equals "content unchanged"  "hello"  "$got"
 
-# --- Empty stdin exits 0 with no output ---
+# ------------------------------------------------------------
+# 2. Empty and blank input
+# ------------------------------------------------------------
+echo ""
+echo "--- 2. empty and blank input ---"
 
 got=$(printf '' | "$VRK" throttle --rate 100/s)
 exit_code=$?
-assert_exit "empty_stdin_exit"   "$exit_code" "0"
-assert_eq   "empty_stdin_output" "$got" ""
+assert_exit        "empty stdin: exit 0"     0  "$exit_code"
+assert_stdout_empty "empty stdin: no output"    "$got"
 
-# --- Empty line (echo '') exits 0 with no output ---
-
+# echo '' sends a single newline — scanner produces one empty string → skipped.
 got=$(echo '' | "$VRK" throttle --rate 100/s)
 exit_code=$?
-assert_exit "empty_line_exit"   "$exit_code" "0"
-assert_eq   "empty_line_output" "$got" ""
+assert_exit        "empty line: exit 0"     0  "$exit_code"
+assert_stdout_empty "empty line: no output"    "$got"
 
-# --- Whitespace-only line is content, passes through ---
-
+# A whitespace-only line is content and passes through unchanged.
 got=$(printf '   \n' | "$VRK" throttle --rate 100/s)
 exit_code=$?
-assert_exit "whitespace_line_exit"    "$exit_code" "0"
-assert_eq   "whitespace_line_content" "$got" "   "
+assert_exit        "whitespace-only line: exit 0"        0      "$exit_code"
+assert_stdout_equals "whitespace-only line: emitted as-is"  "   "  "$got"
 
-# --- Missing --rate exits 2 ---
+# ------------------------------------------------------------
+# 3. Usage errors
+# ------------------------------------------------------------
+echo ""
+echo "--- 3. usage errors ---"
 
 set +e
 "$VRK" throttle < /dev/null > /dev/null 2>&1
 exit_code=$?
 set -e
-assert_exit "missing_rate_exit_2" "$exit_code" "2"
-
-# --- --rate 0/s exits 2 ---
+assert_exit "missing --rate: exit 2" 2 "$exit_code"
 
 set +e
 "$VRK" throttle --rate 0/s < /dev/null > /dev/null 2>&1
 exit_code=$?
 set -e
-assert_exit "rate_zero_exit_2" "$exit_code" "2"
-
-# --- --rate abc exits 2 ---
+assert_exit "--rate 0/s: exit 2" 2 "$exit_code"
 
 set +e
 "$VRK" throttle --rate abc < /dev/null > /dev/null 2>&1
 exit_code=$?
 set -e
-assert_exit "rate_invalid_format_exit_2" "$exit_code" "2"
-
-# --- --rate 0.5/s exits 2 (decimal N rejected) ---
+assert_exit "--rate abc: exit 2" 2 "$exit_code"
 
 set +e
 "$VRK" throttle --rate 0.5/s < /dev/null > /dev/null 2>&1
 exit_code=$?
 set -e
-assert_exit "rate_decimal_exit_2" "$exit_code" "2"
+assert_exit "--rate 0.5/s (decimal N rejected): exit 2" 2 "$exit_code"
 
-# --- --help exits 0 ---
+# ------------------------------------------------------------
+# 4. --help
+# ------------------------------------------------------------
+echo ""
+echo "--- 4. --help ---"
 
 "$VRK" throttle --help > /dev/null
 exit_code=$?
-assert_exit "help_exit_0" "$exit_code" "0"
+assert_exit "--help: exit 0" 0 "$exit_code"
 
-# --- --json trailing metadata record ---
+# ------------------------------------------------------------
+# 5. --json metadata trailer
+# ------------------------------------------------------------
+echo ""
+echo "--- 5. --json metadata trailer ---"
 
 json_out=$(printf 'x\ny\n' | "$VRK" throttle --rate 100/s --json)
 exit_code=$?
-assert_exit "json_exit_0" "$exit_code" "0"
-assert_line_count "json_line_count" "$json_out" "3"  # 2 data + 1 metadata
+assert_exit       "--json: exit 0"                   0  "$exit_code"
+assert_line_count "--json: 2 data + 1 metadata"      3  "$json_out"
 
-last_line=$(printf '%s' "$json_out" | tail -1)
-assert_contains "json_vrk_field"   "$last_line" '"_vrk":"throttle"'
-assert_contains "json_rate_field"  "$last_line" '"rate":"100/s"'
-assert_contains "json_lines_field" "$last_line" '"lines":2'
-
-# --- --json with empty stdin emits only metadata ---
+last_line=$(printf '%s\n' "$json_out" | tail -1)
+assert_stdout_contains "--json: _vrk field"    '"_vrk":"throttle"'  "$last_line"
+assert_stdout_contains "--json: rate field"    '"rate":"100/s"'      "$last_line"
+assert_stdout_contains "--json: lines field"   '"lines":2'           "$last_line"
+assert_stdout_contains "--json: elapsed_ms"    '"elapsed_ms"'        "$last_line"
 
 json_out=$(printf '' | "$VRK" throttle --rate 10/s --json)
 exit_code=$?
-assert_exit "json_empty_stdin_exit" "$exit_code" "0"
-assert_contains "json_empty_lines_0" "$json_out" '"lines":0'
+assert_exit       "--json empty stdin: exit 0"  0  "$exit_code"
+assert_stdout_contains "--json empty stdin: lines=0"  '"lines":0'  "$json_out"
 
-# --- --tokens-field happy path ---
+# ------------------------------------------------------------
+# 6. --tokens-field
+# ------------------------------------------------------------
+echo ""
+echo "--- 6. --tokens-field ---"
 
 tf_input='{"prompt":"hi"}
 {"prompt":"hello world"}'
 got=$(printf '%s\n' "$tf_input" | "$VRK" throttle --rate 100/s --tokens-field prompt)
 exit_code=$?
-assert_exit "tokens_field_exit_0" "$exit_code" "0"
-assert_line_count "tokens_field_2_lines" "$got" "2"
-assert_contains "tokens_field_line1" "$got" '"prompt":"hi"'
-
-# --- --tokens-field invalid JSON exits 1 ---
+assert_exit       "--tokens-field: exit 0"          0  "$exit_code"
+assert_line_count "--tokens-field: 2 lines emitted"  2  "$got"
+assert_stdout_contains "--tokens-field: line 1 verbatim"  '"prompt":"hi"'  "$got"
 
 set +e
 echo 'not json' | "$VRK" throttle --rate 10/s --tokens-field prompt > /dev/null 2>&1
 exit_code=$?
 set -e
-assert_exit "tokens_field_bad_json_exit_1" "$exit_code" "1"
+assert_exit "--tokens-field invalid JSON: exit 1" 1 "$exit_code"
 
-# --- Pipeline composition ---
+# ------------------------------------------------------------
+# 7. Pipeline composition
+# ------------------------------------------------------------
+echo ""
+echo "--- 7. pipeline ---"
 
 count=$(seq 10 | "$VRK" throttle --rate 100/s | wc -l | tr -d ' ')
-assert_eq "pipeline_line_count" "$count" "10"
+assert_stdout_equals "seq 10 | throttle: 10 lines out" "10" "$count"
 
-# --- Timing: seq 3 at 2/s takes >= 1s ---
-# Allow up to 5s to avoid flakiness on slow CI.
+# ------------------------------------------------------------
+# 8. Timing: seq 3 at 2/s takes >= 1s
+# ------------------------------------------------------------
+echo ""
+echo "--- 8. timing ---"
+
+# TTY guard is covered by TestInteractiveTTY / TestInteractiveTTYWithJSON in
+# throttle_test.go — a real TTY cannot be simulated in automated smoke tests.
 
 start_ts=$(date +%s)
 seq 3 | "$VRK" throttle --rate 2/s > /dev/null
 end_ts=$(date +%s)
 elapsed=$((end_ts - start_ts))
 
-if [[ "$elapsed" -ge 1 && "$elapsed" -le 5 ]]; then
-    printf 'PASS: timing_2s_rate (elapsed=%ds)\n' "$elapsed"
-    PASS=$((PASS + 1))
+if [ "$elapsed" -ge 1 ] && [ "$elapsed" -le 5 ]; then
+  ok "timing: seq 3 at 2/s took ${elapsed}s (want 1-5s)"
 else
-    printf 'FAIL: timing_2s_rate (elapsed=%ds, want 1-5s)\n' "$elapsed"
-    FAIL=$((FAIL + 1))
+  fail "timing: seq 3 at 2/s" "elapsed ${elapsed}s, want 1-5s"
 fi
 
-# --- TTY guard note ---
-# Running vrk throttle with no stdin in an interactive TTY exits 2. Automated
-# smoke testing cannot simulate a real TTY; that path is verified by
-# TestInteractiveTTY and TestInteractiveTTYWithJSON in throttle_test.go.
+# ------------------------------------------------------------
+# Summary
+# ------------------------------------------------------------
+echo ""
+echo "---"
+echo "Results: $PASS passed, $FAIL failed"
+echo ""
 
-# --- summary ---
-
-printf '\nResults: %d passed, %d failed\n' "$PASS" "$FAIL"
-[[ $FAIL -eq 0 ]]
+if [ "$FAIL" -gt 0 ]; then
+  exit 1
+fi
+exit 0

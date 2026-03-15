@@ -1,146 +1,215 @@
 #!/usr/bin/env bash
-# Smoke tests for vrk links — run against the built binary.
+# testdata/links/smoke.sh
+#
+# End-to-end smoke tests for vrk links.
 # Run after make build to verify real process behaviour: exit codes, stdout/stderr
 # separation, and pipeline composition that unit tests cannot exercise.
 #
 # Usage:
 #   ./testdata/links/smoke.sh              # run against ./vrk in repo root
 #   VRK=./vrk ./testdata/links/smoke.sh   # explicit binary path
+
 set -euo pipefail
 
 VRK="${VRK:-./vrk}"
 PASS=0
 FAIL=0
 
-assert_eq() {
-    local label="$1" got="$2" want="$3"
-    if [[ "$got" == "$want" ]]; then
-        printf 'PASS: %s\n' "$label"
-        PASS=$((PASS + 1))
-    else
-        printf 'FAIL: %s\n  got:  %s\n  want: %s\n' "$label" "$(printf '%q' "$got")" "$(printf '%q' "$want")"
-        FAIL=$((FAIL + 1))
-    fi
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+
+ok() {
+  echo "  PASS  $1"
+  PASS=$((PASS + 1))
+}
+
+fail() {
+  echo "  FAIL  $1"
+  echo "        $2"
+  FAIL=$((FAIL + 1))
 }
 
 assert_exit() {
-    local label="$1" got="$2" want="$3"
-    if [[ "$got" == "$want" ]]; then
-        printf 'PASS: %s (exit %s)\n' "$label" "$got"
-        PASS=$((PASS + 1))
-    else
-        printf 'FAIL: %s (exit %s, want %s)\n' "$label" "$got" "$want"
-        FAIL=$((FAIL + 1))
-    fi
+  local desc=$1 expected=$2 actual=$3
+  if [ "$actual" -eq "$expected" ]; then
+    ok "$desc (exit $expected)"
+  else
+    fail "$desc" "expected exit $expected, got exit $actual"
+  fi
 }
 
-assert_contains() {
-    local label="$1" haystack="$2" needle="$3"
-    if [[ "$haystack" == *"$needle"* ]]; then
-        printf 'PASS: %s\n' "$label"
-        PASS=$((PASS + 1))
-    else
-        printf 'FAIL: %s\n  output does not contain: %s\n  got: %s\n' "$label" "$(printf '%q' "$needle")" "$(printf '%q' "$haystack")"
-        FAIL=$((FAIL + 1))
-    fi
+assert_stdout_equals() {
+  local desc=$1 expected=$2 actual=$3
+  if [ "$actual" = "$expected" ]; then
+    ok "$desc"
+  else
+    fail "$desc" "expected '$expected', got '$actual'"
+  fi
 }
 
-# --- Markdown inline link ---
+assert_stdout_contains() {
+  local desc=$1 pattern=$2 actual=$3
+  if echo "$actual" | grep -q "$pattern"; then
+    ok "$desc (contains '$pattern')"
+  else
+    fail "$desc" "stdout did not contain '$pattern'. got: $actual"
+  fi
+}
+
+assert_stdout_empty() {
+  local desc=$1 actual=$2
+  if [ -z "$actual" ]; then
+    ok "$desc (stdout empty)"
+  else
+    fail "$desc" "expected empty stdout, got: $actual"
+  fi
+}
+
+echo "vrk links — smoke tests"
+echo "binary: $VRK"
+echo ""
+
+# ------------------------------------------------------------
+# 1. Markdown inline link
+# ------------------------------------------------------------
+echo "--- 1. markdown inline link ---"
 
 got=$(echo 'See [Homebrew](https://brew.sh) for install.' | "$VRK" links)
-assert_contains "markdown_inline_text"   "$got" '"text":"Homebrew"'
-assert_contains "markdown_inline_url"    "$got" '"url":"https://brew.sh"'
-assert_contains "markdown_inline_line"   "$got" '"line":1'
+assert_stdout_contains "markdown inline: text field"  '"text":"Homebrew"'        "$got"
+assert_stdout_contains "markdown inline: url field"   '"url":"https://brew.sh"'  "$got"
+assert_stdout_contains "markdown inline: line field"  '"line":1'                 "$got"
 
-# --- HTML anchor ---
+# ------------------------------------------------------------
+# 2. HTML anchor
+# ------------------------------------------------------------
+echo ""
+echo "--- 2. HTML anchor ---"
 
 got=$(echo '<a href="https://example.com">Example</a>' | "$VRK" links)
-assert_contains "html_anchor_url"  "$got" '"url":"https://example.com"'
-assert_contains "html_anchor_text" "$got" '"text":"Example"'
+assert_stdout_contains "html anchor: url"   '"url":"https://example.com"'  "$got"
+assert_stdout_contains "html anchor: text"  '"text":"Example"'             "$got"
 
-# --- Bare URL ---
+# ------------------------------------------------------------
+# 3. Bare URL
+# ------------------------------------------------------------
+echo ""
+echo "--- 3. bare URL ---"
 
 got=$(echo 'Visit https://example.com for more.' | "$VRK" links)
-assert_contains "bare_url_url"  "$got" '"url":"https://example.com"'
-assert_contains "bare_url_text" "$got" '"text":"https://example.com"'
+assert_stdout_contains "bare URL: url"   '"url":"https://example.com"'   "$got"
+assert_stdout_contains "bare URL: text"  '"text":"https://example.com"'  "$got"
 
-# --- Markdown reference-style link ---
+# ------------------------------------------------------------
+# 4. Markdown reference-style link
+# ------------------------------------------------------------
+echo ""
+echo "--- 4. markdown reference-style link ---"
 
 ref_input=$(printf '[Homebrew][brew]\n\n[brew]: https://brew.sh\n')
 got=$(printf '%s' "$ref_input" | "$VRK" links)
-assert_contains "ref_link_url"  "$got" '"url":"https://brew.sh"'
-assert_contains "ref_link_text" "$got" '"text":"Homebrew"'
-assert_contains "ref_link_line" "$got" '"line":1'
+assert_stdout_contains "ref link: url"   '"url":"https://brew.sh"'  "$got"
+assert_stdout_contains "ref link: text"  '"text":"Homebrew"'        "$got"
+assert_stdout_contains "ref link: line"  '"line":1'                 "$got"
 
-# --- --bare flag ---
+# ------------------------------------------------------------
+# 5. --bare flag
+# ------------------------------------------------------------
+echo ""
+echo "--- 5. --bare flag ---"
 
 got=$(echo 'See [Homebrew](https://brew.sh) for install.' | "$VRK" links --bare)
-assert_eq "bare_flag_output" "$got" "https://brew.sh"
+assert_stdout_equals "bare: URL only" "https://brew.sh" "$got"
 
-# --- --json trailing metadata record ---
+# ------------------------------------------------------------
+# 6. --json trailing metadata record
+# ------------------------------------------------------------
+echo ""
+echo "--- 6. --json trailing metadata ---"
 
 json_out=$(echo '[link](https://example.com)' | "$VRK" links --json)
 last_line=$(printf '%s' "$json_out" | tail -1)
-assert_contains "json_trailing_vrk"   "$last_line" '"_vrk":"links"'
-assert_contains "json_trailing_count" "$last_line" '"count":1'
+assert_stdout_contains "json trailing: _vrk field"  '"_vrk":"links"'  "$last_line"
+assert_stdout_contains "json trailing: count field"  '"count":1'       "$last_line"
 
-# --- --json with no links emits count:0 ---
+# ------------------------------------------------------------
+# 7. --json with no links emits count:0
+# ------------------------------------------------------------
+echo ""
+echo "--- 7. --json no links ---"
 
 json_out=$(echo 'no links here' | "$VRK" links --json)
-assert_contains "json_no_links_vrk"   "$json_out" '"_vrk":"links"'
-assert_contains "json_no_links_count" "$json_out" '"count":0'
+assert_stdout_contains "json no links: _vrk"    '"_vrk":"links"'  "$json_out"
+assert_stdout_contains "json no links: count=0"  '"count":0'       "$json_out"
 
-# --- mixed-format input (all three formats on same stream) ---
+# ------------------------------------------------------------
+# 8. Mixed-format input (markdown, HTML, bare URL)
+# ------------------------------------------------------------
+echo ""
+echo "--- 8. mixed-format input ---"
 
 mixed_input=$(printf '[MD](https://md.example.com)\n<a href="https://html.example.com">HTML</a>\nhttps://bare.example.com\n')
 got=$(printf '%s' "$mixed_input" | "$VRK" links --bare)
-assert_contains "mixed_markdown" "$got" "https://md.example.com"
-assert_contains "mixed_html"     "$got" "https://html.example.com"
-assert_contains "mixed_bare"     "$got" "https://bare.example.com"
+assert_stdout_contains "mixed: markdown URL"  "https://md.example.com"    "$got"
+assert_stdout_contains "mixed: HTML URL"      "https://html.example.com"  "$got"
+assert_stdout_contains "mixed: bare URL"      "https://bare.example.com"  "$got"
 
-# --- empty stdin exits 0 with no output ---
+# ------------------------------------------------------------
+# 9. Empty stdin
+# ------------------------------------------------------------
+echo ""
+echo "--- 9. empty stdin ---"
 
 got=$(printf '' | "$VRK" links)
 exit_code=$?
-assert_exit "empty_stdin_exit"   "$exit_code" "0"
-assert_eq   "empty_stdin_output" "$got" ""
-
-# --- --bare with empty stdin exits 0 with no output ---
+assert_exit        "empty stdin: exit 0"    0  "$exit_code"
+assert_stdout_empty "empty stdin: no output"   "$got"
 
 got=$(printf '' | "$VRK" links --bare)
 exit_code=$?
-assert_exit "bare_empty_stdin_exit"   "$exit_code" "0"
-assert_eq   "bare_empty_stdin_output" "$got" ""
-
-# --- --bare --json with empty stdin exits 0, emits only metadata count:0 ---
+assert_exit        "bare empty stdin: exit 0"    0  "$exit_code"
+assert_stdout_empty "bare empty stdin: no output"   "$got"
 
 got=$(printf '' | "$VRK" links --bare --json)
 exit_code=$?
-assert_exit "bare_json_empty_stdin_exit" "$exit_code" "0"
-assert_contains "bare_json_empty_stdin_vrk"   "$got" '"_vrk":"links"'
-assert_contains "bare_json_empty_stdin_count" "$got" '"count":0'
+assert_exit        "bare+json empty stdin: exit 0"  0  "$exit_code"
+assert_stdout_contains "bare+json empty stdin: _vrk"    '"_vrk":"links"'  "$got"
+assert_stdout_contains "bare+json empty stdin: count=0"  '"count":0'       "$got"
 
-# --- no-stdin interactive guard (covered by unit tests) ---
-# Running vrk links with no stdin in an interactive TTY exits 2, and when
-# --json is also active the error record goes to stdout (not stderr).
-# Automated smoke testing cannot simulate a real TTY; both paths are verified
-# by TestInteractiveTTYNoArg and TestInteractiveTTYWithJSONFlag in links_test.go.
-
-# --- --help exits 0 ---
+# ------------------------------------------------------------
+# 10. --help exits 0
+# ------------------------------------------------------------
+echo ""
+echo "--- 10. --help ---"
 
 "$VRK" links --help > /dev/null
 exit_code=$?
-assert_exit "help_exit_0" "$exit_code" "0"
+assert_exit "--help: exit 0" 0 "$exit_code"
 
-# --- unknown flag exits 2 ---
+# ------------------------------------------------------------
+# 11. Usage errors
+# ------------------------------------------------------------
+echo ""
+echo "--- 11. usage errors ---"
+
+# TTY guard is covered by TestInteractiveTTYNoArg / TestInteractiveTTYWithJSONFlag
+# in links_test.go — a real TTY cannot be simulated in automated smoke tests.
 
 set +e
 "$VRK" links --bogus < /dev/null > /dev/null 2>&1
 exit_code=$?
 set -e
-assert_exit "unknown_flag_exit_2" "$exit_code" "2"
+assert_exit "unknown flag: exit 2" 2 "$exit_code"
 
-# --- summary ---
+# ------------------------------------------------------------
+# Summary
+# ------------------------------------------------------------
+echo ""
+echo "---"
+echo "Results: $PASS passed, $FAIL failed"
+echo ""
 
-printf '\nResults: %d passed, %d failed\n' "$PASS" "$FAIL"
-[[ $FAIL -eq 0 ]]
+if [ "$FAIL" -gt 0 ]; then
+  exit 1
+fi
+exit 0
