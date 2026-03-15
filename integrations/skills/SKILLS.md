@@ -1801,6 +1801,68 @@ echo "$ENCODED" | vrk base decode --from base64url
 
 ---
 
+## recase — Naming Convention Converter
+
+Converts text between naming conventions. Auto-detects the input convention from
+separators and casing. Reads stdin line by line — one line in, one line out.
+Input: stdin (streaming, line by line).
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--to <convention>` | — | Target naming convention (required): `camel`, `pascal`, `snake`, `kebab`, `screaming`, `title`, `lower`, `upper` |
+| `--json` | `-j` | Emit a JSON object per line: `{"input":"…","output":"…","from":"…","to":"…"}` |
+| `--quiet` | `-q` | Suppress stderr; exit codes unchanged |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (including empty stdin) |
+| 1 | I/O error reading stdin |
+| 2 | Usage error — `--to` missing or unknown, unknown flag, interactive TTY with no input |
+
+### Examples
+
+```bash
+# Basic conversions
+echo 'hello_world'  | vrk recase --to camel      # helloWorld
+echo 'hello_world'  | vrk recase --to pascal     # HelloWorld
+echo 'hello_world'  | vrk recase --to kebab      # hello-world
+echo 'hello_world'  | vrk recase --to screaming  # HELLO_WORLD
+echo 'hello_world'  | vrk recase --to title      # Hello World
+echo 'helloWorld'   | vrk recase --to snake      # hello_world
+echo 'HELLO_WORLD'  | vrk recase --to camel      # helloWorld
+
+# Acronyms
+echo 'userID'    | vrk recase --to snake   # user_id
+echo 'parseHTML' | vrk recase --to snake   # parse_html
+
+# Multiline batch — one conversion per line, preserves line count
+printf 'hello_world\nfoo_bar\n' | vrk recase --to camel
+# helloWorld
+# fooBar
+
+# JSON output for pipeline inspection
+echo 'hello_world' | vrk recase --to camel --json
+# {"input":"hello_world","output":"helloWorld","from":"snake","to":"camel"}
+
+# Rename variable names in a list
+cat vars.txt | vrk recase --to camelCase
+```
+
+### Gotchas
+
+- **`lower` and `upper` are prose-level transforms, not identifier formats.** Output is space-separated: `hello_world → lower` produces `"hello world"`, not `"hello_world"`. Use `snake` or `kebab` for identifier output.
+- **Single words with no separators and no case changes are treated as one word.** `helloworld → camel` stays `helloworld` — there are no word boundaries to detect. Use a separator (`hello_world`) to get `helloWorld`.
+- **Digits are not word boundaries.** `oauth2` is one token; `base64url` is one token. `oauth2 → pascal` = `Oauth2`.
+- **Two consecutive acronyms with no separator cannot be split.** `getHTTPSURL → snake` produces `get_httpsurl`, not `get_https_url`. The algorithm needs a lowercase letter to know where one acronym ends and the next begins. Workaround: use an explicit separator in the input: `getHTTPS_URL` or `get-https-url`.
+- **Empty lines are preserved.** A blank line in produces a blank line out. This maintains line counts in batch pipelines.
+- **Auto-detection priority:** separators (`_`, `-`, ` `) take precedence over case. `hello_world` is always detected as `snake`, even if it could theoretically be read another way.
+
+---
+
 ## Breaking changes
 
 ### digest — stdin no longer strips trailing newline (streaming fix)

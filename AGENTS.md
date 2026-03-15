@@ -28,6 +28,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `throttle` | Rate-limit lines from stdin | `--rate <N/s\|N/m>`, `--burst N`, `--tokens-field <f>`, `--json` |
 | `digest` | Hash stdin or files; HMAC with --hmac --key; file comparison with --compare | `--algo <sha256\|md5\|sha512>`, `--bare`, `--file`, `--hmac`, `--key`, `--verify`, `--json` |
 | `base` | Encode and decode between base64, base64url, hex, base32 | subcommands: `encode --to`, `decode --from`; `--quiet` |
+| `recase` | Convert naming conventions — auto-detects input, converts to target | `--to <convention>`, `--json`, `--quiet` |
 
 ---
 
