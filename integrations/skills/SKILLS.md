@@ -1943,3 +1943,97 @@ fixes an OOM crash on binary pipes. `printf 'foo' | vrk digest` and
 
 Migration: replace `echo 'value' |` with `printf 'value' |` anywhere the old
 hash is expected.
+
+---
+
+## moniker — Memorable Name Generator
+
+Generates human-readable adjective-noun names for run IDs, job labels, and temporary
+directory names. Like Docker container names and Heroku dyno names.
+Input: none (generates names from embedded wordlists; stdin is ignored).
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--count` | `-n` | Number of names to generate (default: 1) |
+| `--separator` | — | Word separator (default: `-`) |
+| `--words` | — | Number of words per name, minimum 2 (default: 2) |
+| `--seed` | — | Fix random seed for deterministic output |
+| `--json` | `-j` | Emit one JSON record per name |
+| `--quiet` | `-q` | Suppress stderr error messages; exit codes unchanged |
+
+### --json record shape
+
+The shape is identical regardless of `--words`:
+
+```json
+{"name":"misty-mountain","words":["misty","mountain"]}
+```
+
+`words` always has exactly `--words` elements. `name` is always `words` joined by `--separator`.
+
+| Flags | Shape |
+|-------|-------|
+| `--json` (any `--words`) | `{"name":"...","words":["w1","w2",...]}` |
+| Any error + `--json` | `{"error":"msg","code":N}` on stdout; stderr empty |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Requested count exceeds available unique combinations |
+| 2 | Usage error — `--count 0`, `--words < 2`, unknown flag |
+
+### Examples
+
+```bash
+# Generate one name (default)
+vrk moniker
+
+# Generate 5 names
+vrk moniker --count 5
+
+# Use underscore separator
+vrk moniker --separator _
+
+# Three-word name
+vrk moniker --words 3
+
+# Deterministic output (same name every run)
+vrk moniker --seed 42
+
+# JSON output for pipeline consumption
+vrk moniker --json
+
+# 1000 unique names — guaranteed no duplicates within the batch
+vrk moniker --count 1000
+```
+
+### Compose patterns
+
+```bash
+# Use a generated name as a run ID stored in kv
+RUN_ID=$(vrk moniker --seed "$EPOCH")
+vrk kv set "run:$RUN_ID" "active"
+
+# Generate a batch of names and store each one
+vrk moniker --count 5 | while read name; do
+  vrk kv set "job:$name" "pending"
+done
+
+# Extract name field from JSON output
+vrk moniker --json | python3 -c 'import sys,json; print(json.load(sys.stdin)["name"])'
+
+# Create a temp directory with a memorable name
+tmpdir=$(mktemp -d "/tmp/$(vrk moniker).XXXXXX")
+```
+
+### Gotchas
+
+- **stdin is always ignored.** Moniker generates names from embedded wordlists. Piping input to it has no effect. It is safe to use in any pipeline position.
+- **`--seed 0` is a valid seed.** Seed zero is distinct from "no seed". Without `--seed`, each run uses a random seed. With `--seed 0`, the output is deterministic.
+- **`--count 1000` guarantees 1000 unique names.** The 2-word combination pool has 87,000+ entries. Requesting more than the pool size exits 1 with a clear message.
+- **`--json` always emits a `words` array.** The shape `{"name":"...","words":[...]}` is identical for all `--words` values. Agent code can always access `words[0]`, `words[1]`, etc. without branching on word count.
+- **Separator does not affect uniqueness.** Uniqueness is guaranteed at the word-index level. Changing `--separator` produces different strings but the same underlying combinations.

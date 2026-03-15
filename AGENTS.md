@@ -30,6 +30,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `base` | Encode and decode between base64, base64url, hex, base32 | subcommands: `encode --to`, `decode --from`; `--quiet` |
 | `recase` | Convert naming conventions — auto-detects input, converts to target | `--to <convention>`, `--json`, `--quiet` |
 | `slug` | Convert text to URL/filename-safe slugs, unicode normalised to ASCII | `--separator <s>`, `--max <n>`, `--json` |
+| `moniker` | Generate memorable adjective-noun names for run IDs and job labels | `--count`, `--seed`, `--separator`, `--json` |
 
 ---
 

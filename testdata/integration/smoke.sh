@@ -537,9 +537,9 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 21 ] \
-  && { echo "PASS: --manifest lists 21 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 21)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 22 ] \
+  && { echo "PASS: --manifest lists 22 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 22)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
 for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
@@ -1272,6 +1272,34 @@ fi
 # slug output feeds into vrk kv as a valid key (no spaces or special chars).
 slug_key=$(echo 'My Pipeline Run (2026)' | $VRK slug)
 assert_stdout "slug output is a valid kv key" "my-pipeline-run-2026" "$slug_key"
+
+# ---------------------------------------------------------------------------
+# moniker integration
+# ---------------------------------------------------------------------------
+
+# moniker output is already a valid slug — passing through vrk slug is a no-op.
+moniker_name=$($VRK moniker --seed 42)
+slug_of_name=$(echo "$moniker_name" | $VRK slug)
+assert_stdout "moniker output is slug-passthrough" "$moniker_name" "$slug_of_name"
+
+# moniker --count 3 produces 3 lines usable as kv keys (no spaces, no special chars).
+while IFS= read -r name; do
+  $VRK kv set "smoke:$name" "ok" 2>/dev/null
+  got=$($VRK kv get "smoke:$name" 2>/dev/null)
+  $VRK kv del "smoke:$name" 2>/dev/null || true
+  if [ "$got" = "ok" ]; then
+    echo "PASS: moniker name '$name' is a valid kv key"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL: moniker name '$name' round-trip via kv (got '$got')"
+    FAIL=$((FAIL + 1))
+  fi
+done < <($VRK moniker --count 3 --seed 7)
+
+# moniker --json emits a JSON record whose name field matches the plain output.
+plain_name=$($VRK moniker --seed 100)
+json_name=$($VRK moniker --seed 100 --json | python3 -c 'import sys,json; print(json.load(sys.stdin)["name"])')
+assert_stdout "moniker --json name matches plain output" "$plain_name" "$json_name"
 
 # ---------------------------------------------------------------------------
 # Results
