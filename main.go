@@ -20,6 +20,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/links"
 	"github.com/vrksh/vrksh/cmd/mask"
 	"github.com/vrksh/vrksh/cmd/moniker"
+	"github.com/vrksh/vrksh/cmd/pct"
 	"github.com/vrksh/vrksh/cmd/plain"
 	"github.com/vrksh/vrksh/cmd/prompt"
 	"github.com/vrksh/vrksh/cmd/recase"
@@ -55,6 +56,7 @@ var tools = map[string]func() int{
 	"links":    links.Run,
 	"mask":     mask.Run,
 	"moniker":  moniker.Run,
+	"pct":      pct.Run,
 	"recase":   recase.Run,
 	"slug":     slug.Run,
 	"plain":    plain.Run,

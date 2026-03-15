@@ -537,11 +537,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 22 ] \
-  && { echo "PASS: --manifest lists 22 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 22)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 23 ] \
+  && { echo "PASS: --manifest lists 23 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 23)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base recase slug moniker pct; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
@@ -1300,6 +1300,34 @@ done < <($VRK moniker --count 3 --seed 7)
 plain_name=$($VRK moniker --seed 100)
 json_name=$($VRK moniker --seed 100 --json | python3 -c 'import sys,json; print(json.load(sys.stdin)["name"])')
 assert_stdout "moniker --json name matches plain output" "$plain_name" "$json_name"
+
+# ---------------------------------------------------------------------------
+# pct — round-trip and pipeline composition
+# ---------------------------------------------------------------------------
+
+# encode | decode restores the original string (canonical round-trip).
+pct_input="hello world & more = ? # / + %"
+pct_round=$(printf '%s\n' "$pct_input" | $VRK pct --encode | $VRK pct --decode)
+assert_stdout "pct round-trip encode|decode" "$pct_input" "$pct_round"
+
+# form encode | form decode restores the original string.
+pct_form_input="hello world foo bar"
+pct_form_round=$(printf '%s\n' "$pct_form_input" | $VRK pct --encode --form | $VRK pct --decode --form)
+assert_stdout "pct form round-trip encode|decode" "$pct_form_input" "$pct_form_round"
+
+# pct --encode | pct --decode is identity on multiline input.
+pct_multi=$(printf 'a b\nc d\ne f\n' | $VRK pct --encode | $VRK pct --decode)
+assert_stdout "pct multiline round-trip line 1" "a b" "$pct_multi"
+assert_stdout "pct multiline round-trip line 3" "e f" "$pct_multi"
+
+# pct --encode | emit --level info produces valid JSONL (cross-tool pipeline).
+pct_jsonl=$(echo 'hello world' | $VRK pct --encode | $VRK emit --level info)
+assert_valid_jsonl "pct --encode | emit produces valid JSONL" "$pct_jsonl"
+
+# pct --encode --json emits a JSONL record whose output field encodes correctly.
+pct_json_out=$(echo 'hello world' | $VRK pct --encode --json)
+assert_stdout "pct --json output field has %20" '"output":"hello%20world"' "$pct_json_out"
+assert_valid_jsonl "pct --encode --json is valid JSONL" "$pct_json_out"
 
 # ---------------------------------------------------------------------------
 # Results

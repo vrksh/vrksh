@@ -31,6 +31,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `recase` | Convert naming conventions — auto-detects input, converts to target | `--to <convention>`, `--json`, `--quiet` |
 | `slug` | Convert text to URL/filename-safe slugs, unicode normalised to ASCII | `--separator <s>`, `--max <n>`, `--json` |
 | `moniker` | Generate memorable adjective-noun names for run IDs and job labels | `--count`, `--seed`, `--separator`, `--json` |
+| `pct` | Percent-encode and decode per RFC 3986, line by line | `--encode`, `--decode`, `--form`, `--json` |
 
 ---
 

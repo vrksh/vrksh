@@ -22,6 +22,7 @@
     {"name": "base",     "description": "Encoding converter — base64, base64url, hex, base32"},
     {"name": "recase",   "description": "Naming convention converter — snake, camel, kebab, pascal, title"},
     {"name": "slug",     "description": "URL/filename slug generator — --separator, --max, --json"},
-    {"name": "moniker",  "description": "Memorable name generator — run IDs, job labels, temp dirs"}
+    {"name": "moniker",  "description": "Memorable name generator — run IDs, job labels, temp dirs"},
+    {"name": "pct",      "description": "Percent encoder/decoder — RFC 3986, --encode, --decode, --form"}
   ]
 }

@@ -2037,3 +2037,99 @@ tmpdir=$(mktemp -d "/tmp/$(vrk moniker).XXXXXX")
 - **`--count 1000` guarantees 1000 unique names.** The 2-word combination pool has 87,000+ entries. Requesting more than the pool size exits 1 with a clear message.
 - **`--json` always emits a `words` array.** The shape `{"name":"...","words":[...]}` is identical for all `--words` values. Agent code can always access `words[0]`, `words[1]`, etc. without branching on word count.
 - **Separator does not affect uniqueness.** Uniqueness is guaranteed at the word-index level. Changing `--separator` produces different strings but the same underlying combinations.
+
+---
+
+## pct — Percent Encoder/Decoder
+
+Encodes and decodes per RFC 3986. Processes input line by line — each input line produces one output line.
+Input: positional argument or stdin.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--encode` | — | Percent-encode input (RFC 3986 strict) |
+| `--decode` | — | Percent-decode input |
+| `--form` | — | Form encoding mode: spaces↔`+` instead of `%20` |
+| `--json` | `-j` | Emit one JSON object per line: `{"input":…,"output":…,"op":…,"mode":…}` |
+| `--quiet` | `-q` | Suppress stderr; exit codes unchanged |
+
+### --json record shape
+
+```json
+{"input":"hello world","output":"hello%20world","op":"encode","mode":"percent"}
+```
+
+Fields: `input` (original line), `output` (encoded/decoded result), `op` (`"encode"` or `"decode"`), `mode` (`"percent"` or `"form"`).
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success, including empty input |
+| 1 | Invalid percent-encoded sequence during decode |
+| 2 | Usage error — neither or both mode flags set, unknown flag, interactive terminal |
+
+### Examples
+
+```bash
+# Encode a string
+echo 'hello world & more' | vrk pct --encode
+# → hello%20world%20%26%20more
+
+# Decode
+echo 'hello%20world%20%26%20more' | vrk pct --decode
+# → hello world & more
+
+# Form encoding (spaces as +)
+echo 'hello world' | vrk pct --encode --form
+# → hello+world
+
+# Form decoding (+ as space)
+echo 'hello+world' | vrk pct --decode --form
+# → hello world
+
+# Positional arg
+vrk pct --encode 'hello world'
+# → hello%20world
+
+# JSON output
+echo 'hello world' | vrk pct --encode --json
+# → {"input":"hello world","output":"hello%20world","op":"encode","mode":"percent"}
+
+# Multiline batch
+printf 'a b\nc d\n' | vrk pct --encode
+# → a%20b
+# → c%20d
+
+# Round-trip pipeline
+echo 'hello world & more' | vrk pct --encode | vrk pct --decode
+# → hello world & more
+```
+
+### Compose patterns
+
+```bash
+# URL-encode a query parameter before passing to curl
+Q=$(echo "$USER_QUERY" | vrk pct --encode)
+curl "https://api.example.com/search?q=$Q"
+
+# Decode a percent-encoded value from a JWT claim
+vrk jwt --claim redirect_uri "$TOKEN" | vrk pct --decode
+
+# Encode each line of a file independently
+cat urls.txt | vrk pct --encode > encoded.txt
+
+# Guard: fail if decoding produces invalid output (non-zero exit propagates)
+echo "$ENCODED_VALUE" | vrk pct --decode | vrk validate --schema '{"type":"string"}'
+```
+
+### Gotchas
+
+- **Double-encode is correct behaviour.** `echo 'hello%20world' | vrk pct --encode` produces `hello%2520world` — the `%` is encoded as `%25`. This is RFC 3986 conformant. If you want to avoid double-encoding, decode first.
+- **`+` is a literal character in non-form decode.** `echo 'hello+world' | vrk pct --decode` produces `hello+world` unchanged. To treat `+` as a space, use `--form`.
+- **`%2B` decodes to `+` in both modes.** `echo 'hello%2Bworld' | vrk pct --decode` → `hello+world`. The percent-encoded form is always authoritative.
+- **In `--form` mode, `~` is encoded as `%7E`.** This is browser-compatible behaviour (`url.QueryEscape`). Strictly, `~` is an RFC 3986 unreserved character and does not need encoding, but browsers encode it in form submissions. Fighting this creates more confusion than it solves.
+- **`--encode` and `--decode` are mutually exclusive.** Passing both exits 2.
+- **Empty input exits 0 with no output.** `printf '' | vrk pct --encode` is valid; it produces nothing and exits 0.
