@@ -142,6 +142,30 @@ set -e
 assert_exit "unknown flag: exit 2" 2 "$exit_code"
 
 # ------------------------------------------------------------
+# 5. Positional argument
+# ------------------------------------------------------------
+echo ""
+echo "--- 5. positional argument ---"
+
+# Basic: positional arg exits 0 and output equals stripped text.
+got=$("$VRK" plain '**hello** world')
+exit_code=$?
+assert_exit        "positional: exit 0"    0             "$exit_code"
+assert_stdout_equals "positional: stripped" "hello world" "$got"
+
+# Positional output == stdin output.
+# echo appends a newline; the tool strips exactly one trailing newline from stdin.
+# The positional path receives no trailing newline from the shell, so outputs match.
+got_stdin=$(echo '**hello** world' | "$VRK" plain)
+assert_stdout_equals "positional == stdin" "$got_stdin" "$got"
+
+# --json combined with positional arg.
+got=$("$VRK" plain '**hello**' --json)
+exit_code=$?
+assert_exit            "positional --json: exit 0"     0        "$exit_code"
+assert_stdout_contains "positional --json: text field" '"text":"hello"' "$got"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

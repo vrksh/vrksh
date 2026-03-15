@@ -502,6 +502,32 @@ assert_stdout "epoch→kv→epoch positional chain" "$ts" "$retrieved"
 
 unset VRK_KV_PATH
 
+# links positional == stdin (byte-for-byte; no network)
+links_pos=$($VRK links '[Homebrew](https://brew.sh)')
+links_stdin=$(echo '[Homebrew](https://brew.sh)' | $VRK links)
+[ "$links_pos" = "$links_stdin" ] \
+  && { echo "PASS: links positional == stdin"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: links positional '$links_pos' != stdin '$links_stdin'"; FAIL=$((FAIL+1)); }
+
+# plain positional == stdin
+plain_pos=$($VRK plain '**bold** text')
+plain_stdin=$(echo '**bold** text' | $VRK plain)
+[ "$plain_pos" = "$plain_stdin" ] \
+  && { echo "PASS: plain positional == stdin"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: plain positional '$plain_pos' != stdin '$plain_stdin'"; FAIL=$((FAIL+1)); }
+[ "$plain_pos" = "bold text" ] \
+  && { echo "PASS: plain positional value correct"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: plain positional value wrong: '$plain_pos'"; FAIL=$((FAIL+1)); }
+
+# chunk positional == stdin (compare line count — both deterministic for fixed input)
+chunk_pos=$($VRK chunk --size 10 'the quick brown fox jumps over the lazy dog')
+chunk_stdin=$(echo 'the quick brown fox jumps over the lazy dog' | $VRK chunk --size 10)
+pos_lines=$(printf '%s\n' "$chunk_pos"   | wc -l | tr -d ' ')
+stdin_lines=$(printf '%s\n' "$chunk_stdin" | wc -l | tr -d ' ')
+[ "$pos_lines" -eq "$stdin_lines" ] && [ "$pos_lines" -gt 0 ] \
+  && { echo "PASS: chunk positional == stdin ($pos_lines chunks)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: chunk positional lines ($pos_lines) != stdin lines ($stdin_lines)"; FAIL=$((FAIL+1)); }
+
 # ---------------------------------------------------------------------------
 # Section 15 — meta-flags (agent discovery surface)
 # ---------------------------------------------------------------------------
@@ -868,6 +894,256 @@ meta_line=$(echo "$json_out" | tail -1)
 echo "$meta_line" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); sys.exit(0 if d.get('_vrk')=='validate' and isinstance(d.get('total'),int) else 1)" \
   && { echo "PASS: validate --json metadata record valid"; PASS=$((PASS+1)); } \
   || { echo "FAIL: validate --json metadata malformed: $meta_line"; FAIL=$((FAIL+1)); }
+
+# ---------------------------------------------------------------------------
+# Section 20 — plain pipelines
+# ---------------------------------------------------------------------------
+echo "--- Section 20: plain pipelines ---"
+
+VRK_KV_PATH="$TMPDIR/plain_kv.db"
+export VRK_KV_PATH
+
+# plain | tok: token count of stripped prose is a positive integer.
+plain_tok=$(printf '# Head\n**bold**\n' | $VRK plain | $VRK tok --quiet)
+[ -n "$plain_tok" ] && [ "$plain_tok" -gt 0 ] 2>/dev/null \
+  && { echo "PASS: plain | tok: count > 0 ($plain_tok)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: plain | tok: unexpected '$plain_tok'"; FAIL=$((FAIL+1)); }
+
+# plain | chunk: stripped text splits into at least 1 chunk.
+plain_chunks=$(printf '# Head\n**bold**\n' | $VRK plain | $VRK chunk --size 5 2>/dev/null)
+plain_chunk_count=$(echo "$plain_chunks" | grep -c '^{' 2>/dev/null || echo 0)
+[ "$plain_chunk_count" -ge 1 ] \
+  && { echo "PASS: plain | chunk: $plain_chunk_count chunk(s)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: plain | chunk: expected >= 1 chunk, got $plain_chunk_count"; FAIL=$((FAIL+1)); }
+
+# plain | kv: stripped text stored and retrieved correctly.
+echo '**value**' | $VRK plain | $VRK kv set plain_key
+plain_retrieved=$($VRK kv get plain_key)
+assert_stdout "plain | kv: retrieved value correct" "value" "$plain_retrieved"
+
+# grab | plain | tok: three-tool chain (network).
+grab_plain_tok=$($VRK grab https://example.com 2>/dev/null | $VRK plain | $VRK tok --quiet 2>/dev/null || echo 0)
+[ -n "$grab_plain_tok" ] && [ "$grab_plain_tok" -gt 0 ] 2>/dev/null \
+  && { echo "PASS: grab | plain | tok: count > 0 ($grab_plain_tok)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: grab | plain | tok: unexpected '$grab_plain_tok'"; FAIL=$((FAIL+1)); }
+
+unset VRK_KV_PATH
+
+# ---------------------------------------------------------------------------
+# Section 21 — emit pipelines
+# ---------------------------------------------------------------------------
+echo "--- Section 21: emit pipelines ---"
+
+VRK_KV_PATH="$TMPDIR/emit_kv.db"
+export VRK_KV_PATH
+
+EMIT_SCHEMA='{"ts":"string","level":"string","msg":"string"}'
+
+# emit basic: single JSONL line, valid JSON, contains expected fields.
+emit_out=$(echo 'hello' | $VRK emit)
+echo "$emit_out" | python3 -c 'import sys,json; r=json.loads(sys.stdin.read()); sys.exit(0 if "ts" in r and "level" in r and r.get("msg")=="hello" else 1)' \
+  && { echo "PASS: emit basic: valid JSONL with msg=hello"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit basic: unexpected output: $emit_out"; FAIL=$((FAIL+1)); }
+
+# emit | validate: every emitted record passes schema.
+val_out=$(echo 'hello' | $VRK emit | $VRK validate --schema "$EMIT_SCHEMA" 2>/dev/null)
+[ -n "$val_out" ] \
+  && { echo "PASS: emit | validate: output non-empty"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit | validate: output was empty"; FAIL=$((FAIL+1)); }
+ec=$(set +e; echo 'hello' | $VRK emit | $VRK validate --schema "$EMIT_SCHEMA" >/dev/null 2>&1; echo $?)
+assert_exit "emit | validate: exits 0" 0 "$ec"
+
+# emit | mask: secret in message is redacted; record structure passes through.
+mask_out=$(echo 'token=secret123abcXYZ' | $VRK emit | $VRK mask 2>/dev/null)
+echo "$mask_out" | grep -q '\[REDACTED\]' \
+  && { echo "PASS: emit | mask: [REDACTED] present"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit | mask: [REDACTED] not found in: $mask_out"; FAIL=$((FAIL+1)); }
+echo "$mask_out" | grep -q 'secret123abcXYZ' \
+  && { echo "FAIL: emit | mask: original secret still present"; FAIL=$((FAIL+1)); } \
+  || { echo "PASS: emit | mask: original secret absent"; PASS=$((PASS+1)); }
+
+# emit | kv: store structured log record, retrieve it.
+echo 'hello' | $VRK emit | $VRK kv set emit_test
+emit_retrieved=$($VRK kv get emit_test)
+assert_stdout "emit | kv: retrieved record contains msg" '"msg":"hello"' "$emit_retrieved"
+
+# emit --parse-level: mixed input → records with different level fields.
+parse_out=$(printf 'ERROR: bad\nINFO: ok\n' | $VRK emit --parse-level)
+levels=$(echo "$parse_out" | python3 -c 'import sys,json; lines=[json.loads(l) for l in sys.stdin if l.strip()]; print(" ".join(r["level"] for r in lines))')
+echo "$levels" | grep -q 'error' \
+  && { echo "PASS: emit --parse-level: error level detected"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit --parse-level: error level not found in: $levels"; FAIL=$((FAIL+1)); }
+echo "$levels" | grep -q 'info' \
+  && { echo "PASS: emit --parse-level: info level detected"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit --parse-level: info level not found in: $levels"; FAIL=$((FAIL+1)); }
+
+# emit positional arg: same level and msg as stdin form.
+emit_pos=$($VRK emit 'hello')
+emit_pos_level=$(echo "$emit_pos" | python3 -c 'import sys,json; print(json.loads(sys.stdin.read())["level"])')
+emit_pos_msg=$(echo "$emit_pos"   | python3 -c 'import sys,json; print(json.loads(sys.stdin.read())["msg"])')
+[ "$emit_pos_level" = "info" ] \
+  && { echo "PASS: emit positional: level=info"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit positional: level='$emit_pos_level', want info"; FAIL=$((FAIL+1)); }
+[ "$emit_pos_msg" = "hello" ] \
+  && { echo "PASS: emit positional: msg=hello"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit positional: msg='$emit_pos_msg', want hello"; FAIL=$((FAIL+1)); }
+
+unset VRK_KV_PATH
+
+# ---------------------------------------------------------------------------
+# Section 22 — throttle pipelines
+# ---------------------------------------------------------------------------
+echo "--- Section 22: throttle pipelines ---"
+
+VRK_KV_PATH="$TMPDIR/throttle_kv.db"
+export VRK_KV_PATH
+
+# throttle pass-through: line count in == line count out.
+throttle_count=$(seq 3 | $VRK throttle --rate 100/s | wc -l | tr -d ' ')
+[ "$throttle_count" -eq 3 ] \
+  && { echo "PASS: throttle: 3 in → 3 out"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: throttle: expected 3 lines out, got $throttle_count"; FAIL=$((FAIL+1)); }
+
+# throttle | tok: throttled lines feed tok cleanly.
+throttle_tok=$(seq 3 | $VRK throttle --rate 100/s | $VRK tok --quiet)
+[ -n "$throttle_tok" ] && [ "$throttle_tok" -gt 0 ] 2>/dev/null \
+  && { echo "PASS: throttle | tok: count > 0 ($throttle_tok)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: throttle | tok: unexpected '$throttle_tok'"; FAIL=$((FAIL+1)); }
+
+# throttle --tokens-field: JSONL records pass through correctly (2 in → 2 out).
+tf_count=$(printf '{"prompt":"hi"}\n{"prompt":"world"}\n' | $VRK throttle --rate 100/s --tokens-field prompt | wc -l | tr -d ' ')
+[ "$tf_count" -eq 2 ] \
+  && { echo "PASS: throttle --tokens-field: 2 in → 2 out"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: throttle --tokens-field: expected 2, got $tf_count"; FAIL=$((FAIL+1)); }
+
+# emit | throttle | validate: three-tool pipeline.
+ec=$(set +e; echo 'start job' | $VRK emit | $VRK throttle --rate 100/s | $VRK validate --schema "$EMIT_SCHEMA" >/dev/null 2>&1; echo $?)
+assert_exit "emit | throttle | validate: exits 0" 0 "$ec"
+
+# emit | throttle | prompt --explain: offline canonical three-tool pipeline.
+explain_out=$(echo 'run this' | $VRK emit | $VRK throttle --rate 100/s | $VRK prompt --explain 2>/dev/null)
+[ -n "$explain_out" ] \
+  && { echo "PASS: emit | throttle | prompt --explain: output non-empty"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit | throttle | prompt --explain: output was empty"; FAIL=$((FAIL+1)); }
+echo "$explain_out" | grep -q 'api.anthropic.com' \
+  && { echo "PASS: emit | throttle | prompt --explain: contains api.anthropic.com"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit | throttle | prompt --explain: api.anthropic.com not found"; FAIL=$((FAIL+1)); }
+
+unset VRK_KV_PATH
+
+# ---------------------------------------------------------------------------
+# Section 23 — jsonl pipelines
+# ---------------------------------------------------------------------------
+echo "--- Section 23: jsonl pipelines ---"
+
+VRK_KV_PATH="$TMPDIR/jsonl_kv.db"
+export VRK_KV_PATH
+
+# jsonl split: 2-element array → 2 JSONL lines, both valid JSON.
+jsonl_split=$(echo '[{"a":1},{"a":2}]' | $VRK jsonl)
+jsonl_split_count=$(echo "$jsonl_split" | wc -l | tr -d ' ')
+[ "$jsonl_split_count" -eq 2 ] \
+  && { echo "PASS: jsonl split: 2 lines"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: jsonl split: expected 2 lines, got $jsonl_split_count"; FAIL=$((FAIL+1)); }
+assert_valid_jsonl "jsonl split: both lines valid JSON" "$jsonl_split"
+
+# jsonl --collect: JSONL → single JSON array line.
+jsonl_collected=$(printf '{"a":1}\n{"a":2}\n' | $VRK jsonl --collect)
+jsonl_collected_lines=$(echo "$jsonl_collected" | wc -l | tr -d ' ')
+[ "$jsonl_collected_lines" -eq 1 ] \
+  && { echo "PASS: jsonl --collect: single line output"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: jsonl --collect: expected 1 line, got $jsonl_collected_lines"; FAIL=$((FAIL+1)); }
+echo "$jsonl_collected" | python3 -c 'import sys,json; a=json.loads(sys.stdin.read()); sys.exit(0 if isinstance(a,list) else 1)' \
+  && { echo "PASS: jsonl --collect: output is a JSON array"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: jsonl --collect: output is not a JSON array: $jsonl_collected"; FAIL=$((FAIL+1)); }
+
+# round-trip: split then collect → records preserved.
+rt=$(echo '[{"a":1},{"a":2}]' | $VRK jsonl | $VRK jsonl --collect)
+echo "$rt" | grep -qF '"a":1' \
+  && { echo "PASS: jsonl round-trip: a:1 preserved"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: jsonl round-trip: a:1 missing from: $rt"; FAIL=$((FAIL+1)); }
+echo "$rt" | grep -qF '"a":2' \
+  && { echo "PASS: jsonl round-trip: a:2 preserved"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: jsonl round-trip: a:2 missing from: $rt"; FAIL=$((FAIL+1)); }
+
+# jsonl | validate: split records validate against schema.
+ec=$(set +e; echo '[{"name":"alice","age":30}]' | $VRK jsonl | $VRK validate --schema '{"name":"string","age":"number"}' >/dev/null 2>&1; echo $?)
+assert_exit "jsonl | validate: exits 0" 0 "$ec"
+
+# jsonl | kv: store each split record by index, retrieve index 0.
+echo '[{"k":"v0"},{"k":"v1"}]' | $VRK jsonl | while IFS= read -r rec; do
+  idx=$(echo "$rec" | python3 -c 'import sys,json; r=json.loads(sys.stdin.read()); print(r.get("k",""))' 2>/dev/null) || idx=""
+  $VRK kv set "jsonl_rec:$idx" "$rec" 2>/dev/null || true
+done
+jsonl_kv_val=$($VRK kv get "jsonl_rec:v0" 2>/dev/null) || jsonl_kv_val=""
+[ -n "$jsonl_kv_val" ] \
+  && { echo "PASS: jsonl | kv: record stored and retrieved"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: jsonl | kv: nothing retrieved for jsonl_rec:v0"; FAIL=$((FAIL+1)); }
+
+# emit | jsonl --collect: order and content verified.
+emit_collected=$(printf 'hello\nworld\n' | $VRK emit | $VRK jsonl --collect)
+emit_collected_check=$(echo "$emit_collected" | python3 -c '
+import sys, json
+a = json.loads(sys.stdin.read())
+ok = (
+    isinstance(a, list) and len(a) == 2
+    and a[0].get("msg") == "hello"
+    and a[1].get("msg") == "world"
+)
+print("ok" if ok else "fail")
+' 2>/dev/null) || emit_collected_check="fail"
+[ "$emit_collected_check" = "ok" ] \
+  && { echo "PASS: emit | jsonl --collect: 2 objects, order correct"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: emit | jsonl --collect: $emit_collected_check — got: $emit_collected"; FAIL=$((FAIL+1)); }
+
+# edge case: empty emit | jsonl --collect → [].
+empty_collected=$(printf '' | $VRK emit | $VRK jsonl --collect 2>/dev/null)
+[ "$empty_collected" = "[]" ] \
+  && { echo "PASS: empty emit | jsonl --collect: []"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: empty emit | jsonl --collect: expected [], got '$empty_collected'"; FAIL=$((FAIL+1)); }
+
+unset VRK_KV_PATH
+
+# ---------------------------------------------------------------------------
+# Section 24 — mask pipelines
+# ---------------------------------------------------------------------------
+echo "--- Section 24: mask pipelines ---"
+
+VRK_KV_PATH="$TMPDIR/mask_kv.db"
+export VRK_KV_PATH
+
+# mask | kv: scrubbed text stored; secret absent from retrieved value.
+echo 'token=secret123ABCXYZ' | $VRK mask | $VRK kv set scrubbed_val
+mask_kv_retrieved=$($VRK kv get scrubbed_val)
+echo "$mask_kv_retrieved" | grep -q '\[REDACTED\]' \
+  && { echo "PASS: mask | kv: [REDACTED] in stored value"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: mask | kv: [REDACTED] not found in: $mask_kv_retrieved"; FAIL=$((FAIL+1)); }
+echo "$mask_kv_retrieved" | grep -q 'secret123ABCXYZ' \
+  && { echo "FAIL: mask | kv: original secret still present in stored value"; FAIL=$((FAIL+1)); } \
+  || { echo "PASS: mask | kv: original secret absent from stored value"; PASS=$((PASS+1)); }
+
+# mask | tok: scrubbed text token count is a positive integer.
+mask_tok=$(echo 'Authorization: Bearer sk-ant-abc123' | $VRK mask | $VRK tok --quiet)
+[ -n "$mask_tok" ] && [ "$mask_tok" -gt 0 ] 2>/dev/null \
+  && { echo "PASS: mask | tok: count > 0 ($mask_tok)"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: mask | tok: unexpected '$mask_tok'"; FAIL=$((FAIL+1)); }
+
+# emit | mask | validate: structured scrubbed log validates against schema.
+ec=$(set +e; echo 'INFO: ok' | $VRK emit | $VRK mask | $VRK validate --schema "$EMIT_SCHEMA" >/dev/null 2>&1; echo $?)
+assert_exit "emit | mask | validate: exits 0" 0 "$ec"
+
+# prompt --explain | mask: pipeline runs cleanly; exits 0; output contains curl.
+explain_mask=$(echo 'hello' | $VRK prompt --explain 2>/dev/null | $VRK mask 2>/dev/null)
+ec=$(set +e; echo 'hello' | $VRK prompt --explain 2>/dev/null | $VRK mask >/dev/null 2>&1; echo $?)
+assert_exit "prompt --explain | mask: exits 0" 0 "$ec"
+[ -n "$explain_mask" ] \
+  && { echo "PASS: prompt --explain | mask: output non-empty"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: prompt --explain | mask: output was empty"; FAIL=$((FAIL+1)); }
+echo "$explain_mask" | grep -q 'curl' \
+  && { echo "PASS: prompt --explain | mask: output contains curl"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: prompt --explain | mask: curl not found in output"; FAIL=$((FAIL+1)); }
+
+unset VRK_KV_PATH
 
 # ---------------------------------------------------------------------------
 # Results

@@ -1077,8 +1077,8 @@ vrk coax --times 3 --backoff exp:1s -- vrk grab https://example.com
 
 ## plain — Markdown Stripper
 
-Strips markdown formatting from stdin. Preserves all content — only syntax is removed.
-Reads from stdin only (no positional argument form).
+Strips markdown formatting from stdin or a positional argument. Preserves all content — only syntax is removed.
+Input: positional argument or stdin.
 
 ### Flags
 
@@ -1123,6 +1123,10 @@ echo '**hello** _world_' | vrk plain --json
 
 # Empty input exits 0 with no output
 printf '' | vrk plain
+
+# Positional arg form — identical to stdin
+vrk plain '**bold** _italic_'
+# → bold italic
 ```
 
 ### Compose patterns
@@ -1153,7 +1157,7 @@ vrk grab https://example.com --text
 
 Extracts all hyperlinks from markdown, HTML, or plain text as JSONL.
 One record per link: `{"text":"...","url":"...","line":N}`.
-Input from stdin only. Empty input exits 0 with no output.
+Input: positional argument or stdin. Empty input exits 0 with no output.
 
 ### Record shape
 
@@ -1216,6 +1220,10 @@ vrk grab https://example.com | vrk links --bare | while read url; do echo "$url"
 
 # Count links in a document
 cat README.md | vrk links --json | tail -1 | jq '.count'
+
+# Positional arg form — identical to stdin
+vrk links '[Homebrew](https://brew.sh)'
+# → {"text":"Homebrew","url":"https://brew.sh","line":1}
 ```
 
 ### Compose patterns

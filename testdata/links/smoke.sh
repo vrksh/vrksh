@@ -202,6 +202,42 @@ set -e
 assert_exit "unknown flag: exit 2" 2 "$exit_code"
 
 # ------------------------------------------------------------
+# 12. Positional argument
+# ------------------------------------------------------------
+echo ""
+echo "--- 12. positional argument ---"
+
+# Basic: positional arg exits 0 and contains the expected url field.
+got=$("$VRK" links '[Homebrew](https://brew.sh)')
+exit_code=$?
+assert_exit        "positional: exit 0"         0                      "$exit_code"
+assert_stdout_contains "positional: url field"  '"url":"https://brew.sh"' "$got"
+assert_stdout_contains "positional: text field" '"text":"Homebrew"'    "$got"
+
+# Positional output == stdin output (byte-for-byte; no network involved).
+got_stdin=$(echo '[Homebrew](https://brew.sh)' | "$VRK" links)
+assert_stdout_equals "positional == stdin" "$got_stdin" "$got"
+
+# --bare combined with positional arg.
+got=$("$VRK" links '[Homebrew](https://brew.sh)' --bare)
+assert_stdout_equals "positional --bare: URL only" "https://brew.sh" "$got"
+
+# Two links in one positional string → 2 records.
+got=$("$VRK" links '[A](https://a.example.com) [B](https://b.example.com)')
+line_count=$(printf '%s\n' "$got" | wc -l | tr -d ' ')
+if [ "$line_count" -eq 2 ]; then
+  ok "positional two links: 2 records"
+else
+  fail "positional two links" "expected 2 records, got $line_count"
+fi
+
+# --json combined with positional arg: trailing metadata record present with count:1.
+got=$("$VRK" links '[Homebrew](https://brew.sh)' --json)
+last_line=$(printf '%s' "$got" | tail -1)
+assert_stdout_contains "positional --json: _vrk field"  '"_vrk":"links"' "$last_line"
+assert_stdout_contains "positional --json: count field" '"count":1'      "$last_line"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""
