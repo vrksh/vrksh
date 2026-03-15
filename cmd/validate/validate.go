@@ -59,12 +59,12 @@ func Run() int {
 	}
 
 	if schemaFlag == "" {
-		return shared.UsageErrorf("--schema is required")
+		return shared.UsageErrorf("validate: --schema is required")
 	}
 
 	schema, err := loadSchema(schemaFlag)
 	if err != nil {
-		return shared.UsageErrorf("%s", err.Error())
+		return shared.UsageErrorf("validate: %s", err.Error())
 	}
 
 	// Marshal schema to JSON once for passing to fixFn's system prompt.
@@ -73,7 +73,7 @@ func Run() int {
 	bw := bufio.NewWriter(os.Stdout)
 	defer func() { _ = bw.Flush() }()
 
-	scanner := bufio.NewScanner(newStdinReader())
+	scanner := shared.ScanLines(newStdinReader())
 	var total, passed, failed int
 
 	for scanner.Scan() {
@@ -88,14 +88,12 @@ func Run() int {
 			if _, werr := fmt.Fprintln(bw, line); werr != nil {
 				return shared.Errorf("validate: writing output: %v", werr)
 			}
-			_ = bw.Flush()
 			passed++
 		} else if fix {
 			if repaired, ok := fixFn(line, string(schemaJSON)); ok {
 				if _, werr := fmt.Fprintln(bw, repaired); werr != nil {
 					return shared.Errorf("validate: writing output: %v", werr)
 				}
-				_ = bw.Flush()
 				passed++
 			} else {
 				for _, f := range failures {
@@ -147,7 +145,6 @@ func strictReturn(bw *bufio.Writer, jsonOut bool, total, passed, failed int) int
 		b, _ := json.Marshal(meta)
 		_, _ = fmt.Fprintln(bw, string(b))
 	}
-	_ = bw.Flush()
 	return shared.ExitError
 }
 

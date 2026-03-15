@@ -112,6 +112,7 @@ func runSplit(r io.Reader, jsonFlag bool) int {
 	}
 
 	w := bufio.NewWriter(os.Stdout)
+	defer func() { _ = w.Flush() }()
 	count := 0
 	for d.More() {
 		var v any
@@ -134,9 +135,6 @@ func runSplit(r io.Reader, jsonFlag bool) int {
 		if err := w.WriteByte('\n'); err != nil {
 			return shared.Errorf("jsonl: writing output: %v", err)
 		}
-		if err := w.Flush(); err != nil {
-			return shared.Errorf("jsonl: writing output: %v", err)
-		}
 		count++
 	}
 
@@ -145,7 +143,6 @@ func runSplit(r io.Reader, jsonFlag bool) int {
 		b, _ := json.Marshal(meta)
 		_, _ = w.Write(b)
 		_ = w.WriteByte('\n')
-		_ = w.Flush()
 	}
 
 	return 0

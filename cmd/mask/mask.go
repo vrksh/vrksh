@@ -111,7 +111,7 @@ func Run() int {
 	if r == nil {
 		r = os.Stdin
 	}
-	scanner := bufio.NewScanner(r)
+	scanner := shared.ScanLines(r)
 
 	var totalLines, redactedLines int
 	firedPatterns := map[string]bool{}
@@ -129,7 +129,6 @@ func Run() int {
 		}
 
 		_, _ = fmt.Fprintln(w, out)
-		_ = w.Flush()
 	}
 
 	if err := scanner.Err(); err != nil {

@@ -49,7 +49,7 @@ func Run() int {
 	w := bufio.NewWriter(os.Stdout)
 	defer func() { _ = w.Flush() }()
 
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := shared.ScanLines(os.Stdin)
 
 	// SSE state machine: per-block accumulators, reset on each blank line.
 	var eventName string

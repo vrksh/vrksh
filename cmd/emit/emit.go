@@ -97,7 +97,7 @@ func Run() int {
 	w := bufio.NewWriter(os.Stdout)
 	defer func() { _ = w.Flush() }()
 
-	scanner := bufio.NewScanner(r)
+	scanner := shared.ScanLines(r)
 	for scanner.Scan() {
 		rawLine := scanner.Text()
 		if rawLine == "" {
@@ -130,9 +130,6 @@ func Run() int {
 		}
 		if err := w.WriteByte('\n'); err != nil {
 			return shared.Errorf("emit: write: %v", err)
-		}
-		if err := w.Flush(); err != nil {
-			return shared.Errorf("emit: flush: %v", err)
 		}
 	}
 	if err := scanner.Err(); err != nil {

@@ -21,6 +21,9 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `grab` | Fetch a URL as clean markdown or plain text | `--text`, `--raw`, `--json` |
 | `plain` | Strip markdown syntax, keep prose | `--json` |
 | `jsonl` | Convert JSON arrays to JSONL or collect JSONL into an array | `--collect`, `--json` |
+| `validate` | Validate JSONL records against a type schema; optionally repair via LLM | `--schema <spec>`, `--strict`, `--fix`, `--json` |
+| `mask` | Redact secrets by pattern matching and Shannon entropy analysis | `--pattern <regex>`, `--entropy <n>`, `--json` |
+| `emit` | Wrap text lines as structured JSONL log records with timestamps | `--level <l>`, `--tag <t>`, `--msg <m>`, `--parse-level` |
 | `links` | Extract hyperlinks from markdown, HTML, or plain text as JSONL | `--bare`, `--json` |
 | `throttle` | Rate-limit lines from stdin | `--rate <N/s\|N/m>`, `--burst N`, `--tokens-field <f>`, `--json` |
 | `digest` | Hash stdin or files; HMAC with --hmac --key; file comparison with --compare | `--algo <sha256\|md5\|sha512>`, `--bare`, `--file`, `--hmac`, `--key`, `--verify`, `--json` |
@@ -104,6 +107,9 @@ vrk kv get run_id
   `true`/`false`, numbers are plain integers. No JSON wrapping.
 - **`prompt --json` wraps the response in metadata.** It does NOT instruct the
   LLM to respond in JSON. Use `--schema` for structured LLM output.
+- **`emit --parse-level` matches plain prefixes only.** `ERROR`, `WARN`, `WARNING`, `INFO`, `DEBUG` at the start of a line (optionally followed by `:`, space, or tab). `[INFO]`-style bracket formats are not detected.
+- **`mask` is best-effort.** Entropy scanning skips tokens shorter than 8 characters and can false-positive on high-entropy non-secrets. Pattern matching is case-insensitive and replaces the full match, not just the value.
+- **`validate --fix` requires an API key.** It shells out to `vrk prompt`. Set `VRK_ANTHROPIC_KEY` or `VRK_LLM_KEY` before use.
 
 ---
 
