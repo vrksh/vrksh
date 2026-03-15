@@ -12,6 +12,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/emit"
 	"github.com/vrksh/vrksh/cmd/epoch"
 	"github.com/vrksh/vrksh/cmd/grab"
+	"github.com/vrksh/vrksh/cmd/jsonl"
 	"github.com/vrksh/vrksh/cmd/jwt"
 	"github.com/vrksh/vrksh/cmd/kv"
 	"github.com/vrksh/vrksh/cmd/links"
@@ -35,6 +36,7 @@ var tools = map[string]func() int{
 	"chunk":    chunk.Run,
 	"emit":     emit.Run,
 	"grab":     grab.Run,
+	"jsonl":    jsonl.Run,
 	"jwt":      jwt.Run,
 	"epoch":    epoch.Run,
 	"uuid":     uuid.Run,

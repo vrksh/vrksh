@@ -20,6 +20,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `chunk` | Split text into token-bounded chunks | `--size <n>`, `--overlap <n>`, `--by <mode>` |
 | `grab` | Fetch a URL as clean markdown or plain text | `--text`, `--raw`, `--json` |
 | `plain` | Strip markdown syntax, keep prose | `--json` |
+| `jsonl` | Convert JSON arrays to JSONL or collect JSONL into an array | `--collect`, `--json` |
 | `links` | Extract hyperlinks from markdown, HTML, or plain text as JSONL | `--bare`, `--json` |
 | `throttle` | Rate-limit lines from stdin | `--rate <N/s\|N/m>`, `--burst N`, `--tokens-field <f>`, `--json` |
 

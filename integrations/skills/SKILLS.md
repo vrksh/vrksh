@@ -1579,3 +1579,66 @@ cat prompts.jsonl | vrk throttle --rate 10/m | vrk prompt --model gpt-4o
 - **`--burst` counts lines, not tokens** — with `--tokens-field`, burst still applies per-line regardless of token count.
 - **`--tokens-field` on non-JSON input exits 1** — use only with JSONL streams. Bad JSON or a missing field is a fatal error, not a skip.
 - **`elapsed_ms` is wall time from first to last line** — it includes all sleep time. Use it for pipeline instrumentation, not performance tuning.
+
+## jsonl — JSON Array ↔ JSONL Converter
+
+Converts a JSON array to JSONL (one record per line) or collects JSONL lines into a JSON array.
+The bridge between JSON-land tools and line-oriented pipeline tools.
+Input: stdin only.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--collect` | `-c` | JSONL → JSON array mode |
+| `--json` | `-j` | Append `{"_vrk":"jsonl","count":N}` after all records (split mode only; no-op in collect mode) |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (including empty input, empty array, `--collect` on empty stdin) |
+| 1 | Invalid JSON input; non-array input in split mode; invalid JSON line in collect mode |
+| 2 | Usage error — interactive TTY with no stdin, unknown flag |
+
+### Examples
+
+```bash
+# JSON array → JSONL (default split mode)
+echo '[{"a":1},{"a":2},{"a":3}]' | vrk jsonl
+
+# JSONL → JSON array
+printf '{"a":1}\n{"a":2}\n{"a":3}\n' | vrk jsonl --collect
+
+# Empty array → no output, exit 0
+echo '[]' | vrk jsonl
+
+# Primitives are emitted as JSON values
+echo '[1,2,3]' | vrk jsonl
+# → 1
+#   2
+#   3
+
+# Add metadata trailer (split mode)
+echo '[{"a":1},{"a":2}]' | vrk jsonl --json
+# → {"a":1}
+#   {"a":2}
+#   {"_vrk":"jsonl","count":2}
+
+# Round-trip pipeline
+echo '[{"a":1},{"b":2}]' | vrk jsonl | vrk jsonl --collect
+# → [{"a":1},{"b":2}]
+
+# Bridge between array tools and line tools
+vrk grab https://api.example.com/items | vrk jsonl | vrk mask | vrk jsonl --collect
+```
+
+### Gotchas
+
+- **Empty stdin in split mode exits 0 with no output** — `printf '' | vrk jsonl` is valid, not an error.
+- **Empty stdin in collect mode outputs `[]`** — `printf '' | vrk jsonl --collect` outputs `[]` and exits 0.
+- **`--json` is a no-op in collect mode** — the output is a single JSON array; a metadata trailer after `]` would produce invalid JSON and break downstream parsers.
+- **Invalid JSON in collect mode exits 1 immediately** — with a line number in the error message. No partial output is emitted.
+- **Streaming in split mode** — uses `json.Decoder`, so arrays larger than memory are handled safely.
+- **Round-trip is structurally equal, not byte-identical** — `json.Marshal` sorts object keys alphabetically. `{"b":2,"a":1}` round-trips as `{"a":1,"b":2}`.
+- **`--collect` skips blank lines** — empty lines between JSONL records are silently skipped.
