@@ -2,6 +2,7 @@ package coax
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +17,7 @@ import (
 // Run is the entry point for vrk coax.
 func Run() int {
 	fs := pflag.NewFlagSet("coax", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard) // suppress pflag's own error output; we handle it below
 	times := fs.Int("times", 3, "number of retries (first attempt is free; total attempts = N+1)")
 	backoffSpec := fs.String("backoff", "", "delay between retries: 100ms for fixed, exp:100ms for exponential")
 	backoffMax := fs.Duration("backoff-max", 0, "cap for exponential backoff; 0 = uncapped")
@@ -27,8 +29,8 @@ func Run() int {
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit errors as JSON")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
-		if err == pflag.ErrHelp {
-			return shared.ExitOK
+		if errors.Is(err, pflag.ErrHelp) {
+			return printCoaxUsage(fs)
 		}
 		return shared.UsageErrorf("%s", err)
 	}
@@ -165,6 +167,26 @@ func parseBackoff(spec string) (isExp bool, base time.Duration, err error) {
 		return false, 0, fmt.Errorf("invalid duration %q: %v", spec, err)
 	}
 	return false, d, nil
+}
+
+// printCoaxUsage writes usage to stdout and returns 0. Called when --help is passed.
+func printCoaxUsage(fs *pflag.FlagSet) int {
+	lines := []string{
+		"usage: vrk coax [flags] -- <command>",
+		"       vrk coax --times 5 --backoff exp:100ms -- curl https://example.com",
+		"",
+		"Retry wrapper — re-runs a command on failure with optional backoff.",
+		"",
+		"flags:",
+	}
+	for _, l := range lines {
+		if _, err := fmt.Fprintln(os.Stdout, l); err != nil {
+			return shared.Errorf("coax: writing usage: %v", err)
+		}
+	}
+	fs.SetOutput(os.Stdout)
+	fs.PrintDefaults()
+	return 0
 }
 
 // computeDelay returns the delay before the retry that follows attempt index

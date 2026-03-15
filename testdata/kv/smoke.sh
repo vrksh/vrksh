@@ -236,7 +236,25 @@ assert_stdout_empty "incr non-numeric: stdout empty"              "$stdout"
 assert_stdout_contains "incr non-numeric: stderr message" "value is not a number" "$stderr"
 
 # ------------------------------------------------------------
-# 8. Namespace isolation
+# 8. incr preserves TTL
+# ------------------------------------------------------------
+echo ""
+echo "--- incr preserves TTL ---"
+
+"$VRK" kv set ttlctr 5 --ttl 60s >/dev/null 2>&1
+
+# incr should succeed and value should be 6.
+stdout=$("$VRK" kv incr ttlctr 2>/dev/null); exit_code=$?
+assert_exit          "incr on TTL key: exit 0"  0  "$exit_code"
+assert_stdout_equals "incr on TTL key: value 6" "6" "$stdout"
+
+# Key must still be readable (TTL was not wiped).
+stdout=$("$VRK" kv get ttlctr 2>/dev/null); exit_code=$?
+assert_exit          "incr TTL key still live: exit 0"  0  "$exit_code"
+assert_stdout_equals "incr TTL key still live: value 6" "6" "$stdout"
+
+# ------------------------------------------------------------
+# 9. Namespace isolation
 # ------------------------------------------------------------
 echo ""
 echo "--- namespace isolation ---"
@@ -251,7 +269,7 @@ exit_code=$(set +e; "$VRK" kv get step >/dev/null 2>&1; echo $?)
 assert_exit "ns get default: exit 1 (isolated)" 1 "$exit_code"
 
 # ------------------------------------------------------------
-# 9. TTL expiry
+# 10. TTL expiry
 # ------------------------------------------------------------
 echo ""
 echo "--- TTL expiry ---"
@@ -270,7 +288,7 @@ stderr=$(set +e; "$VRK" kv get expiring 2>&1 >/dev/null; true)
 assert_stdout_contains "ttl: stderr key not found" "key not found" "$stderr"
 
 # ------------------------------------------------------------
-# 10. --dry-run
+# 11. --dry-run
 # ------------------------------------------------------------
 echo ""
 echo "--- --dry-run ---"
@@ -284,7 +302,7 @@ exit_code=$(set +e; "$VRK" kv get drykey >/dev/null 2>&1; echo $?)
 assert_exit "--dry-run: key not written" 1 "$exit_code"
 
 # ------------------------------------------------------------
-# 11. stdout / stderr separation
+# 12. stdout / stderr separation
 # ------------------------------------------------------------
 echo ""
 echo "--- stdout/stderr separation ---"
@@ -302,7 +320,7 @@ stdout=$(set +e; "$VRK" kv get nonexistent 2>/dev/null; true)
 assert_stdout_empty "get error: stdout empty" "$stdout"
 
 # ------------------------------------------------------------
-# 12. Usage errors → exit 2, stdout empty
+# 13. Usage errors → exit 2, stdout empty
 # ------------------------------------------------------------
 echo ""
 echo "--- usage errors ---"
@@ -326,7 +344,7 @@ exit_code=$(set +e; "$VRK" kv incr counter --by 0 >/dev/null 2>&1; echo $?)
 assert_exit "--by 0: exit 2" 2 "$exit_code"
 
 # ------------------------------------------------------------
-# 13. --help → exit 0
+# 14. --help → exit 0
 # ------------------------------------------------------------
 echo ""
 echo "--- --help ---"
@@ -341,7 +359,7 @@ assert_exit          "kv set --help: exit 0"      0     "$exit_code"
 assert_stdout_contains "kv set --help: mentions --ttl" "ttl" "$stdout"
 
 # ------------------------------------------------------------
-# 14. Concurrency: 10 parallel incr → final value must be 10
+# 15. Concurrency: 10 parallel incr → final value must be 10
 # ------------------------------------------------------------
 echo ""
 echo "--- concurrency ---"

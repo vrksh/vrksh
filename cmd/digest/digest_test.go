@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"hash"
 	"io"
 	"os"
 	"strings"
@@ -93,7 +94,9 @@ func TestHappyPathSHA256(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\n"
+	// After streaming fix: stdin bytes are hashed verbatim including the trailing \n.
+	// sha256("hello\n") = 5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03
+	want := "sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
 	}
@@ -104,7 +107,8 @@ func TestHappyPathMD5(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := "md5:5d41402abc4b2a76b9719d911017c592\n"
+	// md5("hello\n") = b1946ac92492d2347c6235b4d2611184
+	want := "md5:b1946ac92492d2347c6235b4d2611184\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
 	}
@@ -129,7 +133,8 @@ func TestBare(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\n"
+	// sha256("hello\n") bare
+	want := "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
 	}
@@ -153,8 +158,9 @@ func TestJSONOutput(t *testing.T) {
 	if obj["algo"] != "sha256" {
 		t.Errorf("algo = %q, want sha256", obj["algo"])
 	}
-	if obj["hash"] != "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" {
-		t.Errorf("hash = %q, want sha256 of 'hello'", obj["hash"])
+	// sha256("hello\n") — stdin bytes hashed verbatim after streaming fix
+	if obj["hash"] != "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" {
+		t.Errorf("hash = %q, want sha256 of 'hello\\n'", obj["hash"])
 	}
 }
 
@@ -168,7 +174,8 @@ func TestPositionalArg(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	// Same hash as stdin "hello\n" after stripping (both yield "hello").
+	// Positional arg hashes the literal string — no newline appended.
+	// sha256("hello") = 2cf24dba... (different from stdin "hello\n" after streaming fix).
 	want := "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\n"
 	if stdout != want {
 		t.Errorf("stdout = %q, want %q", stdout, want)
@@ -206,14 +213,15 @@ func TestEmptyStdin(t *testing.T) {
 }
 
 func TestEmptyStdinEcho(t *testing.T) {
-	// echo '' sends \n; strip exactly one trailing \n → hash of empty string.
+	// echo '' pipes a single \n byte — after streaming fix, that byte IS hashed.
+	// sha256("\n") = 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
 	stdout, _, code := runDigest(t, nil, "\n")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	want := "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n"
+	want := "sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b\n"
 	if stdout != want {
-		t.Errorf("stdout = %q, want hash of empty string", stdout)
+		t.Errorf("stdout = %q, want sha256 of newline byte", stdout)
 	}
 }
 
@@ -326,8 +334,9 @@ func TestHMACVerifyMismatch(t *testing.T) {
 }
 
 func TestHMACFile(t *testing.T) {
-	// HMAC of file "payload" (no trailing newline) should equal HMAC of stdin "payload\n"
-	// after stripping — both hash the bytes "payload".
+	// After the streaming fix, stdin bytes are hashed verbatim. Use printf-style
+	// input (no trailing newline) to get the same bytes as the file.
+	// Both hash "payload" (7 bytes) → identical HMAC.
 	path := writeTempFile(t, "payload")
 	stdout, _, code := runDigest(t, []string{"--hmac", "--key", "secret", "--file", path}, "")
 	if code != 0 {
@@ -338,12 +347,12 @@ func TestHMACFile(t *testing.T) {
 	}
 	fileHex := strings.TrimPrefix(strings.TrimSuffix(stdout, "\n"), "sha256:")
 
-	// stdin path: "payload\n" → strip \n → HMAC("payload")
-	stdinBare, _, _ := runDigest(t, []string{"--hmac", "--key", "secret", "--bare"}, "payload\n")
+	// stdin path: "payload" (no newline) → hashes "payload" → same as file
+	stdinBare, _, _ := runDigest(t, []string{"--hmac", "--key", "secret", "--bare"}, "payload")
 	stdinHex := strings.TrimSpace(stdinBare)
 
 	if fileHex != stdinHex {
-		t.Errorf("file HMAC %q != stdin HMAC %q (both should hash 'payload')", fileHex, stdinHex)
+		t.Errorf("file HMAC %q != stdin HMAC %q (both hash 'payload')", fileHex, stdinHex)
 	}
 }
 
@@ -399,11 +408,11 @@ func TestTTYWithJSON(t *testing.T) {
 }
 
 func TestJSONErrorToStdout(t *testing.T) {
-	origReadAll := readAll
-	readAll = func(r io.Reader) ([]byte, error) {
-		return nil, errors.New("simulated read error")
+	origCopyToHash := copyToHash
+	copyToHash = func(_ hash.Hash, _ io.Reader) (int64, error) {
+		return 0, errors.New("simulated read error")
 	}
-	defer func() { readAll = origReadAll }()
+	defer func() { copyToHash = origCopyToHash }()
 
 	stdout, stderr, code := runDigest(t, []string{"--json"}, "any input")
 	if code != 1 {

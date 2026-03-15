@@ -48,8 +48,8 @@ assert_contains() {
 echo "--- Section 1: SHA-256 default ---"
 
 out=$(echo 'hello' | $VRK digest)
-assert_eq "sha256 of hello" \
-  "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" \
+assert_eq "sha256 of hello (with newline)" \
+  "sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" \
   "$out"
 
 # ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ assert_eq "sha256 of hello" \
 echo "--- Section 2: algorithms ---"
 
 out=$(echo 'hello' | $VRK digest --algo md5)
-assert_eq "md5 of hello" "md5:5d41402abc4b2a76b9719d911017c592" "$out"
+assert_eq "md5 of hello (with newline)" "md5:b1946ac92492d2347c6235b4d2611184" "$out"
 
 out=$(echo 'hello' | $VRK digest --algo sha512)
 assert_contains "sha512 has correct prefix" "sha512:" "$out"
@@ -74,8 +74,8 @@ assert_exit "--algo unknown exits 2" 2 "$ec"
 echo "--- Section 3: --bare ---"
 
 out=$(echo 'hello' | $VRK digest --bare)
-assert_eq "--bare sha256 of hello" \
-  "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" \
+assert_eq "--bare sha256 of hello (with newline)" \
+  "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" \
   "$out"
 # No colon in bare output
 if echo "$out" | grep -q ':'; then
@@ -92,7 +92,7 @@ echo "--- Section 4: --json ---"
 out=$(echo 'hello' | $VRK digest --json)
 assert_contains "--json has input_bytes:6"  '"input_bytes":6'  "$out"
 assert_contains "--json has algo sha256"    '"algo":"sha256"'  "$out"
-assert_contains "--json has correct hash"  '"hash":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"' "$out"
+assert_contains "--json has correct hash"  '"hash":"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"' "$out"
 
 # --json is valid JSON
 echo "$out" | python3 -c 'import sys,json; json.load(sys.stdin)' 2>/dev/null \
@@ -110,8 +110,8 @@ assert_eq "empty stdin (printf '')" \
   "$out"
 
 out=$(echo '' | $VRK digest)
-assert_eq "echo '' strips \\n → empty hash" \
-  "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" \
+assert_eq "echo '' pipes \\n → sha256 of newline" \
+  "sha256:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b" \
   "$out"
 
 # ---------------------------------------------------------------------------
@@ -119,9 +119,23 @@ assert_eq "echo '' strips \\n → empty hash" \
 # ---------------------------------------------------------------------------
 echo "--- Section 6: positional arg ---"
 
-pos_out=$($VRK digest 'hello')
-stdin_out=$(echo 'hello' | $VRK digest)
-assert_eq "positional arg matches stdin form" "$stdin_out" "$pos_out"
+# Positional arg hashes the literal string without a newline.
+out=$($VRK digest 'hello')
+assert_eq "positional arg sha256 of hello" \
+  "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" \
+  "$out"
+
+# stdin hashes the literal pipe bytes — echo adds \n so the hash differs.
+out=$(echo 'hello' | $VRK digest)
+assert_eq "stdin sha256 of hello-newline" \
+  "sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" \
+  "$out"
+
+# printf omits the trailing newline → same hash as positional arg.
+printf_out=$(printf 'hello' | $VRK digest)
+assert_eq "printf stdin matches positional (no newline)" \
+  "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" \
+  "$printf_out"
 
 # ---------------------------------------------------------------------------
 # Section 7 — --file
@@ -137,6 +151,18 @@ assert_eq "--file sha256 of hello" \
 
 ec=$(set +e; $VRK digest --file "$TMPDIR/no-such-file" >/dev/null 2>&1; echo $?)
 assert_exit "--file not found exits 1" 1 "$ec"
+
+# stdin (printf, no newline) and --file must produce identical hashes.
+stdin_hash=$(printf 'hello' | $VRK digest)
+assert_eq "printf stdin matches --file (consistent streaming)" \
+  "$($VRK digest --file "$f1")" \
+  "$stdin_hash"
+
+# Large-stream: 10 MB of zero bytes must hash without OOM.
+large_hash=$(dd if=/dev/zero bs=1048576 count=10 2>/dev/null | $VRK digest)
+assert_eq "large stream (10 MB zeros) sha256" \
+  "sha256:e5b844cc57f57094ea4585e235f36c78c1cd222262bb89d53c94dcb4d6b3e55d" \
+  "$large_hash"
 
 # --file JSON shape
 out=$($VRK digest --file "$f1" --json)

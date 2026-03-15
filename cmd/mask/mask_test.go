@@ -369,6 +369,32 @@ func TestInteractiveTTY(t *testing.T) {
 	}
 }
 
+// TestInteractiveTTYJSON verifies that --json routes the TTY usage error to
+// stdout as a JSON envelope and leaves stderr empty.
+func TestInteractiveTTYJSON(t *testing.T) {
+	origTTY := isTerminal
+	isTerminal = func(_ int) bool { return true }
+	t.Cleanup(func() { isTerminal = origTTY })
+
+	stdout, stderr, code := runMask(t, []string{"--json"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (TTY + --json → usage error via JSON)", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty when --json active", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing 'error' field")
+	}
+	if obj["code"] != float64(2) {
+		t.Errorf("JSON code = %v, want 2", obj["code"])
+	}
+}
+
 func TestUnknownFlag(t *testing.T) {
 	_, stderr, code := runMask(t, []string{"--unknown-flag"}, "")
 	if code != 2 {

@@ -374,16 +374,15 @@ assert_stdout_equals "pipeline: --claim sub piped" "1234567890" "$sub"
 echo ""
 echo "--- whitespace handling ---"
 
-# Positional arg with leading spaces — decodes correctly with TrimSpace.
-stdout=$("$VRK" jwt "  $VALID_JWT  " 2>/dev/null) || true
+# Positional arg with leading/trailing spaces — base64 decode fails, exits 1.
+# Spaces are the caller's responsibility (TrimSuffix convention strips only \n).
 exit_code=$(set +e; "$VRK" jwt "  $VALID_JWT  " > /dev/null 2>&1; echo $?)
-assert_exit            "trim: leading/trailing spaces: exit 0"   0       "$exit_code"
-assert_stdout_contains "trim: leading/trailing spaces: has sub"  '"sub"' "$stdout"
+assert_exit "trim: leading/trailing spaces: exits 1 (caller's responsibility)" 1 "$exit_code"
 
-# Positional arg with leading \r — decodes correctly with TrimSpace.
+# Positional arg with leading \r — Go's base64 silently skips \r, so it decodes fine.
 stdout=$("$VRK" jwt $'\r'"$VALID_JWT" 2>/dev/null) || true
 exit_code=$(set +e; "$VRK" jwt $'\r'"$VALID_JWT" > /dev/null 2>&1; echo $?)
-assert_exit            "trim: leading CR: exit 0"   0       "$exit_code"
+assert_exit            "trim: leading CR: exit 0 (base64 skips CR)"   0       "$exit_code"
 assert_stdout_contains "trim: leading CR: has sub"  '"sub"' "$stdout"
 
 # ------------------------------------------------------------

@@ -1156,7 +1156,7 @@ export VRK_KV_PATH
 # digest | kv: store hash, retrieve it, confirm it's the expected value.
 echo 'hello' | $VRK digest | $VRK kv set digest_out
 digest_kv=$($VRK kv get digest_out)
-[ "$digest_kv" = "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" ] \
+[ "$digest_kv" = "sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" ] \
   && { echo "PASS: digest | kv: hash stored and retrieved correctly"; PASS=$((PASS+1)); } \
   || { echo "FAIL: digest | kv: got '$digest_kv'"; FAIL=$((FAIL+1)); }
 

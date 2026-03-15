@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/vrksh/vrksh/internal/shared"
 )
 
 // buildJWT constructs a minimal test JWT from a JSON payload string.
@@ -441,40 +443,26 @@ func TestPropertyAnyValidJWT(t *testing.T) {
 
 // --- TrimSpace tests ---
 
-// TestTrimSpaceOnInput verifies that leading/trailing whitespace in the token
-// is stripped before decoding. Trailing whitespace that lands in the signature
-// part is harmless (signature is not decoded), but leading whitespace corrupts
-// the header. The test covers both paths: positional arg and stdin.
+// TestTrimSpaceOnInput verifies that only a single trailing \n is stripped from
+// the token (TrimSuffix behaviour). Leading spaces are the caller's responsibility —
+// base64 decode will fail on space-padded input. Note: Go's base64 silently skips
+// \r bytes, so CR-prefixed tokens decode successfully.
 func TestTrimSpaceOnInput(t *testing.T) {
-	// positional arg with leading spaces: without TrimSpace, parts[0] would be
-	// "  eyJhbGci..." and base64 decoding would fail → exit 1.
-	// With TrimSpace the leading spaces are stripped → exit 0.
+	// positional arg with leading spaces: TrimSuffix("\n") does NOT strip spaces.
+	// parts[0] = "  eyJhbGci..." → base64 decode fails → exit 1.
 	t.Run("leading whitespace in positional arg", func(t *testing.T) {
-		stdout, _, code := runJWT(t, []string{"  " + validJWT + "  "}, "")
-		if code != 0 {
-			t.Fatalf("exit code = %d (arg with surrounding spaces), want 0", code)
-		}
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
-			t.Fatalf("stdout not valid JSON: %v\ngot: %q", err, stdout)
-		}
-		if payload["sub"] != "1234567890" {
-			t.Errorf("sub = %v, want %q", payload["sub"], "1234567890")
+		_, _, code := runJWT(t, []string{"  " + validJWT + "  "}, "")
+		if code != 1 {
+			t.Fatalf("exit code = %d (arg with surrounding spaces), want 1 — spaces are caller's responsibility", code)
 		}
 	})
 
-	// stdin with \r\n: ReadInput strips the trailing \n leaving a \r before the
-	// first dot — corrupting parts[0]. TrimSpace removes the \r.
-	// Construct a token where \r lands in the header part, not the signature.
-	// The simplest way: prepend \r so it becomes part of parts[0].
+	// positional arg with leading CR: Go's base64 decoder silently skips \r bytes,
+	// so "\r" + validJWT decodes successfully. Exit 0 is the correct behaviour here.
 	t.Run("leading CR in positional arg", func(t *testing.T) {
-		stdout, _, code := runJWT(t, []string{"\r" + validJWT}, "")
+		_, _, code := runJWT(t, []string{"\r" + validJWT}, "")
 		if code != 0 {
-			t.Fatalf("exit code = %d (arg with leading \\r), want 0", code)
-		}
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
-			t.Fatalf("stdout not valid JSON: %v\ngot: %q", err, stdout)
+			t.Fatalf("exit code = %d (arg with leading \\r), want 0 — base64 silently skips CR", code)
 		}
 	})
 
@@ -673,5 +661,52 @@ func TestJSONErrorToStdout(t *testing.T) {
 	}
 	if _, ok := obj["error"]; !ok {
 		t.Error("JSON missing key \"error\"")
+	}
+}
+
+// --- TTY guard tests ---
+
+// TestTTYNoInput verifies that running jwt with an interactive terminal and no
+// positional argument exits 2 and writes a usage message to stderr.
+func TestTTYNoInput(t *testing.T) {
+	origTTY := shared.IsTerminal
+	shared.IsTerminal = func(int) bool { return true }
+	t.Cleanup(func() { shared.IsTerminal = origTTY })
+
+	stdout, stderr, code := runJWT(t, []string{}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (TTY with no input → usage error)", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty on usage error", stdout)
+	}
+	if !strings.Contains(stderr, "no input") {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, "no input")
+	}
+}
+
+// TestTTYNoInputJSON verifies that --json routes the TTY usage error to stdout
+// as a JSON envelope and leaves stderr empty.
+func TestTTYNoInputJSON(t *testing.T) {
+	origTTY := shared.IsTerminal
+	shared.IsTerminal = func(int) bool { return true }
+	t.Cleanup(func() { shared.IsTerminal = origTTY })
+
+	stdout, stderr, code := runJWT(t, []string{"--json"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty when --json active", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing 'error' field")
+	}
+	if obj["code"] != float64(2) {
+		t.Errorf("JSON code = %v, want 2", obj["code"])
 	}
 }

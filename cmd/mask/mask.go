@@ -94,6 +94,12 @@ func Run() int {
 	// TTY check: if stdin is an interactive terminal, the user ran vrk mask with
 	// no piped input — that is a usage error.
 	if isTerminal(int(os.Stdin.Fd())) {
+		if jsonOut {
+			return shared.PrintJSONError(map[string]any{
+				"error": "mask: no input: pipe text to stdin",
+				"code":  2,
+			})
+		}
 		return shared.UsageErrorf("mask: no input: pipe text to stdin")
 	}
 
@@ -218,7 +224,11 @@ func shannonEntropy(s string) float64 {
 	for _, c := range s {
 		freq[c]++
 	}
-	n := float64(len([]rune(s)))
+	var total int
+	for _, count := range freq {
+		total += count
+	}
+	n := float64(total)
 	var h float64
 	for _, count := range freq {
 		p := float64(count) / n

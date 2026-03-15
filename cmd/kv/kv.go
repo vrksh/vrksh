@@ -229,13 +229,23 @@ func incrVal(db *sql.DB, ns, key string, delta int64) (int64, error) {
 		}
 	}
 
+	// Determine which expires_at to write back:
+	// - key was missing → nil (new key, no TTL)
+	// - key existed but was expired → nil (treat as new; TTL has fired)
+	// - key existed and is valid with a TTL → preserve the original expires_at
+	// - key existed and is valid with no TTL → nil
+	var expiresAtToStore interface{}
+	if expiresAt.Valid && expiresAt.Int64 > time.Now().Unix() {
+		expiresAtToStore = expiresAt.Int64
+	}
+
 	newVal := cur + delta
 	_, err = conn.ExecContext(ctx,
-		`INSERT INTO kv (ns, key, value, expires_at) VALUES (?, ?, ?, NULL)
+		`INSERT INTO kv (ns, key, value, expires_at) VALUES (?, ?, ?, ?)
 		 ON CONFLICT(ns, key) DO UPDATE SET
 		     value      = excluded.value,
 		     expires_at = excluded.expires_at`,
-		ns, key, strconv.FormatInt(newVal, 10),
+		ns, key, strconv.FormatInt(newVal, 10), expiresAtToStore,
 	)
 	if err != nil {
 		return 0, err
@@ -266,7 +276,11 @@ func beginImmediate(ctx context.Context, conn *sql.Conn) error {
 		if !strings.Contains(msg, "SQLITE_BUSY") && !strings.Contains(msg, "database is locked") {
 			return err
 		}
-		time.Sleep(retryDelay)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(retryDelay):
+		}
 	}
 	return fmt.Errorf("database is locked after %d retries", maxAttempts)
 }

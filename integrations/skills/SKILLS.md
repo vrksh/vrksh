@@ -1726,9 +1726,30 @@ echo 'hello' | vrk digest | vrk kv set last_hash
 
 ### Gotchas
 
-- **Trailing newline is stripped from stdin** — `echo 'hello'` and `printf 'hello'` both hash `hello` (5 bytes). This matches the vrksh convention but means the hash won't match `sha256sum` output on a file that ends with `\n`. Use `--file` to hash files byte-for-byte with no stripping.
+- **`echo` appends a newline — `echo 'hello' | vrk digest` hashes `"hello\n"` (6 bytes), not `"hello"` (5 bytes).** To hash a string without a trailing newline, use either of these instead:
+  ```bash
+  vrk digest 'hello'          # positional arg — no newline added
+  printf 'hello' | vrk digest # printf does not append \n
+  ```
+- **`--file` and `printf`-stdin produce identical hashes** — both stream bytes verbatim with no modification. `echo`-stdin and `--file` will differ if the file does not end with `\n`.
 - **`--compare` exits 0 for both match and mismatch** — the result is informational (stdout says `match: true`/`match: false`). The caller decides what to do. Use the stdout content, not the exit code, to detect mismatches.
 - **`--verify` uses constant-time comparison** — `hmac.Equal` prevents timing attacks. Never use `==` to compare HMACs.
 - **`--bare` and `--json` are mutually exclusive** — combining them exits 2 with a clear error.
-- **`input_bytes` counts raw bytes read, including the trailing newline** — for `echo 'hello'`, `input_bytes` is 6 even though only 5 bytes are hashed.
+- **`input_bytes` in JSON output counts bytes actually hashed** — for `echo 'hello'`, `input_bytes` is 6 (the newline is included).
 - **MD5 is available but not recommended for security** — offer it only when compatibility with existing MD5 checksums is required.
+
+---
+
+## Breaking changes
+
+### digest — stdin no longer strips trailing newline (streaming fix)
+
+Previously, `echo 'foo' | vrk digest` hashed `"foo"` (3 bytes).
+After this change it hashes `"foo\n"` (4 bytes, the literal pipe content).
+
+This aligns stdin with `--file` behaviour (which never stripped bytes) and
+fixes an OOM crash on binary pipes. `printf 'foo' | vrk digest` and
+`vrk digest foo` are unaffected — neither ever produced a trailing newline.
+
+Migration: replace `echo 'value' |` with `printf 'value' |` anywhere the old
+hash is expected.

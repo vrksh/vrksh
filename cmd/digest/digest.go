@@ -22,8 +22,8 @@ import (
 // isTerminal is a var so tests can override TTY detection without a real fd.
 var isTerminal = shared.IsTerminal
 
-// readAll is a var so tests can inject I/O errors.
-var readAll = io.ReadAll
+// copyToHash is a var so tests can inject I/O errors on the stdin streaming path.
+var copyToHash = func(h hash.Hash, r io.Reader) (int64, error) { return io.Copy(h, r) }
 
 // Run is the entry point for vrk digest. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
@@ -115,15 +115,22 @@ func Run() int {
 		return handleFiles(files, algo, newHash, keyFlag, hmacFlag, compareFlag, bareFlag, jsonFlag)
 	}
 
-	// Stdin / positional arg mode.
-	var input []byte
-	inputBytes := 0
+	// Stdin / positional arg mode — initialise the hash before branching so the
+	// stdin path can stream directly into it without buffering the entire input.
+	var h hash.Hash
+	if hmacFlag {
+		h = hmac.New(newHash, []byte(keyFlag))
+	} else {
+		h = newHash()
+	}
+
+	var inputBytes int64
 
 	if args := fs.Args(); len(args) > 0 {
-		// Positional arg: hash the string as-is, no newline stripping.
+		// Positional arg: hash the string as-is, no newline added.
 		s := strings.Join(args, " ")
-		input = []byte(s)
-		inputBytes = len(input)
+		_, _ = h.Write([]byte(s))
+		inputBytes = int64(len(s))
 	} else {
 		// TTY guard: interactive terminal with no piped input and no --file → usage error.
 		if isTerminal(int(os.Stdin.Fd())) {
@@ -136,7 +143,9 @@ func Run() int {
 			return shared.UsageErrorf("digest: no input: pipe text to stdin or use --file")
 		}
 
-		raw, err := readAll(os.Stdin)
+		// Stream stdin directly into the hash — no intermediate buffer, no OOM risk.
+		// Bytes are hashed verbatim, including any trailing newline from the pipe.
+		n, err := copyToHash(h, os.Stdin)
 		if err != nil {
 			if jsonFlag {
 				return shared.PrintJSONError(map[string]any{
@@ -146,19 +155,9 @@ func Run() int {
 			}
 			return shared.Errorf("digest: reading stdin: %v", err)
 		}
-		inputBytes = len(raw)
-		// Strip exactly one trailing newline — echo appends one; printf does not.
-		input = []byte(strings.TrimSuffix(string(raw), "\n"))
+		inputBytes = n
 	}
 
-	// Compute hash or HMAC.
-	var h hash.Hash
-	if hmacFlag {
-		h = hmac.New(newHash, []byte(keyFlag))
-	} else {
-		h = newHash()
-	}
-	_, _ = h.Write(input)
 	computed := h.Sum(nil)
 	hexHash := hex.EncodeToString(computed)
 

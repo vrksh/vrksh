@@ -2,6 +2,8 @@ package kv
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -486,5 +488,134 @@ func TestJSONErrorToStdout(t *testing.T) {
 	}
 	if c, _ := obj["code"].(float64); int(c) != 1 {
 		t.Errorf("code = %v, want 1", obj["code"])
+	}
+}
+
+// --- TTL preservation on incr/decr ---
+
+// TestIncrPreservesTTL verifies that incrementing a key with a TTL does not
+// clear expires_at. This was a bug: the INSERT ... ON CONFLICT always wrote
+// NULL for expires_at.
+func TestIncrPreservesTTL(t *testing.T) {
+	dbPath := newTempDB(t)
+	t.Setenv("VRK_KV_PATH", dbPath)
+
+	db, err := openDB()
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Write key with a 10-minute TTL.
+	if err := setVal(db, "default", "counter", "5", 10*time.Minute); err != nil {
+		t.Fatalf("setVal: %v", err)
+	}
+
+	// Increment — must preserve the TTL.
+	if _, err := incrVal(db, "default", "counter", 1); err != nil {
+		t.Fatalf("incrVal: %v", err)
+	}
+
+	// Value must be 6.
+	val, err := getVal(db, "default", "counter")
+	if err != nil {
+		t.Fatalf("getVal after incr: %v", err)
+	}
+	if val != "6" {
+		t.Errorf("value after incr = %q, want %q", val, "6")
+	}
+
+	// expires_at must still be set.
+	var expiresAt sql.NullInt64
+	if err := db.QueryRow(
+		"SELECT expires_at FROM kv WHERE ns = ? AND key = ?", "default", "counter",
+	).Scan(&expiresAt); err != nil {
+		t.Fatalf("query expires_at: %v", err)
+	}
+	if !expiresAt.Valid {
+		t.Error("expires_at is NULL after incr on a key with TTL — TTL must be preserved")
+	}
+	if expiresAt.Valid && expiresAt.Int64 <= time.Now().Unix() {
+		t.Errorf("expires_at %d is not in the future (now %d)", expiresAt.Int64, time.Now().Unix())
+	}
+}
+
+// TestIncrExpiredKeyClearsTTL verifies that incrementing an already-expired key
+// starts fresh from zero with no TTL — the expired TTL must not be re-instated.
+func TestIncrExpiredKeyClearsTTL(t *testing.T) {
+	dbPath := newTempDB(t)
+	t.Setenv("VRK_KV_PATH", dbPath)
+
+	db, err := openDB()
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Write key with a TTL in the past so it is already expired.
+	_, err = db.Exec(
+		`INSERT INTO kv (ns, key, value, expires_at) VALUES (?, ?, ?, ?)`,
+		"default", "counter", "99", time.Now().Unix()-1,
+	)
+	if err != nil {
+		t.Fatalf("insert expired key: %v", err)
+	}
+
+	// Increment — expired key treated as missing, result must be 1 with no TTL.
+	newVal, err := incrVal(db, "default", "counter", 1)
+	if err != nil {
+		t.Fatalf("incrVal on expired key: %v", err)
+	}
+	if newVal != 1 {
+		t.Errorf("newVal = %d, want 1 (expired key treated as 0)", newVal)
+	}
+
+	// expires_at must be NULL — no TTL should be re-instated.
+	var expiresAt sql.NullInt64
+	if err := db.QueryRow(
+		"SELECT expires_at FROM kv WHERE ns = ? AND key = ?", "default", "counter",
+	).Scan(&expiresAt); err != nil {
+		t.Fatalf("query expires_at: %v", err)
+	}
+	if expiresAt.Valid {
+		t.Errorf("expires_at = %d after incr on expired key, want NULL", expiresAt.Int64)
+	}
+}
+
+// TestBeginImmediateCancelledContext verifies that beginImmediate respects
+// context cancellation and does not block for the full retry budget when the
+// context is already done.
+func TestBeginImmediateCancelledContext(t *testing.T) {
+	dbPath := newTempDB(t)
+	t.Setenv("VRK_KV_PATH", dbPath)
+
+	db, err := openDB()
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("db.Conn: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Pre-cancel the context before calling beginImmediate.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	err = beginImmediate(ctx, conn)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Error("expected non-nil error from cancelled context, got nil")
+	}
+	// Must return well within one retry sleep interval (50ms).
+	// Without the ctx-aware select, a SQLITE_BUSY would sleep 50ms before checking.
+	const maxExpected = 100 * time.Millisecond
+	if elapsed > maxExpected {
+		t.Errorf("beginImmediate took %v with pre-cancelled context, want <%v", elapsed, maxExpected)
 	}
 }

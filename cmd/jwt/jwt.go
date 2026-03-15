@@ -85,9 +85,10 @@ func Run() int {
 	if err != nil {
 		return usageErrorf("jwt: %v", err)
 	}
-	// Strip whitespace: copy-paste artifacts or echo-appended newlines must not
-	// corrupt the base64url-encoded header or payload.
-	input = strings.TrimSpace(input)
+	// Strip exactly one trailing newline (echo appends one; printf does not).
+	// Leading/trailing spaces are the caller's responsibility — JWT tokens are
+	// base64url-encoded and contain no whitespace.
+	input = strings.TrimSuffix(input, "\n")
 
 	header, payload, signature, err := decodeJWT(input)
 	if err != nil {
