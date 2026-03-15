@@ -17,6 +17,7 @@
     {"name": "validate", "description": "JSONL schema validator — --schema, --strict, --fix, --json"},
     {"name": "mask",     "description": "Secret redactor — entropy + pattern-based, streaming"},
     {"name": "emit",     "description": "Structured logger — wraps stdin lines as JSONL log records"},
-    {"name": "throttle", "description": "Rate limiter for pipes — --rate N/s or N/m"}
+    {"name": "throttle", "description": "Rate limiter for pipes — --rate N/s or N/m"},
+    {"name": "digest",   "description": "Universal hasher — sha256/md5/sha512, --hmac, --compare"}
   ]
 }

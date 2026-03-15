@@ -1,0 +1,501 @@
+package digest
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"strings"
+	"testing"
+)
+
+// runDigest replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and returns
+// captured stdout, stderr, and the exit code. Not parallel-safe — tests share
+// global OS state.
+func runDigest(t *testing.T, args []string, stdinContent string) (stdout, stderr string, code int) {
+	t.Helper()
+
+	origStdin := os.Stdin
+	origStdout := os.Stdout
+	origStderr := os.Stderr
+	origArgs := os.Args
+
+	t.Cleanup(func() {
+		os.Stdin = origStdin
+		os.Stdout = origStdout
+		os.Stderr = origStderr
+		os.Args = origArgs
+	})
+
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
+	}
+	if _, err := io.WriteString(stdinW, stdinContent); err != nil {
+		t.Fatalf("write stdin: %v", err)
+	}
+	if err := stdinW.Close(); err != nil {
+		t.Fatalf("close stdin write end: %v", err)
+	}
+	os.Stdin = stdinR
+
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	os.Stdout = stdoutW
+
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	os.Stderr = stderrW
+
+	os.Args = append([]string{"digest"}, args...)
+	code = Run()
+
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+
+	var outBuf, errBuf bytes.Buffer
+	if _, err := io.Copy(&outBuf, stdoutR); err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	if _, err := io.Copy(&errBuf, stderrR); err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	_ = stdoutR.Close()
+	_ = stderrR.Close()
+
+	return outBuf.String(), errBuf.String(), code
+}
+
+// writeTempFile creates a temp file with the given content and returns its path.
+func writeTempFile(t *testing.T, content string) string {
+	t.Helper()
+	f, err := os.CreateTemp("", "digest-test-*")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(f.Name()) })
+	if _, err := io.WriteString(f, content); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close temp file: %v", err)
+	}
+	return f.Name()
+}
+
+func TestHappyPathSHA256(t *testing.T) {
+	stdout, _, code := runDigest(t, nil, "hello\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	want := "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\n"
+	if stdout != want {
+		t.Errorf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+func TestHappyPathMD5(t *testing.T) {
+	stdout, _, code := runDigest(t, []string{"--algo", "md5"}, "hello\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	want := "md5:5d41402abc4b2a76b9719d911017c592\n"
+	if stdout != want {
+		t.Errorf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+func TestHappyPathSHA512(t *testing.T) {
+	stdout, _, code := runDigest(t, []string{"--algo", "sha512"}, "hello\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.HasPrefix(stdout, "sha512:") {
+		t.Errorf("stdout = %q, want sha512: prefix", stdout)
+	}
+	hexPart := strings.TrimPrefix(strings.TrimSuffix(stdout, "\n"), "sha512:")
+	if len(hexPart) != 128 {
+		t.Errorf("sha512 hex length = %d, want 128; hex=%q", len(hexPart), hexPart)
+	}
+}
+
+func TestBare(t *testing.T) {
+	stdout, _, code := runDigest(t, []string{"--bare"}, "hello\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	want := "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\n"
+	if stdout != want {
+		t.Errorf("stdout = %q, want %q", stdout, want)
+	}
+	if strings.Contains(strings.TrimSuffix(stdout, "\n"), ":") {
+		t.Errorf("--bare output should not contain colon, got %q", stdout)
+	}
+}
+
+func TestJSONOutput(t *testing.T) {
+	stdout, _, code := runDigest(t, []string{"--json"}, "hello\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if obj["input_bytes"] != float64(6) {
+		t.Errorf("input_bytes = %v, want 6 (raw bytes including newline)", obj["input_bytes"])
+	}
+	if obj["algo"] != "sha256" {
+		t.Errorf("algo = %q, want sha256", obj["algo"])
+	}
+	if obj["hash"] != "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" {
+		t.Errorf("hash = %q, want sha256 of 'hello'", obj["hash"])
+	}
+}
+
+func TestPositionalArg(t *testing.T) {
+	// Positional arg bypasses stdin entirely — TTY guard must not fire.
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	defer func() { isTerminal = orig }()
+
+	stdout, _, code := runDigest(t, []string{"hello"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	// Same hash as stdin "hello\n" after stripping (both yield "hello").
+	want := "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\n"
+	if stdout != want {
+		t.Errorf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+func TestPositionalArgJSONInputBytes(t *testing.T) {
+	// Positional arg: input_bytes = len("hello") = 5, not 6.
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	defer func() { isTerminal = orig }()
+
+	stdout, _, code := runDigest(t, []string{"--json", "hello"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("not valid JSON: %v, got %q", err, stdout)
+	}
+	if obj["input_bytes"] != float64(5) {
+		t.Errorf("input_bytes = %v, want 5 (no newline in positional arg)", obj["input_bytes"])
+	}
+}
+
+func TestEmptyStdin(t *testing.T) {
+	stdout, _, code := runDigest(t, nil, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	want := "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n"
+	if stdout != want {
+		t.Errorf("stdout = %q, want hash of empty string", stdout)
+	}
+}
+
+func TestEmptyStdinEcho(t *testing.T) {
+	// echo '' sends \n; strip exactly one trailing \n → hash of empty string.
+	stdout, _, code := runDigest(t, nil, "\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	want := "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n"
+	if stdout != want {
+		t.Errorf("stdout = %q, want hash of empty string", stdout)
+	}
+}
+
+func TestFileHash(t *testing.T) {
+	// File content "hello" — no newline stripping for files.
+	path := writeTempFile(t, "hello")
+	stdout, _, code := runDigest(t, []string{"--file", path}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	want := "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\n"
+	if stdout != want {
+		t.Errorf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+func TestFileNotFound(t *testing.T) {
+	_, _, code := runDigest(t, []string{"--file", "/no/such/file/digest-test-xyz"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+}
+
+func TestCompareMatch(t *testing.T) {
+	f1 := writeTempFile(t, "hello")
+	f2 := writeTempFile(t, "hello")
+	stdout, _, code := runDigest(t, []string{"--file", f1, "--file", f2, "--compare"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if strings.TrimSpace(stdout) != "match: true" {
+		t.Errorf("stdout = %q, want 'match: true'", stdout)
+	}
+}
+
+func TestCompareMismatch(t *testing.T) {
+	f1 := writeTempFile(t, "hello")
+	f2 := writeTempFile(t, "world")
+	stdout, _, code := runDigest(t, []string{"--file", f1, "--file", f2, "--compare"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (mismatch is informational, not an error)", code)
+	}
+	if strings.TrimSpace(stdout) != "match: false" {
+		t.Errorf("stdout = %q, want 'match: false'", stdout)
+	}
+}
+
+func TestCompareJSON(t *testing.T) {
+	f1 := writeTempFile(t, "hello")
+	f2 := writeTempFile(t, "hello")
+	stdout, _, code := runDigest(t, []string{"--file", f1, "--file", f2, "--compare", "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("not valid JSON: %v, got %q", err, stdout)
+	}
+	if obj["match"] != true {
+		t.Errorf("match = %v, want true", obj["match"])
+	}
+	if obj["algo"] != "sha256" {
+		t.Errorf("algo = %q, want sha256", obj["algo"])
+	}
+	files, ok := obj["files"].([]any)
+	if !ok || len(files) != 2 {
+		t.Errorf("files = %v, want 2-element array", obj["files"])
+	}
+	hashes, ok := obj["hashes"].([]any)
+	if !ok || len(hashes) != 2 {
+		t.Errorf("hashes = %v, want 2-element array", obj["hashes"])
+	}
+}
+
+func TestHMAC(t *testing.T) {
+	stdout, _, code := runDigest(t, []string{"--hmac", "--key", "secret"}, "payload\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.HasPrefix(stdout, "sha256:") {
+		t.Errorf("stdout = %q, want sha256: prefix", stdout)
+	}
+	hexPart := strings.TrimPrefix(strings.TrimSuffix(stdout, "\n"), "sha256:")
+	if len(hexPart) != 64 {
+		t.Errorf("HMAC hex length = %d, want 64; hex=%q", len(hexPart), hexPart)
+	}
+}
+
+func TestHMACVerifyMatch(t *testing.T) {
+	// Produce HMAC then verify — must exit 0.
+	bare, _, code := runDigest(t, []string{"--hmac", "--key", "secret", "--bare"}, "payload\n")
+	if code != 0 {
+		t.Fatalf("produce HMAC: exit code = %d, want 0", code)
+	}
+	knownHMAC := strings.TrimSpace(bare)
+
+	_, _, code = runDigest(t, []string{"--hmac", "--key", "secret", "--verify", knownHMAC}, "payload\n")
+	if code != 0 {
+		t.Fatalf("verify match: exit code = %d, want 0", code)
+	}
+}
+
+func TestHMACVerifyMismatch(t *testing.T) {
+	// 64-char hex string that won't match the real HMAC.
+	wrongHMAC := strings.Repeat("de", 32)
+	_, _, code := runDigest(t, []string{"--hmac", "--key", "secret", "--verify", wrongHMAC}, "payload\n")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (mismatch)", code)
+	}
+}
+
+func TestHMACFile(t *testing.T) {
+	// HMAC of file "payload" (no trailing newline) should equal HMAC of stdin "payload\n"
+	// after stripping — both hash the bytes "payload".
+	path := writeTempFile(t, "payload")
+	stdout, _, code := runDigest(t, []string{"--hmac", "--key", "secret", "--file", path}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.HasPrefix(stdout, "sha256:") {
+		t.Errorf("stdout = %q, want sha256: prefix", stdout)
+	}
+	fileHex := strings.TrimPrefix(strings.TrimSuffix(stdout, "\n"), "sha256:")
+
+	// stdin path: "payload\n" → strip \n → HMAC("payload")
+	stdinBare, _, _ := runDigest(t, []string{"--hmac", "--key", "secret", "--bare"}, "payload\n")
+	stdinHex := strings.TrimSpace(stdinBare)
+
+	if fileHex != stdinHex {
+		t.Errorf("file HMAC %q != stdin HMAC %q (both should hash 'payload')", fileHex, stdinHex)
+	}
+}
+
+func TestHelpExitsZero(t *testing.T) {
+	stdout, _, code := runDigest(t, []string{"--help"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "digest") {
+		t.Errorf("--help stdout = %q, want it to contain 'digest'", stdout)
+	}
+}
+
+func TestTTYNoFile(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	defer func() { isTerminal = orig }()
+
+	stdout, stderr, code := runDigest(t, nil, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty on usage error", stdout)
+	}
+	if !strings.Contains(stderr, "no input") {
+		t.Errorf("stderr = %q, want 'no input'", stderr)
+	}
+}
+
+func TestTTYWithJSON(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	defer func() { isTerminal = orig }()
+
+	stdout, stderr, code := runDigest(t, []string{"--json"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty when --json active", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing 'error' field")
+	}
+	if obj["code"] != float64(2) {
+		t.Errorf("JSON code = %v, want 2", obj["code"])
+	}
+}
+
+func TestJSONErrorToStdout(t *testing.T) {
+	origReadAll := readAll
+	readAll = func(r io.Reader) ([]byte, error) {
+		return nil, errors.New("simulated read error")
+	}
+	defer func() { readAll = origReadAll }()
+
+	stdout, stderr, code := runDigest(t, []string{"--json"}, "any input")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty when --json active", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing 'error' field")
+	}
+	if obj["code"] != float64(1) {
+		t.Errorf("JSON code = %v, want 1", obj["code"])
+	}
+}
+
+func TestBareAndJSONMutuallyExclusive(t *testing.T) {
+	_, _, code := runDigest(t, []string{"--bare", "--json"}, "hello\n")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+func TestUnknownAlgo(t *testing.T) {
+	_, _, code := runDigest(t, []string{"--algo", "crc32"}, "hello\n")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+func TestHMACMissingKey(t *testing.T) {
+	_, _, code := runDigest(t, []string{"--hmac"}, "hello\n")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+func TestVerifyWithoutHMAC(t *testing.T) {
+	_, _, code := runDigest(t, []string{"--verify", "abc123"}, "hello\n")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+func TestCompareNeedsFiles(t *testing.T) {
+	f1 := writeTempFile(t, "hello")
+	_, _, code := runDigest(t, []string{"--file", f1, "--compare"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+func TestCompareNoFiles(t *testing.T) {
+	_, _, code := runDigest(t, []string{"--compare"}, "hello\n")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+func TestUnknownFlag(t *testing.T) {
+	_, _, code := runDigest(t, []string{"--notaflag"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+func TestPropertyHMACVerify(t *testing.T) {
+	// Property: for any input and key, produce HMAC then verify → always exit 0.
+	cases := []struct {
+		input string
+		key   string
+	}{
+		{"hello\n", "secret"},
+		{"test payload with spaces\n", "my-secret-key"},
+		{"\n", "k"}, // empty after stripping
+		{"", "key"}, // truly empty
+		{"data\n", "k3y-w1th-sp3c1al-ch@rs!"},
+	}
+	for _, tc := range cases {
+		bare, _, code := runDigest(t, []string{"--hmac", "--key", tc.key, "--bare"}, tc.input)
+		if code != 0 {
+			t.Errorf("input=%q key=%q: produce HMAC exit %d, want 0", tc.input, tc.key, code)
+			continue
+		}
+		knownHMAC := strings.TrimSpace(bare)
+		_, _, code = runDigest(t, []string{"--hmac", "--key", tc.key, "--verify", knownHMAC}, tc.input)
+		if code != 0 {
+			t.Errorf("input=%q key=%q: verify exit %d, want 0 (HMAC=%q)", tc.input, tc.key, code, knownHMAC)
+		}
+	}
+}

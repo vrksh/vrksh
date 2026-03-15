@@ -23,6 +23,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `jsonl` | Convert JSON arrays to JSONL or collect JSONL into an array | `--collect`, `--json` |
 | `links` | Extract hyperlinks from markdown, HTML, or plain text as JSONL | `--bare`, `--json` |
 | `throttle` | Rate-limit lines from stdin | `--rate <N/s\|N/m>`, `--burst N`, `--tokens-field <f>`, `--json` |
+| `digest` | Hash stdin or files; HMAC with --hmac --key; file comparison with --compare | `--algo <sha256\|md5\|sha512>`, `--bare`, `--file`, `--hmac`, `--key`, `--verify`, `--json` |
 
 ---
 

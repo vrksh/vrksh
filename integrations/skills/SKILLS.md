@@ -1650,3 +1650,85 @@ vrk grab https://api.example.com/items | vrk jsonl | vrk mask | vrk jsonl --coll
 - **Streaming in split mode** — uses `json.Decoder`, so arrays larger than memory are handled safely.
 - **Round-trip is structurally equal, not byte-identical** — `json.Marshal` sorts object keys alphabetically. `{"b":2,"a":1}` round-trips as `{"a":1,"b":2}`.
 - **`--collect` skips blank lines** — empty lines between JSONL records are silently skipped.
+
+## digest — Universal Hasher
+
+Hashes stdin or files. SHA-256 by default. Outputs `algo:hash`. Supports HMAC for message authentication and file comparison.
+Input: positional argument or stdin, or one or more `--file` paths.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--algo <name>` | `-a` | Hash algorithm: `sha256` (default), `md5`, `sha512` |
+| `--bare` | `-b` | Output hash only — no `algo:` prefix; mutually exclusive with `--json` |
+| `--file <path>` | none | File to hash; repeatable for multiple files |
+| `--compare` | none | Compare hashes of all `--file` inputs; outputs `match: true` or `match: false`; exits 0 either way |
+| `--hmac` | none | Compute HMAC instead of plain hash; requires `--key` |
+| `--key <secret>` | `-k` | HMAC secret key |
+| `--verify <hex>` | none | Compare computed HMAC against this hex string; exits 0 on match, 1 on mismatch (constant-time) |
+| `--json` | `-j` | Emit JSON object with metadata |
+
+### --json output shapes
+
+| Mode | Shape |
+|------|-------|
+| stdin / positional | `{"input_bytes":N,"algo":"sha256","hash":"..."}` |
+| `--file` | `{"file":"<path>","algo":"sha256","hash":"..."}` |
+| `--hmac` | `{"input_bytes":N,"algo":"sha256","hmac":"..."}` |
+| `--compare` | `{"files":[...],"algo":"sha256","hashes":[...],"match":true}` |
+| any error | `{"error":"digest: ...","code":N}` |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success — hash produced, `--compare` result (match or mismatch), `--hmac --verify` match |
+| 1 | Runtime error — `--hmac --verify` mismatch, file not found, I/O error |
+| 2 | Usage error — interactive terminal with no `--file`; unknown flag; unknown `--algo`; `--hmac` without `--key`; `--verify` without `--hmac`; `--compare` with fewer than 2 `--file` values; `--bare` + `--json` together |
+
+### Examples
+
+```bash
+# Hash stdin (default SHA-256)
+echo 'hello' | vrk digest
+# → sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+
+# Positional arg form — identical result
+vrk digest 'hello'
+
+# Different algorithms
+echo 'hello' | vrk digest --algo md5
+echo 'hello' | vrk digest --algo sha512
+
+# No prefix — useful when piping the hash onward
+echo 'hello' | vrk digest --bare
+
+# JSON output with metadata
+echo 'hello' | vrk digest --json
+
+# Hash a file
+vrk digest --file /path/to/file
+
+# Compare two files (exits 0 whether they match or not)
+vrk digest --file a.txt --file b.txt --compare
+# → match: true   or   match: false
+
+# HMAC — produce and verify a message authentication code
+echo 'payload' | vrk digest --hmac --key mysecret
+HMAC=$(echo 'payload' | vrk digest --hmac --key mysecret --bare)
+echo 'payload' | vrk digest --hmac --key mysecret --verify "$HMAC"
+# → exit 0 (match); exit 1 on mismatch
+
+# Pipeline: hash → store
+echo 'hello' | vrk digest | vrk kv set last_hash
+```
+
+### Gotchas
+
+- **Trailing newline is stripped from stdin** — `echo 'hello'` and `printf 'hello'` both hash `hello` (5 bytes). This matches the vrksh convention but means the hash won't match `sha256sum` output on a file that ends with `\n`. Use `--file` to hash files byte-for-byte with no stripping.
+- **`--compare` exits 0 for both match and mismatch** — the result is informational (stdout says `match: true`/`match: false`). The caller decides what to do. Use the stdout content, not the exit code, to detect mismatches.
+- **`--verify` uses constant-time comparison** — `hmac.Equal` prevents timing attacks. Never use `==` to compare HMACs.
+- **`--bare` and `--json` are mutually exclusive** — combining them exits 2 with a clear error.
+- **`input_bytes` counts raw bytes read, including the trailing newline** — for `echo 'hello'`, `input_bytes` is 6 even though only 5 bytes are hashed.
+- **MD5 is available but not recommended for security** — offer it only when compatibility with existing MD5 checksums is required.

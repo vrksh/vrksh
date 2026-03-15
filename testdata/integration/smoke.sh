@@ -537,11 +537,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 17 ] \
-  && { echo "PASS: --manifest lists 17 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 17)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 18 ] \
+  && { echo "PASS: --manifest lists 18 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 18)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
@@ -1142,6 +1142,45 @@ assert_exit "prompt --explain | mask: exits 0" 0 "$ec"
 echo "$explain_mask" | grep -q 'curl' \
   && { echo "PASS: prompt --explain | mask: output contains curl"; PASS=$((PASS+1)); } \
   || { echo "FAIL: prompt --explain | mask: curl not found in output"; FAIL=$((FAIL+1)); }
+
+unset VRK_KV_PATH
+
+# ---------------------------------------------------------------------------
+# Section 25 — digest pipelines
+# ---------------------------------------------------------------------------
+echo "--- Section 25: digest pipelines ---"
+
+VRK_KV_PATH="$TMPDIR/digest_kv.db"
+export VRK_KV_PATH
+
+# digest | kv: store hash, retrieve it, confirm it's the expected value.
+echo 'hello' | $VRK digest | $VRK kv set digest_out
+digest_kv=$($VRK kv get digest_out)
+[ "$digest_kv" = "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" ] \
+  && { echo "PASS: digest | kv: hash stored and retrieved correctly"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: digest | kv: got '$digest_kv'"; FAIL=$((FAIL+1)); }
+
+# digest --json | validate: JSON output validates against schema.
+DIGEST_SCHEMA='{"input_bytes":"number","algo":"string","hash":"string"}'
+ec=$(set +e; echo 'hello' | $VRK digest --json | $VRK validate --schema "$DIGEST_SCHEMA" >/dev/null 2>&1; echo $?)
+assert_exit "digest --json | validate: exits 0" 0 "$ec"
+
+# HMAC round-trip in pipeline: produce with --bare, feed to --verify.
+HMAC_HEX=$(echo 'pipeline-payload' | $VRK digest --hmac --key pipelinekey --bare)
+ec=$(set +e; echo 'pipeline-payload' | $VRK digest --hmac --key pipelinekey --verify "$HMAC_HEX" >/dev/null 2>&1; echo $?)
+assert_exit "digest HMAC round-trip in pipeline: exits 0" 0 "$ec"
+
+# digest --compare via pipeline: confirm both match and mismatch exit 0.
+f_a="$TMPDIR/digest_a.txt"
+f_b="$TMPDIR/digest_b.txt"
+f_c="$TMPDIR/digest_c.txt"
+printf 'same' > "$f_a"
+printf 'same' > "$f_b"
+printf 'diff' > "$f_c"
+ec=$(set +e; $VRK digest --file "$f_a" --file "$f_b" --compare >/dev/null 2>&1; echo $?)
+assert_exit "digest --compare match exits 0" 0 "$ec"
+ec=$(set +e; $VRK digest --file "$f_a" --file "$f_c" --compare >/dev/null 2>&1; echo $?)
+assert_exit "digest --compare mismatch exits 0" 0 "$ec"
 
 unset VRK_KV_PATH
 
