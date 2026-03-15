@@ -66,6 +66,15 @@ assert_stdout_empty() {
   fi
 }
 
+assert_stderr_empty() {
+  local desc=$1 stderr=$2
+  if [ -z "$stderr" ]; then
+    ok "$desc (stderr empty)"
+  else
+    fail "$desc" "expected empty stderr, got: $stderr"
+  fi
+}
+
 assert_line_count() {
   local desc=$1 expected=$2 actual=$3
   local count
@@ -238,6 +247,26 @@ if [ "$elapsed" -ge 1 ] && [ "$elapsed" -le 5 ]; then
 else
   fail "timing: seq 3 at 2/s" "elapsed ${elapsed}s, want 1-5s"
 fi
+
+# ------------------------------------------------------------
+# --quiet flag
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+# --quiet suppresses usage error when --rate is omitted (fires after defer)
+stderr=$(printf 'a\nb\n' | "$VRK" throttle --quiet 2>&1 >/dev/null) || true
+exit_code=0; printf 'a\nb\n' | "$VRK" throttle --quiet > /dev/null 2>&1 || exit_code=$?
+assert_exit         "--quiet error: exit 2 (missing --rate)" 2  "$exit_code"
+assert_stderr_empty "--quiet error: stderr empty"                "$stderr"
+
+# --quiet success: stdout unaffected
+stdout=$(printf 'a\nb\n' | "$VRK" throttle --rate 1000/s --quiet 2>/dev/null)
+stderr=$(printf 'a\nb\n' | "$VRK" throttle --rate 1000/s --quiet 2>&1 >/dev/null)
+exit_code=0; printf 'a\nb\n' | "$VRK" throttle --rate 1000/s --quiet > /dev/null 2>&1 || exit_code=$?
+assert_exit            "--quiet success: exit 0"               0    "$exit_code"
+assert_stdout_contains "--quiet success: stdout has lines"     "a"  "$stdout"
+assert_stderr_empty    "--quiet success: no stderr"                 "$stderr"
 
 # ------------------------------------------------------------
 # Summary

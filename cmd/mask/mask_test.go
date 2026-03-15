@@ -427,6 +427,39 @@ func TestPropertyExitCodesOnly(t *testing.T) {
 	}
 }
 
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on error.
+// Exit code is unaffected.
+func TestQuietSuppressesStderr(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	t.Cleanup(func() { isTerminal = orig })
+
+	_, stderr, code := runMask(t, []string{"--quiet"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (usage: no piped input)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, stderr, code := runMask(t, []string{"--quiet"}, "hello world")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "hello world") {
+		t.Errorf("stdout = %q, want it to contain the input line", stdout)
+	}
+}
+
 func TestPropertyRedactedNeverLeaksOriginal(t *testing.T) {
 	// After redaction, the original secret value must not appear anywhere in stdout.
 	secret := "sk-ant-SuperSecretValue123"

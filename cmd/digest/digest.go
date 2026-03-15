@@ -34,6 +34,7 @@ func Run() int {
 		algo        string
 		bareFlag    bool
 		jsonFlag    bool
+		quietFlag   bool
 		files       []string
 		compareFlag bool
 		hmacFlag    bool
@@ -49,6 +50,7 @@ func Run() int {
 	fs.StringVarP(&keyFlag, "key", "k", "", "HMAC secret key (required with --hmac)")
 	fs.StringVar(&verifyFlag, "verify", "", "known HMAC hex; exits 0 if match, 1 if mismatch")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit JSON object")
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -56,6 +58,9 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
+
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	// --bare and --json are mutually exclusive. Since --json is set, use JSON error path.
 	if bareFlag && jsonFlag {

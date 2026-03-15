@@ -191,6 +191,40 @@ else
 fi
 
 # ------------------------------------------------------------
+# --quiet flag
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+# --quiet suppresses usage error when --size is omitted (fires after defer)
+stderr=$(printf 'hello' | "$VRK" chunk --quiet 2>&1 >/dev/null) || true
+exit_code=0; printf 'hello' | "$VRK" chunk --quiet > /dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 2 ]; then
+  ok "--quiet error: exit 2 (missing --size)"
+else
+  fail "--quiet error: exit 2 (missing --size)" "expected exit 2, got $exit_code"
+fi
+if [ -z "$stderr" ]; then
+  ok "--quiet error: stderr empty"
+else
+  fail "--quiet error: stderr empty" "got: $stderr"
+fi
+
+# --quiet success: stdout unaffected
+stdout=$(printf 'hello world' | "$VRK" chunk --size 100 --quiet 2>/dev/null) || true
+exit_code=0; printf 'hello world' | "$VRK" chunk --size 100 --quiet > /dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 0 ]; then
+  ok "--quiet success: exit 0"
+else
+  fail "--quiet success: exit 0" "expected exit 0, got $exit_code"
+fi
+if echo "$stdout" | grep -q '"text"'; then
+  ok "--quiet success: stdout has chunk"
+else
+  fail "--quiet success: stdout has chunk" "stdout did not contain '\"text\"'. got: $stdout"
+fi
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

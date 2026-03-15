@@ -592,3 +592,37 @@ func TestJSONUsageErrorsToStdout(t *testing.T) {
 		assertJSONUsageError(t, "no input on TTY", stdout, stderr, code)
 	})
 }
+
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on error.
+// Exit code is unaffected. TTY with no input triggers the usage error after
+// the defer is registered.
+func TestQuietSuppressesStderr(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	t.Cleanup(func() { isTerminal = orig })
+
+	_, stderr, code := runPrompt(t, map[string]string{}, []string{"--quiet"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (usage: no input)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success. --explain is used so no API call is made.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, stderr, code := runPrompt(t, map[string]string{}, []string{"--explain", "--quiet"}, "what is 2+2")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "curl") {
+		t.Errorf("stdout = %q, want --explain curl output", stdout)
+	}
+}

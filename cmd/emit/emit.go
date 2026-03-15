@@ -58,7 +58,6 @@ func Run() int {
 	var tag string
 	var msg string
 	var parseLevel bool
-
 	fs.StringVarP(&level, "level", "l", "info", "log level: debug, info, warn, error")
 	fs.StringVar(&tag, "tag", "", "add tag field to every record")
 	fs.StringVar(&msg, "msg", "", "override message; stdin treated as JSON to merge extra fields")

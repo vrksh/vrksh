@@ -66,6 +66,15 @@ assert_stdout_empty() {
   fi
 }
 
+assert_stderr_empty() {
+  local desc=$1 stderr=$2
+  if [ -z "$stderr" ]; then
+    ok "$desc (stderr empty)"
+  else
+    fail "$desc" "expected empty stderr, got: $stderr"
+  fi
+}
+
 echo "vrk plain — smoke tests"
 echo "binary: $VRK"
 echo ""
@@ -164,6 +173,19 @@ got=$("$VRK" plain '**hello**' --json)
 exit_code=$?
 assert_exit            "positional --json: exit 0"     0        "$exit_code"
 assert_stdout_contains "positional --json: text field" '"text":"hello"' "$got"
+
+# ------------------------------------------------------------
+# --quiet flag
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+stdout=$(echo "**bold**" | "$VRK" plain --quiet 2>/dev/null)
+stderr=$(echo "**bold**" | "$VRK" plain --quiet 2>&1 >/dev/null)
+exit_code=0; echo "**bold**" | "$VRK" plain --quiet > /dev/null 2>&1 || exit_code=$?
+assert_exit            "--quiet success: exit 0"          0       "$exit_code"
+assert_stdout_contains "--quiet success: stdout has text" "bold"  "$stdout"
+assert_stderr_empty    "--quiet success: no stderr"               "$stderr"
 
 # ------------------------------------------------------------
 # Summary

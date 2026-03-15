@@ -278,6 +278,21 @@ assert_contains "--help lists --hmac"  "--hmac"  "$out"
 assert_contains "--help lists --verify" "--verify" "$out"
 
 # ---------------------------------------------------------------------------
+# --quiet flag
+# ---------------------------------------------------------------------------
+echo "--- --quiet flag ---"
+
+out=$(echo "hello" | "$VRK" digest --quiet 2>/dev/null)
+err=$(echo "hello" | "$VRK" digest --quiet 2>&1 >/dev/null)
+if echo "hello" | "$VRK" digest --quiet >/dev/null 2>&1; then
+  pass "--quiet success: exit 0"
+else
+  fail "--quiet success: exit 0" "non-zero exit"
+fi
+assert_contains "--quiet success: stdout has hash"   "sha256:" "$out"
+[ -z "$err" ] && pass "--quiet success: stderr empty" || fail "--quiet success: stderr empty" "got: $err"
+
+# ---------------------------------------------------------------------------
 # Results
 # ---------------------------------------------------------------------------
 echo ""

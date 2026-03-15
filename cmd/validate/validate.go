@@ -42,13 +42,14 @@ type metaRecord struct {
 func Run() int {
 	fs := pflag.NewFlagSet("validate", pflag.ContinueOnError)
 	var schemaFlag string
-	var strict, fix, jsonOut bool
+	var strict, fix, jsonOut, quietFlag bool
 
 	fs.StringVarP(&schemaFlag, "schema", "s", "", "JSON schema or file path (required)")
 	// --strict has no shorthand — -s is reserved for --schema.
 	fs.BoolVar(&strict, "strict", false, "exit 1 on first invalid line")
 	fs.BoolVar(&fix, "fix", false, "attempt to repair invalid lines via prompt")
 	fs.BoolVarP(&jsonOut, "json", "j", false, "append metadata record to stdout at end")
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -57,6 +58,9 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
+
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	if schemaFlag == "" {
 		return shared.UsageErrorf("validate: --schema is required")

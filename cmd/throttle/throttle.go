@@ -44,12 +44,13 @@ func Run() int {
 	var rateStr string
 	var burst int
 	var tokensField string
-	var jsonFlag bool
+	var jsonFlag, quietFlag bool
 
 	fs.StringVarP(&rateStr, "rate", "r", "", "rate limit: N/s or N/m (required)")
 	fs.IntVar(&burst, "burst", 0, "emit first N lines without delay")
 	fs.StringVar(&tokensField, "tokens-field", "", "rate by token count of a JSONL field")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `emit {"_vrk":"throttle","rate":"...","lines":N,"elapsed_ms":N} after all lines`)
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -57,6 +58,9 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
+
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	// --rate is required.
 	if rateStr == "" {

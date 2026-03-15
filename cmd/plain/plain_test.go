@@ -310,3 +310,36 @@ func TestJSONErrorToStdout(t *testing.T) {
 		t.Error("JSON missing 'error' field")
 	}
 }
+
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on error.
+// Exit code is unaffected.
+func TestQuietSuppressesStderr(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	t.Cleanup(func() { isTerminal = orig })
+
+	_, stderr, code := runPlain(t, []string{"--quiet"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (usage: no piped input)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, stderr, code := runPlain(t, []string{"--quiet"}, "**bold**")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "bold") {
+		t.Errorf("stdout = %q, want plain text containing 'bold'", stdout)
+	}
+}

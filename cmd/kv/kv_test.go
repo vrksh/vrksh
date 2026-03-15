@@ -582,6 +582,42 @@ func TestIncrExpiredKeyClearsTTL(t *testing.T) {
 	}
 }
 
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on error.
+// Exit code is unaffected. Getting a missing key triggers a runtime error.
+func TestQuietSuppressesStderr(t *testing.T) {
+	db := t.TempDir() + "/kv.db"
+	_, stderr, code := runKV(t, db, []string{"--quiet", "get", "nosuchkey"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (key not found)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	db := t.TempDir() + "/kv.db"
+	_, _, setCode := runKV(t, db, []string{"set", "greetkey", "hello"}, "")
+	if setCode != 0 {
+		t.Fatalf("set exit code = %d, want 0", setCode)
+	}
+
+	stdout, stderr, code := runKV(t, db, []string{"--quiet", "get", "greetkey"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if strings.TrimSpace(stdout) != "hello" {
+		t.Errorf("stdout = %q, want %q", strings.TrimSpace(stdout), "hello")
+	}
+}
+
 // TestBeginImmediateCancelledContext verifies that beginImmediate respects
 // context cancellation and does not block for the full retry budget when the
 // context is already done.

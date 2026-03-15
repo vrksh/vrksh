@@ -532,3 +532,36 @@ func TestPropertyRecordFields(t *testing.T) {
 		}
 	}
 }
+
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on I/O error.
+// Exit code is unaffected.
+func TestQuietSuppressesStderr(t *testing.T) {
+	orig := readAll
+	readAll = func(r io.Reader) ([]byte, error) { return nil, errors.New("simulated read error") }
+	t.Cleanup(func() { readAll = orig })
+
+	_, stderr, code := runLinks(t, []string{"--quiet"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (I/O error)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, stderr, code := runLinks(t, []string{"--quiet"}, "[example](https://example.com)")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "example.com") {
+		t.Errorf("stdout = %q, want link record containing example.com", stdout)
+	}
+}

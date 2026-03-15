@@ -715,3 +715,52 @@ func TestPropertyValidLinesPassedThrough(t *testing.T) {
 		}
 	}
 }
+
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on I/O error.
+// Exit code is unaffected.
+func TestQuietSuppressesStderr(t *testing.T) {
+	orig := newStdinReader
+	newStdinReader = func() io.Reader { return &errorReader{err: fmt.Errorf("injected read error")} }
+	t.Cleanup(func() { newStdinReader = orig })
+
+	_, stderr, code := runValidate(t, "", []string{"--schema", `{"x":"string"}`, "--quiet"})
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (I/O error)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietSuppressesValidationWarnings verifies that --quiet suppresses
+// per-line validation warnings emitted to stderr. Exit code and stdout are
+// unaffected: invalid lines are not passed through.
+func TestQuietSuppressesValidationWarnings(t *testing.T) {
+	stdout, stderr, code := runValidate(t, `{"x":123}`, []string{"--schema", `{"x":"string"}`, "--quiet"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (warn mode, not strict)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty (warnings suppressed)", stderr)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty (invalid line not passed through)", stdout)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, stderr, code := runValidate(t, `{"x":"hello"}`, []string{"--schema", `{"x":"string"}`, "--quiet"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if !strings.Contains(stdout, `"x"`) {
+		t.Errorf("stdout = %q, want the valid record passed through", stdout)
+	}
+}

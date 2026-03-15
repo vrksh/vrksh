@@ -66,9 +66,11 @@ func Run() int {
 	var entropyThreshold float64
 	var jsonOut bool
 
+	var quietFlag bool
 	fs.StringArrayVar(&patterns, "pattern", nil, "additional pattern regex (repeatable)")
 	fs.Float64Var(&entropyThreshold, "entropy", 4.0, "Shannon entropy threshold (default 4.0; lower = more aggressive)")
 	fs.BoolVarP(&jsonOut, "json", "j", false, "append metadata JSON record after text output")
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	// Suppress pflag's automatic error printing so all output goes through shared helpers.
 	fs.SetOutput(io.Discard)
@@ -79,6 +81,9 @@ func Run() int {
 		}
 		return shared.UsageErrorf("mask: %s", err)
 	}
+
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	// Compile all --pattern regexes before touching stdin so that an invalid
 	// regex exits 2 immediately without consuming any input.

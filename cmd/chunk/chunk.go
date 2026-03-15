@@ -33,9 +33,11 @@ func Run() int {
 	var size int
 	var overlap int
 	var by string
+	var quietFlag bool
 	fs.IntVar(&size, "size", 0, "max tokens per chunk (required, >= 1)")
 	fs.IntVar(&overlap, "overlap", 0, `token overlap between adjacent chunks (must be < --size)`)
 	fs.StringVar(&by, "by", "", `chunking strategy; supported: "paragraph"`)
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -43,6 +45,9 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
+
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	// --size is required and must be >= 1.
 	if !fs.Changed("size") {

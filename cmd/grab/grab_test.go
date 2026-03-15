@@ -543,6 +543,42 @@ func TestJSONModeUnreachableHost(t *testing.T) {
 	}
 }
 
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on error.
+// Exit code is unaffected. An ftp:// URL is invalid (only http/https accepted),
+// triggering a usage error after the defer is registered.
+func TestQuietSuppressesStderr(t *testing.T) {
+	_, stderr, code := runGrab(t, []string{"--quiet", "ftp://example.com"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (usage: invalid URL scheme)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprint(w, "<html><body><p>hello world</p></body></html>")
+	}))
+	defer srv.Close()
+
+	stdout, stderr, code := runGrab(t, []string{"--quiet", srv.URL}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "hello world") {
+		t.Errorf("stdout = %q, want content containing 'hello world'", stdout)
+	}
+}
+
 // --- property test ---
 
 func TestPropertyExitCodesOnly(t *testing.T) {

@@ -63,9 +63,10 @@ func Run() int {
 	fs := pflag.NewFlagSet("links", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	var bareFlag, jsonFlag bool
+	var bareFlag, jsonFlag, quietFlag bool
 	fs.BoolVarP(&bareFlag, "bare", "b", false, "output URLs only, one per line")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `append {"_vrk":"links","count":N} after all records`)
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -73,6 +74,9 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
+
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	var raw []byte
 	if args := fs.Args(); len(args) > 0 {

@@ -23,12 +23,26 @@ var errNotANumber = errors.New("value is not a number")
 
 // Run is the entry point for vrk kv. Returns 0, 1, or 2. Never calls os.Exit.
 func Run() int {
-	if len(os.Args) < 2 {
+	// Pre-scan for --quiet/-q before subcommand dispatch. kv uses a manual
+	// switch rather than a top-level pflag.FlagSet, so we filter the flag here
+	// and pass the remainder to the subcommand.
+	quietFlag := false
+	stripped := make([]string, 0, len(os.Args)-1)
+	for _, a := range os.Args[1:] {
+		if a == "--quiet" || a == "-q" {
+			quietFlag = true
+		} else {
+			stripped = append(stripped, a)
+		}
+	}
+	defer shared.SilenceStderr(quietFlag)()
+
+	if len(stripped) < 1 {
 		return shared.UsageErrorf("usage: vrk kv <set|get|del|list|incr|decr>")
 	}
 
-	sub := os.Args[1]
-	args := os.Args[2:]
+	sub := stripped[0]
+	args := stripped[1:]
 
 	switch sub {
 	case "set":

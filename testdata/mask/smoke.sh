@@ -292,6 +292,19 @@ assert_stdout_not_contains "pipeline: secret gone" "sk-ant-xyzABC123" "$stdout"
 assert_stdout_contains "pipeline: placeholder present" "[REDACTED]" "$stdout"
 
 # ------------------------------------------------------------
+# --quiet flag
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+stdout=$(echo "token = abc123xyz" | "$VRK" mask --quiet 2>/dev/null)
+stderr=$(echo "token = abc123xyz" | "$VRK" mask --quiet 2>&1 >/dev/null)
+exit_code=0; echo "token = abc123xyz" | "$VRK" mask --quiet > /dev/null 2>&1 || exit_code=$?
+assert_exit            "--quiet success: exit 0"                   0             "$exit_code"
+assert_stdout_contains "--quiet success: stdout has [REDACTED]"    "[REDACTED]"  "$stdout"
+assert_stderr_empty    "--quiet success: no stderr"                              "$stderr"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

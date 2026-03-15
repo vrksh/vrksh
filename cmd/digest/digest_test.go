@@ -483,6 +483,41 @@ func TestUnknownFlag(t *testing.T) {
 	}
 }
 
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on I/O error.
+// Exit code is unaffected.
+func TestQuietSuppressesStderr(t *testing.T) {
+	origCopyToHash := copyToHash
+	copyToHash = func(_ hash.Hash, _ io.Reader) (int64, error) {
+		return 0, errors.New("simulated read error")
+	}
+	t.Cleanup(func() { copyToHash = origCopyToHash })
+
+	_, stderr, code := runDigest(t, []string{"--quiet"}, "hello")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (I/O error)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, stderr, code := runDigest(t, []string{"--quiet"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "sha256:") {
+		t.Errorf("stdout = %q, want hash output with sha256: prefix", stdout)
+	}
+}
+
 func TestPropertyHMACVerify(t *testing.T) {
 	// Property: for any input and key, produce HMAC then verify → always exit 0.
 	cases := []struct {

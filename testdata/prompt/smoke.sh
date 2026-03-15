@@ -148,6 +148,25 @@ fi
 echo 'hello' | "$BIN" prompt --endpoint "not a url" 2>/dev/null && fail "--endpoint bad URL: expected exit 2" "" || true
 pass "--endpoint invalid URL exits 2"
 
+# --- --quiet ---
+echo ""
+echo "--- --quiet ---"
+
+# --quiet success: --explain still writes to stdout, no stderr
+out=$(echo "test" | "$BIN" prompt --explain --quiet 2>/dev/null)
+err=$(echo "test" | "$BIN" prompt --explain --quiet 2>&1 >/dev/null)
+if echo "test" | "$BIN" prompt --explain --quiet >/dev/null 2>&1; then
+  pass "--quiet --explain: exit 0"
+else
+  fail "--quiet --explain: exit 0" "non-zero exit"
+fi
+if echo "$out" | grep -q "curl"; then
+  pass "--quiet --explain: stdout has curl"
+else
+  fail "--quiet --explain: stdout has curl" "got: $out"
+fi
+[ -z "$err" ] && pass "--quiet --explain: stderr empty" || fail "--quiet --explain: stderr empty" "got: $err"
+
 # --- summary ---
 echo ""
 echo "All smoke tests passed."

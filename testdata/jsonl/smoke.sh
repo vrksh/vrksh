@@ -66,6 +66,15 @@ assert_stdout_empty() {
   fi
 }
 
+assert_stderr_empty() {
+  local desc=$1 stderr=$2
+  if [ -z "$stderr" ]; then
+    ok "$desc (stderr empty)"
+  else
+    fail "$desc" "expected empty stderr, got: $stderr"
+  fi
+}
+
 assert_line_count() {
   local desc=$1 expected=$2 actual=$3
   local count

@@ -75,10 +75,11 @@ func Run() int {
 	fs := pflag.NewFlagSet("grab", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	var textFlag, rawFlag, jsonFlag bool
+	var textFlag, rawFlag, jsonFlag, quietFlag bool
 	fs.BoolVarP(&textFlag, "text", "t", false, "plain prose output, no markdown syntax")
 	fs.BoolVar(&rawFlag, "raw", false, "raw HTML, no processing")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit JSON envelope with metadata")
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -86,6 +87,9 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
+
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	// Exactly one output mode allowed.
 	modes := 0

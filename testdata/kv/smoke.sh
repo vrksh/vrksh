@@ -375,6 +375,25 @@ stdout=$("$VRK" kv get conckey 2>/dev/null)
 assert_stdout_equals "10 parallel incr: final value 10" "10" "$stdout"
 
 # ------------------------------------------------------------
+# --quiet flag
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+# --quiet suppresses stderr on error (missing key → exit 1)
+stderr=$("$VRK" kv --quiet get nosuchkey_quiet_test 2>&1 >/dev/null) || true
+exit_code=0; "$VRK" kv --quiet get nosuchkey_quiet_test > /dev/null 2>&1 || exit_code=$?
+assert_exit         "--quiet error: exit 1 (missing key)" 1  "$exit_code"
+assert_stderr_empty "--quiet error: stderr empty"             "$stderr"
+
+# --quiet success: stdout unaffected
+"$VRK" kv set quiet_test_key quiet_test_val > /dev/null
+stdout=$("$VRK" kv --quiet get quiet_test_key 2>/dev/null)
+exit_code=0; "$VRK" kv --quiet get quiet_test_key > /dev/null 2>&1 || exit_code=$?
+assert_exit            "--quiet success: exit 0"           0                  "$exit_code"
+assert_stdout_contains "--quiet success: stdout has value" "quiet_test_val"   "$stdout"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

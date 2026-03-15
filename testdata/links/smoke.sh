@@ -66,6 +66,15 @@ assert_stdout_empty() {
   fi
 }
 
+assert_stderr_empty() {
+  local desc=$1 stderr=$2
+  if [ -z "$stderr" ]; then
+    ok "$desc (stderr empty)"
+  else
+    fail "$desc" "expected empty stderr, got: $stderr"
+  fi
+}
+
 echo "vrk links — smoke tests"
 echo "binary: $VRK"
 echo ""
@@ -236,6 +245,19 @@ got=$("$VRK" links '[Homebrew](https://brew.sh)' --json)
 last_line=$(printf '%s' "$got" | tail -1)
 assert_stdout_contains "positional --json: _vrk field"  '"_vrk":"links"' "$last_line"
 assert_stdout_contains "positional --json: count field" '"count":1'      "$last_line"
+
+# ------------------------------------------------------------
+# --quiet flag
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+stdout=$(echo "[a](https://example.com)" | "$VRK" links --quiet 2>/dev/null)
+stderr=$(echo "[a](https://example.com)" | "$VRK" links --quiet 2>&1 >/dev/null)
+exit_code=0; echo "[a](https://example.com)" | "$VRK" links --quiet > /dev/null 2>&1 || exit_code=$?
+assert_exit            "--quiet success: exit 0"              0               "$exit_code"
+assert_stdout_contains "--quiet success: stdout has url"      "example.com"  "$stdout"
+assert_stderr_empty    "--quiet success: no stderr"                           "$stderr"
 
 # ------------------------------------------------------------
 # Summary

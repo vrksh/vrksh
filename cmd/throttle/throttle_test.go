@@ -559,3 +559,36 @@ func TestPropertyLinesPassThrough(t *testing.T) {
 		}
 	}
 }
+
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on I/O error.
+// Exit code is unaffected.
+func TestQuietSuppressesStderr(t *testing.T) {
+	orig := stdinReader
+	stdinReader = &errReader{}
+	t.Cleanup(func() { stdinReader = orig })
+
+	_, stderr, code := runThrottle(t, []string{"--rate", "1000/s", "--quiet"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (I/O error)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	stdout, stderr, code := runThrottle(t, []string{"--rate", "1000/s", "--quiet"}, "hello\nworld\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if strings.Count(stdout, "\n") != 2 {
+		t.Errorf("stdout = %q, want 2 lines", stdout)
+	}
+}

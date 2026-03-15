@@ -449,6 +449,36 @@ func TestInvariant(t *testing.T) {
 	}
 }
 
+// --- --quiet flag tests ---
+
+// TestQuietSuppressesStderr verifies that --quiet suppresses stderr on error.
+// Exit code is unaffected. The --size flag is intentionally omitted to trigger
+// the usage error that fires after the defer is registered.
+func TestQuietSuppressesStderr(t *testing.T) {
+	code, _, stderr := runChunk("", []string{"--quiet"})
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (usage: --size is required)", code)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
+	}
+}
+
+// TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
+// on success.
+func TestQuietDoesNotAffectStdout(t *testing.T) {
+	code, stdout, stderr := runChunk("hello world this is a test", []string{"--size", "100", "--quiet"})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty on success, got %q", stderr)
+	}
+	if !strings.Contains(stdout, `"text"`) {
+		t.Errorf("stdout = %q, want chunk JSONL record with text field", stdout)
+	}
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func itoa(n int) string { return strconv.Itoa(n) }

@@ -314,6 +314,24 @@ else
 fi
 
 # ------------------------------------------------------------
+# --quiet flag
+# ------------------------------------------------------------
+echo ""
+echo "--- --quiet ---"
+
+# --quiet suppresses validation warnings (invalid line, non-strict mode)
+stderr=$(echo '{"x":123}' | "$VRK" validate --schema '{"x":"string"}' --quiet 2>&1 >/dev/null)
+exit_code=0; echo '{"x":123}' | "$VRK" validate --schema '{"x":"string"}' --quiet > /dev/null 2>&1 || exit_code=$?
+assert_exit         "--quiet warn: exit 0"        0  "$exit_code"
+assert_stderr_empty "--quiet warn: stderr empty"      "$stderr"
+
+# --quiet success: valid line still passes through stdout
+stdout=$(echo '{"x":"hi"}' | "$VRK" validate --schema '{"x":"string"}' --quiet 2>/dev/null)
+exit_code=0; echo '{"x":"hi"}' | "$VRK" validate --schema '{"x":"string"}' --quiet > /dev/null 2>&1 || exit_code=$?
+assert_exit            "--quiet success: exit 0"           0       "$exit_code"
+assert_stdout_contains "--quiet success: stdout has line"  '"x"'   "$stdout"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

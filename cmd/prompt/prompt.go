@@ -560,6 +560,7 @@ func Run() int {
 		budget      int
 		failFlag    bool
 		jsonFlag    bool
+		quietFlag   bool
 		schemaArg   string
 		explainFlag bool
 		retryCount  int
@@ -570,6 +571,7 @@ func Run() int {
 	fs.IntVar(&budget, "budget", 0, "exit 1 if prompt exceeds N tokens (0 = disabled)")
 	fs.BoolVarP(&failFlag, "fail", "f", false, "fail on non-2xx API response or schema mismatch")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit response as JSON envelope with metadata")
+	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 	fs.StringVarP(&schemaArg, "schema", "s", "", "JSON schema string or file path for response validation")
 	fs.BoolVar(&explainFlag, "explain", false, "print equivalent curl command and exit, no API call")
 	fs.IntVar(&retryCount, "retry", 0, "retry N times on schema mismatch with temperature escalation")
@@ -591,6 +593,9 @@ func Run() int {
 		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
+
+	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	defer shared.SilenceStderr(quietFlag)()
 
 	// VRK_LLM_URL is the env-var alternative to --endpoint; flag takes precedence.
 	if endpoint == "" {
