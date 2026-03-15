@@ -537,9 +537,9 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 20 ] \
-  && { echo "PASS: --manifest lists 20 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 20)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 21 ] \
+  && { echo "PASS: --manifest lists 21 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 21)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
 for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
@@ -1245,6 +1245,33 @@ else
   echo "PASS: recase | emit pipeline (skipped — emit output empty, tool may differ)"
   PASS=$((PASS + 1))
 fi
+
+# ---------------------------------------------------------------------------
+# slug integration
+# ---------------------------------------------------------------------------
+
+# slug takes recase output and produces a URL-safe slug.
+got=$(echo 'Hello World (2026)' | $VRK plain | $VRK slug)
+assert_stdout "plain | slug pipeline" "hello-world-2026" "$got"
+
+# slug processes links output — slugify each bare URL.
+got=$(echo '[My Article](https://example.com/my-article)' | $VRK links --bare | $VRK slug)
+assert_stdout "links --bare | slug" "https-example-com-my-article" "$got"
+
+# slug --json output is valid JSONL: each line parses as a JSON object.
+json_out=$(printf 'Hello World\nFoo Bar\n' | $VRK slug --json)
+line_count=$(echo "$json_out" | grep -c '"input"' || true)
+if [ "$line_count" -eq 2 ]; then
+  echo "PASS: slug --json multiline JSONL (2 records)"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: slug --json multiline JSONL (expected 2 records, got $line_count)"
+  FAIL=$((FAIL + 1))
+fi
+
+# slug output feeds into vrk kv as a valid key (no spaces or special chars).
+slug_key=$(echo 'My Pipeline Run (2026)' | $VRK slug)
+assert_stdout "slug output is a valid kv key" "my-pipeline-run-2026" "$slug_key"
 
 # ---------------------------------------------------------------------------
 # Results

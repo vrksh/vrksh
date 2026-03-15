@@ -1863,6 +1863,73 @@ cat vars.txt | vrk recase --to camelCase
 
 ---
 
+## slug — URL/Filename Safe Slug Generator
+
+Converts text to URL/filename-safe slugs. Lowercase, hyphen-separated, unicode normalised to ASCII. One slug per input line; empty slugs (empty input or all-punctuation) produce no output.
+Input: positional argument or stdin.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--separator <s>` | — | Word separator (default: `-`). Any string, including multi-character or empty. |
+| `--max <n>` | — | Max output length (0 = unlimited). Truncates at last word boundary at or before `n`. |
+| `--json` | `-j` | Emit `{"input":"...","output":"..."}` per input line (JSONL). Empty-slug lines suppressed. |
+| `--quiet` | `-q` | Suppress stderr; exit codes unchanged. |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (including empty output) |
+| 1 | I/O error reading stdin |
+| 2 | Usage error — interactive terminal with no stdin, unknown flag |
+
+### Examples
+
+```bash
+# Basic slug
+echo 'Hello World' | vrk slug
+# → hello-world
+
+# Positional arg form
+vrk slug 'Hello, World! (2026)'
+# → hello-world-2026
+
+# Unicode normalisation
+echo 'Ünïcödé Héró' | vrk slug
+# → unicode-hero
+
+# Custom separator
+echo 'Hello World' | vrk slug --separator _
+# → hello_world
+
+# Max length at word boundary
+echo 'A very long title' | vrk slug --max 12
+# → a-very-long
+
+# Multiline batch
+printf 'Hello World\nFoo Bar\n' | vrk slug
+# → hello-world
+# → foo-bar
+
+# JSON output
+echo 'Hello World' | vrk slug --json
+# → {"input":"Hello World","output":"hello-world"}
+
+# Pipeline: slugify page titles fetched from links
+cat README.md | vrk links --bare | vrk slug
+```
+
+### Gotchas
+
+- **`--max` truncates at word boundary — if the first word is longer than `--max`, output is empty.** For example, `echo 'helloworld' | vrk slug --max 3` produces no output, not a truncated `hel`. Use a value larger than the longest expected word to avoid silent empty output.
+- **Empty slug lines are suppressed.** Inputs that produce no alphanumeric content (empty string, all-punctuation) emit no output line. This is intentional — slug treats empty output as a no-op, consistent with `echo '' | vrk slug` exiting 0 with no output.
+- **Non-Latin characters are dropped.** Only Latin-script characters with NFD decomposition to ASCII (`é → e`, `ü → u`, etc.) are preserved. Characters with no ASCII base (Cyrillic, CJK, Arabic) are treated as word boundaries and dropped. The spec is ASCII-only slug output.
+- **`--separator` allows any string, including empty.** `--separator ''` joins words without any separator (`hello-world → helloworld`). Multi-character separators (`--separator --`) are allowed but unusual.
+
+---
+
 ## Breaking changes
 
 ### digest — stdin no longer strips trailing newline (streaming fix)

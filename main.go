@@ -22,6 +22,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/plain"
 	"github.com/vrksh/vrksh/cmd/prompt"
 	"github.com/vrksh/vrksh/cmd/recase"
+	"github.com/vrksh/vrksh/cmd/slug"
 	"github.com/vrksh/vrksh/cmd/sse"
 	"github.com/vrksh/vrksh/cmd/throttle"
 	"github.com/vrksh/vrksh/cmd/tok"
@@ -53,6 +54,7 @@ var tools = map[string]func() int{
 	"links":    links.Run,
 	"mask":     mask.Run,
 	"recase":   recase.Run,
+	"slug":     slug.Run,
 	"plain":    plain.Run,
 	"throttle": throttle.Run,
 	"validate": validate.Run,

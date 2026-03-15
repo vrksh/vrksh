@@ -20,6 +20,7 @@
     {"name": "throttle", "description": "Rate limiter for pipes — --rate N/s or N/m"},
     {"name": "digest",   "description": "Universal hasher — sha256/md5/sha512, --hmac, --compare"},
     {"name": "base",     "description": "Encoding converter — base64, base64url, hex, base32"},
-    {"name": "recase",   "description": "Naming convention converter — snake, camel, kebab, pascal, title"}
+    {"name": "recase",   "description": "Naming convention converter — snake, camel, kebab, pascal, title"},
+    {"name": "slug",     "description": "URL/filename slug generator — --separator, --max, --json"}
   ]
 }
