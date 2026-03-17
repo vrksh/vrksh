@@ -4,7 +4,6 @@
 package urlinfo
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -245,11 +244,6 @@ func extractField(rec *urlRecord, rawQuery, path string) string {
 	default:
 		return ""
 	}
-}
-
-// scanner wraps bufio.NewScanner — extracted for readability.
-func scanner(r io.Reader) *bufio.Scanner {
-	return bufio.NewScanner(r)
 }
 
 func printUsage(fs *pflag.FlagSet) int {

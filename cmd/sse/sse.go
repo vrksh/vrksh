@@ -16,6 +16,10 @@ import (
 // isTerminal is a var so tests can override TTY detection without a real fd.
 var isTerminal = shared.IsTerminal
 
+// stdinReader is a var so tests can inject I/O errors without touching os.Stdin.
+// nil means "use os.Stdin" at the time Run() is called.
+var stdinReader io.Reader
+
 // sseRecord is the shape emitted to stdout for each parsed SSE event.
 type sseRecord struct {
 	Event string      `json:"event"`
@@ -49,7 +53,11 @@ func Run() int {
 	w := bufio.NewWriter(os.Stdout)
 	defer func() { _ = w.Flush() }()
 
-	scanner := shared.ScanLines(os.Stdin)
+	r := stdinReader
+	if r == nil {
+		r = os.Stdin
+	}
+	scanner := shared.ScanLines(r)
 
 	// SSE state machine: per-block accumulators, reset on each blank line.
 	var eventName string

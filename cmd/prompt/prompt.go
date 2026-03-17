@@ -54,7 +54,7 @@ func defaultModel(prov provider) string {
 	if prov == providerOpenAI {
 		return "gpt-4o-mini"
 	}
-	return "claude-sonnet-4-5"
+	return "claude-sonnet-4-6"
 }
 
 // selectProvider picks a provider based on the model name and available keys.

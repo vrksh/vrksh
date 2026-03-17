@@ -3,6 +3,7 @@ package sse
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -610,6 +611,33 @@ func TestPropertyExitCodesOnly(t *testing.T) {
 		if code != 0 && code != 1 && code != 2 {
 			t.Errorf("input %q: exit code = %d, want 0, 1, or 2", input, code)
 		}
+	}
+}
+
+// --- I/O error injection ---
+
+// errReader is an io.Reader that always fails — used to simulate a mid-stream I/O error.
+type errReader struct{}
+
+func (errReader) Read(_ []byte) (int, error) {
+	return 0, errors.New("simulated read error")
+}
+
+func TestIOErrorExit1(t *testing.T) {
+	// Inject an I/O error via stdinReader. Expect exit 1, non-empty stderr, empty stdout.
+	orig := stdinReader
+	stdinReader = errReader{}
+	defer func() { stdinReader = orig }()
+
+	stdout, stderr, code := runSSE(t, nil, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty on error", stdout)
+	}
+	if !strings.Contains(stderr, "sse: reading stdin") {
+		t.Errorf("stderr = %q, want 'sse: reading stdin'", stderr)
 	}
 }
 

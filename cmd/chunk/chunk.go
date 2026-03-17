@@ -264,7 +264,9 @@ func printUsage(fs *pflag.FlagSet) int {
 		"flags:",
 	}
 	for _, l := range lines {
-		_, _ = fmt.Fprintln(os.Stdout, l)
+		if _, err := fmt.Fprintln(os.Stdout, l); err != nil {
+			return shared.Errorf("chunk: writing usage: %v", err)
+		}
 	}
 	fs.SetOutput(os.Stdout)
 	fs.PrintDefaults()

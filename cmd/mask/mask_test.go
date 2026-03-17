@@ -320,6 +320,27 @@ func TestJSONNormalShape(t *testing.T) {
 	}
 }
 
+func TestIOErrorExit1(t *testing.T) {
+	// Inject an I/O error via stdinReader. Without --json:
+	//   stderr: "error: mask: reading stdin: ..."
+	//   stdout: empty
+	//   Run() returns 1
+	origReader := stdinReader
+	stdinReader = &errReader{err: errors.New("injected read error")}
+	t.Cleanup(func() { stdinReader = origReader })
+
+	stdout, stderr, code := runMask(t, nil, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (I/O error must not silently exit 0)", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty on error", stdout)
+	}
+	if !strings.Contains(stderr, "mask: reading stdin") {
+		t.Errorf("stderr = %q, want 'mask: reading stdin'", stderr)
+	}
+}
+
 func TestJSONErrorToStdout(t *testing.T) {
 	// Inject an I/O error via stdinReader. With --json:
 	//   stdout: {"error":"...","code":1}

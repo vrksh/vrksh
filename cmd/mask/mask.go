@@ -137,15 +137,14 @@ func Run() int {
 	}
 
 	if err := scanner.Err(); err != nil {
+		_ = w.Flush()
 		if jsonOut {
-			_ = w.Flush()
 			return shared.PrintJSONError(map[string]any{
-				"error": err.Error(),
+				"error": fmt.Sprintf("mask: reading stdin: %v", err),
 				"code":  1,
 			})
 		}
-		// Without --json, mask is a filter — silently stop on I/O error.
-		return 0
+		return shared.Errorf("mask: reading stdin: %v", err)
 	}
 
 	if jsonOut {

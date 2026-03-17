@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -507,10 +508,10 @@ func renderChildrenMd(n *html.Node, sb *strings.Builder, inPre bool, base *url.U
 	}
 }
 
+// reThreeNewlines matches runs of three or more consecutive newlines.
+var reThreeNewlines = regexp.MustCompile(`\n{3,}`)
+
 // collapseNewlines reduces runs of 3+ consecutive newlines to exactly 2.
 func collapseNewlines(s string) string {
-	for strings.Contains(s, "\n\n\n") {
-		s = strings.ReplaceAll(s, "\n\n\n", "\n\n")
-	}
-	return s
+	return reThreeNewlines.ReplaceAllString(s, "\n\n")
 }
