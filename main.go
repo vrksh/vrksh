@@ -24,6 +24,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/plain"
 	"github.com/vrksh/vrksh/cmd/prompt"
 	"github.com/vrksh/vrksh/cmd/recase"
+	"github.com/vrksh/vrksh/cmd/sip"
 	"github.com/vrksh/vrksh/cmd/slug"
 	"github.com/vrksh/vrksh/cmd/sse"
 	"github.com/vrksh/vrksh/cmd/throttle"
@@ -60,6 +61,7 @@ var tools = map[string]func() int{
 	"moniker":  moniker.Run,
 	"pct":      pct.Run,
 	"recase":   recase.Run,
+	"sip":      sip.Run,
 	"slug":     slug.Run,
 	"plain":    plain.Run,
 	"throttle": throttle.Run,

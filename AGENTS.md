@@ -25,6 +25,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `mask` | Redact secrets by pattern matching and Shannon entropy analysis | `--pattern <regex>`, `--entropy <n>`, `--json` |
 | `emit` | Wrap text lines as structured JSONL log records with timestamps | `--level <l>`, `--tag <t>`, `--msg <m>`, `--parse-level` |
 | `links` | Extract hyperlinks from markdown, HTML, or plain text as JSONL | `--bare`, `--json` |
+| `sip` | Sample lines from stdin — first N, every Nth, reservoir, or percentage | `--first`, `--count` (`-n`), `--every`, `--sample`, `--seed`, `--json` |
 | `throttle` | Rate-limit lines from stdin | `--rate <N/s\|N/m>`, `--burst N`, `--tokens-field <f>`, `--json` |
 | `digest` | Hash stdin or files; HMAC with --hmac --key; file comparison with --compare | `--algo <sha256\|md5\|sha512>`, `--bare`, `--file`, `--hmac`, `--key`, `--verify`, `--json` |
 | `base` | Encode and decode between base64, base64url, hex, base32 | subcommands: `encode --to`, `decode --from`; `--quiet` |

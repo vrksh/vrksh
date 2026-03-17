@@ -24,6 +24,7 @@
     {"name": "slug",     "description": "URL/filename slug generator — --separator, --max, --json"},
     {"name": "moniker",  "description": "Memorable name generator — run IDs, job labels, temp dirs"},
     {"name": "pct",      "description": "Percent encoder/decoder — RFC 3986, --encode, --decode, --form"},
+    {"name": "sip",      "description": "Stream sampler — --first, --count, --every, --sample"},
     {"name": "urlinfo",  "description": "URL parser — scheme, host, port, path, query, --field"}
   ]
 }

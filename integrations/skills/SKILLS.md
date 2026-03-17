@@ -2220,3 +2220,73 @@ cat page.html | vrk links --bare | vrk urlinfo --field host
 - **`--field query.<key>` returns empty string if the key is absent** — not an error.
 - **`--field` suppresses the `--json` metadata trailer** — plain-text field output and a JSON trailer are incoherent; only field values are printed.
 - **Empty input exits 0 with no output.** `printf '' | vrk pct --encode` is valid; it produces nothing and exits 0.
+
+---
+
+## sip — Stream Sampler
+
+Samples lines from stdin using one of four strategies. Memory-efficient for arbitrarily large streams — reservoir sampling uses O(N) memory where N is the sample size, not the stream size.
+Input: stdin only (no positional argument — sip is a pure stream filter).
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--first N` | — | Take first N lines (deterministic) |
+| `--count N` | `-n` | Reservoir sample of exactly N lines (random, O(N) memory) |
+| `--every N` | — | Emit every Nth line (deterministic) |
+| `--sample N` | — | Include each line with N% probability (approximate, random) |
+| `--seed N` | — | Fix random seed for deterministic output; 0 is a valid seed value |
+| `--json` | `-j` | Append `{"_vrk":"sip","strategy":"...","requested":N,"returned":N,"total_seen":N}` after output |
+| `--quiet` | `-q` | Suppress stderr; exit codes unchanged |
+
+Exactly one of `--first`, `--count`, `--every`, `--sample` must be specified.
+
+### --json metadata shape
+
+```json
+{"_vrk":"sip","strategy":"reservoir","requested":100,"returned":87,"total_seen":1000}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `strategy` | `"first"`, `"every"`, `"reservoir"`, or `"sample"` |
+| `requested` | N from flag (percentage value for `--sample`) |
+| `returned` | Actual lines emitted |
+| `total_seen` | Non-empty lines read from stdin |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (including sample larger than population — emit all, no error) |
+| 1 | I/O error reading stdin |
+| 2 | Usage error — no strategy flag, multiple strategy flags, invalid flag value, interactive terminal |
+
+### Examples
+
+```bash
+# Inspect the first 10 lines of any stream
+cat data.jsonl | vrk sip --first 10
+
+# Every 100th line — uniform stride across a large file
+seq 1000000 | vrk sip --every 100
+
+# Reproducible reservoir sample of 1000 lines — same seed gives same output every run
+cat events.log | vrk sip --count 1000 --seed 42
+
+# Approximate 5% random sample (count varies per run)
+cat events.log | vrk sip --sample 5
+
+# Metadata: how many lines were in the stream and how many were returned
+seq 1000 | vrk sip --count 100 --json | tail -1
+```
+
+### Gotchas
+
+- **`--sample` is probabilistic** — `--sample 10` on 1000 lines produces approximately 100, not exactly 100. Use `--count` for exact counts.
+- **`--seed 0` is valid** — seed value 0 is not a "not set" sentinel. Use it freely.
+- **Reservoir output preserves input order** — `--n 100` on a 1000-line stream emits 100 lines in the same relative order they appeared in the input, not in random order.
+- **Empty lines are skipped and not counted** — a line that is `""` is invisible to all strategies and does not appear in `total_seen`.
+- **`--first` and `--every` still read the full stream** — `total_seen` reflects all non-empty lines, even for `--first N` where only the first N are emitted.
+- **No positional argument** — `sip` is a pure filter; input must come from a pipe.

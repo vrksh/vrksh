@@ -537,11 +537,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 24 ] \
-  && { echo "PASS: --manifest lists 24 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 24)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 25 ] \
+  && { echo "PASS: --manifest lists 25 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 25)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base recase slug moniker pct urlinfo; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base recase slug moniker pct urlinfo sip; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
@@ -1349,6 +1349,42 @@ assert_valid_jsonl "urlinfo | emit produces valid JSONL" "$urlinfo_emit"
 # urlinfo --field host output is a valid slug (no special characters) — pipeable to slug.
 urlinfo_slug=$($VRK urlinfo --field host 'https://api.example.com/path' | $VRK slug)
 assert_stdout "urlinfo host | slug: slug of api.example.com" "api-example-com" "$urlinfo_slug"
+
+# ---------------------------------------------------------------------------
+# Section: sip — stream sampling in pipelines
+# ---------------------------------------------------------------------------
+echo "--- sip: stream sampling ---"
+
+# sip --count 10 | tok: sample lines then count tokens — exit 0, token count > 0.
+sip_tok=$(seq 1000 | $VRK sip --count 10 | $VRK tok)
+assert_exit "sip --count 10 | tok: exit 0" 0 $?
+assert_stdout "sip --count 10 | tok: numeric token count" "" "$sip_tok"
+if [ "$(echo "$sip_tok" | tr -d '[:space:]')" -gt 0 ] 2>/dev/null; then
+  echo "PASS: sip --count 10 | tok: token count > 0"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: sip --count 10 | tok: expected token count > 0, got '$sip_tok'"
+  FAIL=$((FAIL + 1))
+fi
+
+# sip --first 5 --json | tail -1: the trailer is valid JSON with _vrk=sip.
+sip_json_trailer=$(seq 100 | $VRK sip --first 5 --json | tail -1)
+assert_valid_json "sip --first 5 --json trailer is valid JSON" "$sip_json_trailer"
+assert_stdout "sip --first 5 --json trailer has _vrk=sip" '"_vrk":"sip"' "$sip_json_trailer"
+
+# sip --count 20 | emit: sampled lines piped to structured logger — valid JSONL.
+sip_emit=$(seq 1000 | $VRK sip --count 20 | $VRK emit --level info)
+assert_valid_jsonl "sip --count 20 | emit: valid JSONL" "$sip_emit"
+
+# sip --every 100 on seq 1000 → 10 lines, each piped through recase → 10 output lines.
+sip_recase_count=$(seq 1000 | $VRK sip --every 100 | $VRK recase --to snake | wc -l | tr -d ' ')
+if [ "$sip_recase_count" -eq 10 ]; then
+  echo "PASS: sip --every 100 | recase: 10 lines"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: sip --every 100 | recase: expected 10 lines, got $sip_recase_count"
+  FAIL=$((FAIL + 1))
+fi
 
 # ---------------------------------------------------------------------------
 # Results
