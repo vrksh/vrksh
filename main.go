@@ -28,6 +28,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/sse"
 	"github.com/vrksh/vrksh/cmd/throttle"
 	"github.com/vrksh/vrksh/cmd/tok"
+	"github.com/vrksh/vrksh/cmd/urlinfo"
 	"github.com/vrksh/vrksh/cmd/uuid"
 	"github.com/vrksh/vrksh/cmd/validate"
 )
@@ -47,6 +48,7 @@ var tools = map[string]func() int{
 	"jsonl":    jsonl.Run,
 	"jwt":      jwt.Run,
 	"epoch":    epoch.Run,
+	"urlinfo":  urlinfo.Run,
 	"uuid":     uuid.Run,
 	"tok":      tok.Run,
 	"sse":      sse.Run,

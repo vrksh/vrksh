@@ -537,11 +537,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 23 ] \
-  && { echo "PASS: --manifest lists 23 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 23)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 24 ] \
+  && { echo "PASS: --manifest lists 24 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 24)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base recase slug moniker pct; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base recase slug moniker pct urlinfo; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
@@ -1328,6 +1328,27 @@ assert_valid_jsonl "pct --encode | emit produces valid JSONL" "$pct_jsonl"
 pct_json_out=$(echo 'hello world' | $VRK pct --encode --json)
 assert_stdout "pct --json output field has %20" '"output":"hello%20world"' "$pct_json_out"
 assert_valid_jsonl "pct --encode --json is valid JSONL" "$pct_json_out"
+
+# ---------------------------------------------------------------------------
+# urlinfo — URL parsing and pipeline composition
+# ---------------------------------------------------------------------------
+
+# Parse a URL and extract its query params as structured JSON.
+urlinfo_query=$(echo 'https://example.com?page=2&limit=10' | $VRK urlinfo | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["query"]["page"])')
+assert_stdout "urlinfo: extract query.page via jq-like pipeline" "2" "$urlinfo_query"
+
+# --field host extracts the hostname as a plain line — pipeable to further tools.
+urlinfo_host=$(printf 'https://api.example.com/path\nhttps://cdn.example.com/asset\n' | $VRK urlinfo --field host)
+assert_stdout "urlinfo --field host batch: first host" "api.example.com" "$urlinfo_host"
+assert_stdout "urlinfo --field host batch: second host" "cdn.example.com" "$urlinfo_host"
+
+# urlinfo output feeds emit to produce structured log records with host field.
+urlinfo_emit=$($VRK urlinfo 'https://api.example.com/v1/users' | $VRK emit --level info)
+assert_valid_jsonl "urlinfo | emit produces valid JSONL" "$urlinfo_emit"
+
+# urlinfo --field host output is a valid slug (no special characters) — pipeable to slug.
+urlinfo_slug=$($VRK urlinfo --field host 'https://api.example.com/path' | $VRK slug)
+assert_stdout "urlinfo host | slug: slug of api.example.com" "api-example-com" "$urlinfo_slug"
 
 # ---------------------------------------------------------------------------
 # Results

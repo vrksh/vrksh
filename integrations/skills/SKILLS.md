@@ -2132,4 +2132,91 @@ echo "$ENCODED_VALUE" | vrk pct --decode | vrk validate --schema '{"type":"strin
 - **`%2B` decodes to `+` in both modes.** `echo 'hello%2Bworld' | vrk pct --decode` → `hello+world`. The percent-encoded form is always authoritative.
 - **In `--form` mode, `~` is encoded as `%7E`.** This is browser-compatible behaviour (`url.QueryEscape`). Strictly, `~` is an RFC 3986 unreserved character and does not need encoding, but browsers encode it in form submissions. Fighting this creates more confusion than it solves.
 - **`--encode` and `--decode` are mutually exclusive.** Passing both exits 2.
+
+---
+
+## urlinfo — URL Parser
+
+Parses a URL string into its components as JSON. Pure string operation — no network calls, no HTTP. Use `grab` to fetch a URL; use `urlinfo` to inspect one.
+Input: positional argument or stdin (single line or multiline batch).
+
+### Record shape
+
+```json
+{"scheme":"https","host":"api.example.com","port":0,"path":"/v1/users","query":{"page":"2","limit":"10"},"fragment":"","user":""}
+```
+
+All fields always present, including zero values. Port is 0 when not explicit in the URL string.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--field <path>` | `-F` | Extract a single field; dot-path for query params (e.g. `query.page`) |
+| `--json` | `-j` | Append `{"_vrk":"urlinfo","count":N}` after all records |
+| `--quiet` | `-q` | Suppress stderr; exit codes unchanged |
+
+### `--field` paths
+
+| Path | Returns |
+|------|---------|
+| `scheme` | `https` |
+| `host` | `api.example.com` |
+| `port` | `8080` (empty string if not present in URL) |
+| `path` | `/v1/users` |
+| `fragment` | `anchor` (empty string if absent) |
+| `user` | username (empty string if absent) |
+| `query` | full raw query string |
+| `query.<key>` | value of that query parameter (empty string if absent) |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success — URL parsed (including scheme-relative `//host/path`) |
+| 1 | Invalid URL — both scheme and host are empty after parsing |
+| 2 | Usage error — interactive terminal with no input, unknown flag |
+
+### Examples
+
+```bash
+# Parse a URL into JSON
+vrk urlinfo 'https://api.example.com/v1/users?page=2&limit=10'
+
+# Extract a single field
+vrk urlinfo --field host 'https://api.example.com/path'
+
+# Extract a nested query parameter
+vrk urlinfo --field query.page 'https://example.com?page=2'
+
+# Batch parse from stdin
+printf 'https://example.com\nhttps://api.example.com\n' | vrk urlinfo
+
+# Stdin form (identical to positional arg)
+echo 'https://example.com/path' | vrk urlinfo
+```
+
+### Compose patterns
+
+```bash
+# Extract host from a fetched URL's redirect chain
+vrk grab https://bit.ly/xyz --json | jq -r .url | vrk urlinfo --field host
+
+# Validate all URLs in a file have https scheme
+cat urls.txt | vrk urlinfo --field scheme | grep -v '^https$'
+
+# Extract all query params as structured JSON
+echo 'https://example.com?page=2&limit=10' | vrk urlinfo | jq .query
+
+# Pipeline: parse URLs from a page then extract their hosts
+cat page.html | vrk links --bare | vrk urlinfo --field host
+```
+
+### Gotchas
+
+- **Password is never output** — inspect the raw string directly if you need credential validation.
+- **`--field port` returns empty string when port is not explicit in the URL** — `https://example.com` has no port in the string even though HTTPS implies 443.
+- **`urlinfo` accepts any string `url.Parse` accepts** — Go's parser is lenient; a string with no scheme parses without error but produces an empty scheme field. Exit 1 only when both scheme and host are empty.
+- **`--field query.<key>` returns empty string if the key is absent** — not an error.
+- **`--field` suppresses the `--json` metadata trailer** — plain-text field output and a JSON trailer are incoherent; only field values are printed.
 - **Empty input exits 0 with no output.** `printf '' | vrk pct --encode` is valid; it produces nothing and exits 0.
