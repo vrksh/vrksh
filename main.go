@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/vrksh/vrksh/cmd/assert"
 	"github.com/vrksh/vrksh/cmd/base"
 	"github.com/vrksh/vrksh/cmd/chunk"
 	"github.com/vrksh/vrksh/cmd/coax"
@@ -41,6 +42,7 @@ var skillsDoc string
 var manifestJSON string
 
 var tools = map[string]func() int{
+	"assert":   assert.Run,
 	"base":     base.Run,
 	"chunk":    chunk.Run,
 	"digest":   digest.Run,

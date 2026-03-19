@@ -34,6 +34,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `moniker` | Generate memorable adjective-noun names for run IDs and job labels | `--count`, `--seed`, `--separator`, `--json` |
 | `pct` | Percent-encode and decode per RFC 3986, line by line | `--encode`, `--decode`, `--form`, `--json` |
 | `urlinfo` | Parse a URL into components — no network calls | `--field <path>`, `--json` |
+| `assert` | Evaluate conditions on stdin — pass through or kill pipeline | `<condition>` (positional), `--contains`, `--matches`, `--json` |
 
 ---
 

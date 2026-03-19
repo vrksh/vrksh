@@ -2290,3 +2290,104 @@ seq 1000 | vrk sip --count 100 --json | tail -1
 - **Empty lines are skipped and not counted** — a line that is `""` is invisible to all strategies and does not appear in `total_seen`.
 - **`--first` and `--every` still read the full stream** — `total_seen` reflects all non-empty lines, even for `--first N` where only the first N are emitted.
 - **No positional argument** — `sip` is a pure filter; input must come from a pipe.
+
+---
+
+## assert — Pipeline Condition Check
+
+Evaluates conditions on stdin and either passes data through (exit 0) or kills
+the pipeline (exit 1). The test gate for agent output verification — put it
+between any two tools to enforce invariants.
+Input: stdin only (pipe).
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `<condition>` | — | jq-compatible condition (positional, repeatable; all must pass) |
+| `--message <msg>` | `-m` | Custom failure message shown in stderr and `--json` output |
+| `--contains <str>` | — | Plain text: assert stdin contains substring (case-sensitive) |
+| `--matches <regex>` | — | Plain text: assert stdin matches Go regex |
+| `--json` | `-j` | Emit `{"passed":bool,...}` to stdout; exit codes unchanged |
+| `--quiet` | `-q` | Suppress stderr on failure; exit codes unchanged |
+
+`--contains` and `--matches` can be combined (both must pass). Both are
+mutually exclusive with positional jq conditions.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Assertion passed — stdin passed through byte-for-byte |
+| 1 | Assertion failed, JSON parse error, or I/O error |
+| 2 | Usage error — no condition, no stdin, mode conflict, invalid regex |
+
+### Examples
+
+```bash
+# JSON condition — pass through if status is ok
+echo '{"status":"ok"}' | vrk assert '.status == "ok"'
+
+# Multiple conditions — all must pass
+echo '{"count":5,"errors":[]}' | vrk assert '.count > 0' '.errors == []'
+
+# Numeric comparison
+echo '{"score":0.91}' | vrk assert '.score > 0.8'
+
+# Missing fields are null (jq compat)
+echo '{}' | vrk assert '.missing == null'
+
+# Array length check
+echo '{"items":[1,2,3]}' | vrk assert '.items | length > 0'
+
+# Plain text — substring match
+echo 'All tests passed' | vrk assert --contains 'passed'
+
+# Plain text — regex match
+echo 'OK: all systems nominal' | vrk assert --matches '^OK:'
+
+# Combine --contains and --matches (both must pass)
+echo 'OK: all tests passed' | vrk assert --contains 'passed' --matches '^OK:'
+
+# Custom failure message
+echo '{"status":"fail"}' | vrk assert '.status == "ok"' --message 'Bad API response'
+
+# JSON output mode
+echo '{"status":"ok"}' | vrk assert '.status == "ok"' --json
+# → {"passed":true,"condition":".status == \"ok\"","input":{"status":"ok"}}
+```
+
+### Compose patterns
+
+```bash
+# Gate pipeline: only store result if confidence is high enough
+cat data.jsonl | vrk prompt --schema schema.json | vrk assert '.confidence > 0.8' | vrk kv set result
+
+# Validate API response before processing
+vrk grab https://api.example.com | vrk assert '.status == "ok"' | vrk emit --parse-level
+
+# Assert + kv: only store if condition passes
+echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set last_result
+```
+
+### --json output shapes
+
+| Scenario | Shape |
+|----------|-------|
+| Pass (JSON mode) | `{"passed":true,"condition":"<expr>","input":<parsed>}` |
+| Fail (JSON mode) | `{"passed":false,"condition":"<expr>","input":<parsed>}` |
+| Fail with --message | adds `"message":"<msg>"` to the fail object |
+| Pass (plain text) | `{"passed":true,"condition":"--contains: <str>"}` |
+| Fail (plain text) | `{"passed":false,"condition":"--contains: <str>","message":"..."}` |
+| Error | `{"error":"assert: ...","code":2}` |
+
+### Gotchas
+
+- **Byte-for-byte transparency** — on success, stdin passes to stdout unchanged. No reformatting, no newline normalisation.
+- **JSONL streaming** — for multi-line JSON input, assert evaluates each line independently. On the first failing line, exit 1. Lines already written to stdout before the failure are not recalled.
+- **Positional conditions require valid JSON** — if input is not valid JSON, exit 1. Use `--contains`/`--matches` for plain text.
+- **`--contains`/`--matches` read full stdin as one blob** — they do not operate line-by-line. They are plain text modes.
+- **jq truthiness** — non-boolean gojq results use jq semantics: `null` and `false` are falsy, everything else (including `0`, empty string, empty array) is truthy.
+- **`.field > 0` on a missing field** — compares `null > 0` which is false. Check for presence first if the field may be absent.
+- **`--quiet` suppresses stderr only** — it does not suppress `--json` output (which goes to stdout).
+- **`--json` fail: `message` field omitted when `--message` not set** — only included when explicitly provided via `--message`.

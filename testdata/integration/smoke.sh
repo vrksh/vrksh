@@ -537,11 +537,11 @@ echo "--- Section 15: meta-flags ---"
 manifest=$($VRK --manifest)
 assert_valid_json "--manifest produces valid JSON" "$manifest"
 tool_count=$(echo "$manifest" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d["tools"]))')
-[ "$tool_count" -eq 25 ] \
-  && { echo "PASS: --manifest lists 25 tools"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: --manifest listed $tool_count tools (expected 25)"; FAIL=$((FAIL+1)); }
+[ "$tool_count" -eq 26 ] \
+  && { echo "PASS: --manifest lists 26 tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: --manifest listed $tool_count tools (expected 26)"; FAIL=$((FAIL+1)); }
 # each expected tool name must appear
-for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base recase slug moniker pct urlinfo sip; do
+for tool in jwt epoch uuid tok sse coax prompt kv chunk grab plain links validate mask emit throttle jsonl digest base recase slug moniker pct urlinfo sip assert; do
   echo "$manifest" | python3 -c "import sys,json; d=json.load(sys.stdin); names=[t['name'] for t in d['tools']]; sys.exit(0 if '$tool' in names else 1)" \
     && { echo "PASS: --manifest contains tool '$tool'"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --manifest missing tool '$tool'"; FAIL=$((FAIL+1)); }
@@ -1385,6 +1385,37 @@ else
   echo "FAIL: sip --every 100 | recase: expected 10 lines, got $sip_recase_count"
   FAIL=$((FAIL + 1))
 fi
+
+# ---------------------------------------------------------------------------
+# assert — pipeline condition check
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- assert ---"
+
+# assert passes data through on success.
+assert_got=$(echo '{"confidence":0.9}' | $VRK assert '.confidence > 0.8' | cat)
+assert_stdout "assert passthrough" '{"confidence":0.9}' "$assert_got"
+
+# assert + kv: only store result if condition passes.
+export VRK_KV_PATH="$TMPDIR/assert_kv_test.db"
+echo '{"score":0.9}' | $VRK assert '.score > 0.8' | $VRK kv set assert_result
+assert_kv_got=$($VRK kv get assert_result)
+assert_stdout "assert+kv: stored value" '{"score":0.9}' "$assert_kv_got"
+
+# assert blocks pipeline on failure — kv set should not receive data.
+export VRK_KV_PATH="$TMPDIR/assert_kv_test2.db"
+rc=0
+echo '{"score":0.5}' | $VRK assert '.score > 0.8' 2>/dev/null | $VRK kv set blocked_result || rc=$?
+# The key should not exist (or be empty) because assert exited 1.
+kv_blocked=$($VRK kv get blocked_result 2>/dev/null || true)
+if [ -z "$kv_blocked" ]; then
+  echo "PASS: assert+kv: blocked on failure"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: assert+kv: expected empty, got '$kv_blocked'"
+  FAIL=$((FAIL + 1))
+fi
+unset VRK_KV_PATH
 
 # ---------------------------------------------------------------------------
 # Results
