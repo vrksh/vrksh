@@ -23,6 +23,17 @@ var isTerminal = shared.IsTerminal
 // stdinReader is a var so tests can inject I/O errors. nil means use os.Stdin.
 var stdinReader io.Reader
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "jsonl",
+		Short: "JSON array to JSONL converter, or JSONL to array",
+		Flags: []shared.FlagMeta{
+			{Name: "collect", Shorthand: "c", Usage: "collect JSONL lines into a JSON array"},
+			{Name: "json", Shorthand: "j", Usage: `append {"_vrk":"jsonl","count":N} after all records (split mode only)`},
+		},
+	})
+}
+
 // Run is the entry point for vrk jsonl. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("jsonl", pflag.ContinueOnError)

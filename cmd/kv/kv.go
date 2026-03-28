@@ -21,6 +21,21 @@ import (
 var errNotFound = errors.New("key not found")
 var errNotANumber = errors.New("value is not a number")
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "kv",
+		Short: "Persistent key-value store backed by SQLite",
+		Flags: []shared.FlagMeta{
+			{Name: "ns", Usage: "namespace"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+			{Name: "ttl", Usage: "expiry duration (e.g. 1s, 5m, 24h); 0 = no expiry"},
+			{Name: "dry-run", Usage: "print intent without writing to db"},
+			{Name: "json", Shorthand: "j", Usage: "emit errors as JSON"},
+			{Name: "by", Usage: "delta (must be >= 1)"},
+		},
+	})
+}
+
 // Run is the entry point for vrk kv. Returns 0, 1, or 2. Never calls os.Exit.
 func Run() int {
 	// Pre-scan for --quiet/-q before subcommand dispatch. kv uses a manual

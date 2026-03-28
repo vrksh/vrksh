@@ -37,6 +37,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/uuid"
 	"github.com/vrksh/vrksh/cmd/validate"
 	"github.com/vrksh/vrksh/internal/bare"
+	"github.com/vrksh/vrksh/internal/completions"
 	mcppkg "github.com/vrksh/vrksh/internal/mcp"
 )
 
@@ -92,6 +93,9 @@ func main() {
 			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 			desc, flagsFn, stdinReq := mcpMaps()
 			os.Exit(mcppkg.Run(desc, flagsFn, stdinReq))
+		case "completions":
+			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+			os.Exit(completions.Run())
 		case "--bare":
 			names := make([]string, 0, len(tools))
 			for name := range tools {

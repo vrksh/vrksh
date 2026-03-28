@@ -41,6 +41,18 @@ type metaRecord struct {
 	Count int    `json:"count"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "urlinfo",
+		Short: "URL parser — components as JSON, no network calls",
+		Flags: []shared.FlagMeta{
+			{Name: "field", Shorthand: "F", Usage: "extract a single field (dot-path for query params, e.g. query.page)"},
+			{Name: "json", Shorthand: "j", Usage: `append {"_vrk":"urlinfo","count":N} after all records`},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk urlinfo. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("urlinfo", pflag.ContinueOnError)

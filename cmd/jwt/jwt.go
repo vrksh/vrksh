@@ -32,6 +32,20 @@ func jsonError(code int, msg string) int {
 	return shared.PrintJSONError(map[string]any{"error": msg, "code": code})
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "jwt",
+		Short: "JWT inspector — decode, --claim, --expired",
+		Flags: []shared.FlagMeta{
+			{Name: "json", Shorthand: "j", Usage: "emit output as JSON"},
+			{Name: "claim", Shorthand: "c", Usage: "print value of a single claim as plain text"},
+			{Name: "expired", Shorthand: "e", Usage: "exit 1 if the token is expired"},
+			{Name: "valid", Usage: "exit 1 if token is expired, not yet valid (nbf), or issued in the future (iat)"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk jwt. Returns 0 (success), 1 (runtime error),
 // or 2 (usage error). Never calls os.Exit.
 func Run() int {

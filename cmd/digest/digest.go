@@ -25,6 +25,24 @@ var isTerminal = shared.IsTerminal
 // copyToHash is a var so tests can inject I/O errors on the stdin streaming path.
 var copyToHash = func(h hash.Hash, r io.Reader) (int64, error) { return io.Copy(h, r) }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "digest",
+		Short: "Universal hasher — SHA-256 by default, outputs algo:hash",
+		Flags: []shared.FlagMeta{
+			{Name: "algo", Shorthand: "a", Usage: "hash algorithm: sha256, md5, sha512"},
+			{Name: "bare", Shorthand: "b", Usage: "output hash only, no algo: prefix"},
+			{Name: "file", Usage: "file to hash (repeatable)"},
+			{Name: "compare", Usage: "compare hashes of all --file inputs; exits 0 either way"},
+			{Name: "hmac", Usage: "compute HMAC instead of plain hash"},
+			{Name: "key", Shorthand: "k", Usage: "HMAC secret key (required with --hmac)"},
+			{Name: "verify", Usage: "known HMAC hex; exits 0 if match, 1 if mismatch"},
+			{Name: "json", Shorthand: "j", Usage: "emit JSON object"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk digest. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("digest", pflag.ContinueOnError)

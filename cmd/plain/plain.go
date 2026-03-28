@@ -25,6 +25,17 @@ type plainOutput struct {
 	OutputBytes int    `json:"output_bytes"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "plain",
+		Short: "Markdown stripper — removes formatting, preserves content",
+		Flags: []shared.FlagMeta{
+			{Name: "json", Shorthand: "j", Usage: "emit JSON envelope with text and byte counts"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk plain. Returns 0 (success), 1 (runtime error),
 // or 2 (usage error). Never calls os.Exit.
 func Run() int {

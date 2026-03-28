@@ -29,6 +29,20 @@ type pctRecord struct {
 	Mode   string `json:"mode"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "pct",
+		Short: "Percent-encoder/decoder per RFC 3986",
+		Flags: []shared.FlagMeta{
+			{Name: "encode", Usage: "percent-encode input (RFC 3986)"},
+			{Name: "decode", Usage: "percent-decode input"},
+			{Name: "form", Usage: "form encoding mode: spaces↔+ instead of %20"},
+			{Name: "json", Shorthand: "j", Usage: "emit JSON object per line: {input, output, op, mode}"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr; exit codes unchanged"},
+		},
+	})
+}
+
 // Run is the entry point for vrk pct. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("pct", pflag.ContinueOnError)

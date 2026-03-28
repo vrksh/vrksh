@@ -35,6 +35,19 @@ var scanLines = func(r io.Reader, fn func(string) error) error {
 	return sc.Err()
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "slug",
+		Short: "URL/filename-safe slug generator",
+		Flags: []shared.FlagMeta{
+			{Name: "separator", Usage: "word separator (default: -)"},
+			{Name: "max", Usage: "max output length, truncated at word boundary (0 = unlimited)"},
+			{Name: "json", Shorthand: "j", Usage: `emit {"input":"...","output":"..."} per line`},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr; exit codes unchanged"},
+		},
+	})
+}
+
 // Run is the entry point for vrk slug. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("slug", pflag.ContinueOnError)

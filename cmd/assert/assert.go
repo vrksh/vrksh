@@ -24,6 +24,20 @@ var isTerminal = shared.IsTerminal
 // readAll is a var so tests can inject I/O errors.
 var readAll = io.ReadAll
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "assert",
+		Short: "Pipeline condition check — evaluates conditions on stdin",
+		Flags: []shared.FlagMeta{
+			{Name: "json", Shorthand: "j", Usage: "emit JSON result to stdout"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr on failure"},
+			{Name: "message", Shorthand: "m", Usage: "custom failure message"},
+			{Name: "contains", Usage: "assert stdin contains substring"},
+			{Name: "matches", Usage: "assert stdin matches regex"},
+		},
+	})
+}
+
 // Run is the entry point for vrk assert. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("assert", pflag.ContinueOnError)

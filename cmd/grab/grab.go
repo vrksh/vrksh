@@ -70,6 +70,19 @@ func emitError(jsonFlag bool, code int, rawURL string, status int, format string
 	return code
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "grab",
+		Short: "URL fetcher — clean markdown, plain text, or raw HTML",
+		Flags: []shared.FlagMeta{
+			{Name: "text", Shorthand: "t", Usage: "plain prose output, no markdown syntax"},
+			{Name: "raw", Usage: "raw HTML, no processing"},
+			{Name: "json", Shorthand: "j", Usage: "emit JSON envelope with metadata"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk grab. Returns 0 (success), 1 (runtime error),
 // or 2 (usage error). Never calls os.Exit.
 func Run() int {

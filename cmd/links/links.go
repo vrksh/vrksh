@@ -58,6 +58,18 @@ type foundLink struct {
 	rec linkRecord
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "links",
+		Short: "Hyperlink extractor — markdown, HTML, bare URLs to JSONL",
+		Flags: []shared.FlagMeta{
+			{Name: "bare", Shorthand: "b", Usage: "output URLs only, one per line"},
+			{Name: "json", Shorthand: "j", Usage: `append {"_vrk":"links","count":N} after all records`},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk links. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("links", pflag.ContinueOnError)

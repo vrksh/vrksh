@@ -30,6 +30,19 @@ var (
 )
 
 func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "moniker",
+		Short: "Memorable name generator — adjective-noun names",
+		Flags: []shared.FlagMeta{
+			{Name: "count", Shorthand: "n", Usage: "number of names to generate (default 1)"},
+			{Name: "separator", Usage: `word separator (default "-")`},
+			{Name: "words", Usage: "number of words per name, minimum 2 (default 2)"},
+			{Name: "seed", Usage: "fix random seed for deterministic output"},
+			{Name: "json", Shorthand: "j", Usage: `emit {"name":"...","adjective":"...","noun":"..."} per name`},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr error messages; exit codes unchanged"},
+		},
+	})
+
 	adjectives = loadWords(adjectivesData)
 	nouns = loadWords(nounsData)
 }

@@ -26,6 +26,17 @@ type sseRecord struct {
 	Data  interface{} `json:"data"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "sse",
+		Short: "SSE stream parser — text/event-stream to JSONL",
+		Flags: []shared.FlagMeta{
+			{Name: "event", Shorthand: "e", Usage: "only emit events of this type; skip all others"},
+			{Name: "field", Shorthand: "F", Usage: "extract dot-path field from the record and print as plain text"},
+		},
+	})
+}
+
 // Run is the entry point for vrk sse. Returns 0, 1, or 2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("sse", pflag.ContinueOnError)

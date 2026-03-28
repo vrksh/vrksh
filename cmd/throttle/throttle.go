@@ -36,6 +36,20 @@ type metaRecord struct {
 	ElapsedMS int64  `json:"elapsed_ms"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "throttle",
+		Short: "Rate limiter for pipes — delays lines to match rate",
+		Flags: []shared.FlagMeta{
+			{Name: "rate", Shorthand: "r", Usage: "rate limit: N/s or N/m (required)"},
+			{Name: "burst", Usage: "emit first N lines without delay"},
+			{Name: "tokens-field", Usage: "rate by token count of a JSONL field"},
+			{Name: "json", Shorthand: "j", Usage: `emit {"_vrk":"throttle","rate":"...","lines":N,"elapsed_ms":N} after all lines`},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk throttle. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("throttle", pflag.ContinueOnError)

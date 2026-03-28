@@ -23,6 +23,21 @@ type epochJSON struct {
 	TZ    string `json:"tz,omitempty"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "epoch",
+		Short: "Timestamp converter — Unix integers and ISO 8601",
+		Flags: []shared.FlagMeta{
+			{Name: "iso", Usage: "output as ISO 8601 string instead of Unix integer"},
+			{Name: "json", Shorthand: "j", Usage: "emit output as JSON: {input, unix, iso, ref?, tz?}"},
+			{Name: "tz", Usage: "timezone for --iso or --json output (IANA name or +HH:MM offset)"},
+			{Name: "now", Usage: "print current Unix timestamp and exit"},
+			{Name: "at", Usage: "reference timestamp for relative input (unix integer), e.g. --at 1740009600"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk epoch. Returns 0 (success), 1 (runtime error),
 // or 2 (usage error). Never calls os.Exit.
 func Run() int {

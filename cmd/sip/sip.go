@@ -50,6 +50,22 @@ func usageErr(jsonFlag bool, msg string) int {
 	return shared.UsageErrorf("%s", msg)
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "sip",
+		Short: "Stream sampler — first, reservoir, every-nth, probabilistic",
+		Flags: []shared.FlagMeta{
+			{Name: "first", Usage: "take first N lines (deterministic)"},
+			{Name: "count", Shorthand: "n", Usage: "reservoir sample of exactly N lines (random, O(N) memory)"},
+			{Name: "every", Usage: "emit every Nth line (deterministic)"},
+			{Name: "sample", Usage: "include each line with N% probability (approximate)"},
+			{Name: "seed", Usage: "fix random seed for deterministic output (0 is valid)"},
+			{Name: "json", Shorthand: "j", Usage: `append {"_vrk":"sip",...} metadata record after output`},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr; exit codes unchanged"},
+		},
+	})
+}
+
 // Run is the entry point for vrk sip. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("sip", pflag.ContinueOnError)

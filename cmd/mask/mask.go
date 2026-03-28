@@ -59,6 +59,19 @@ type maskMeta struct {
 	PatternsMatched []string `json:"patterns_matched"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "mask",
+		Short: "Secret redactor — pattern matching and entropy analysis",
+		Flags: []shared.FlagMeta{
+			{Name: "pattern", Usage: "additional pattern regex (repeatable)"},
+			{Name: "entropy", Usage: "Shannon entropy threshold (default 4.0; lower = more aggressive)"},
+			{Name: "json", Shorthand: "j", Usage: "append metadata JSON record after text output"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk mask. Returns 0, 1, or 2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("mask", pflag.ContinueOnError)

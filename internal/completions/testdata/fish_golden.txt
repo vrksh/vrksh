@@ -1,0 +1,7 @@
+complete -c vrk -f
+complete -c vrk -n '__fish_use_subcommand' -a 'bar' -d 'do bar things'
+complete -c vrk -n '__fish_use_subcommand' -a 'foo' -d 'do foo things'
+complete -c vrk -n '__fish_seen_subcommand_from bar' -l verbose -d 'increase verbosity'
+complete -c vrk -n '__fish_seen_subcommand_from bar' -l quiet -s q -d 'suppress output'
+complete -c vrk -n '__fish_seen_subcommand_from foo' -l json -s j -d 'emit JSON'
+complete -c vrk -n '__fish_seen_subcommand_from foo' -l count -s n -d 'number of items'

@@ -20,6 +20,19 @@ type uuidOutput struct {
 	GeneratedAt int64  `json:"generated_at"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "uuid",
+		Short: "UUID generator — v4 random, v7 time-ordered",
+		Flags: []shared.FlagMeta{
+			{Name: "v7", Usage: "generate a v7 (time-ordered) UUID instead of v4"},
+			{Name: "count", Shorthand: "n", Usage: "number of UUIDs to generate (>= 1)"},
+			{Name: "json", Shorthand: "j", Usage: "emit output as JSON (JSONL when --count > 1)"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk uuid. Returns 0 (success) or 2 (usage error).
 // Never calls os.Exit.
 func Run() int {

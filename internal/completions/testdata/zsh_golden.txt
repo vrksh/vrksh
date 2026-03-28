@@ -1,0 +1,38 @@
+#compdef vrk
+
+_vrk() {
+    local -a commands
+    commands=(
+        'bar:do bar things'
+        'foo:do foo things'
+    )
+
+    _arguments -C \
+        '1:command:->command' \
+        '*::arg:->args'
+
+    case $state in
+    command)
+        _describe -t commands 'vrk tools' commands
+        ;;
+    args)
+        case $words[1] in
+        bar)
+            _arguments \
+                '--verbose[increase verbosity]' \
+                '--quiet[suppress output]' \
+                '-q[suppress output]'
+            ;;
+        foo)
+            _arguments \
+                '--json[emit JSON]' \
+                '-j[emit JSON]' \
+                '--count[number of items]' \
+                '-n[number of items]'
+            ;;
+        esac
+        ;;
+    esac
+}
+
+_vrk "$@"

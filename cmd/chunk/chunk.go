@@ -24,6 +24,19 @@ type chunkRecord struct {
 	Tokens int    `json:"tokens"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "chunk",
+		Short: "Token-aware text splitter — splits stdin into chunks within a token budget",
+		Flags: []shared.FlagMeta{
+			{Name: "size", Usage: "max tokens per chunk (required, >= 1)"},
+			{Name: "overlap", Usage: "token overlap between adjacent chunks (must be < --size)"},
+			{Name: "by", Usage: `chunking strategy; supported: "paragraph"`},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk chunk. Returns 0 (success), 1 (runtime error),
 // or 2 (usage error). Never calls os.Exit.
 func Run() int {

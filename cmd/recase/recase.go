@@ -44,6 +44,18 @@ var validConventions = map[string]bool{
 	"upper":     true,
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "recase",
+		Short: "Naming convention converter — camel, snake, kebab, etc.",
+		Flags: []shared.FlagMeta{
+			{Name: "to", Usage: "target naming convention (required): camel, pascal, snake, kebab, screaming, title, lower, upper"},
+			{Name: "json", Shorthand: "j", Usage: "emit JSON object per line with input, output, from, to fields"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output; exit codes unchanged"},
+		},
+	})
+}
+
 // Run is the entry point for vrk recase. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("recase", pflag.ContinueOnError)

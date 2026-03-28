@@ -38,6 +38,20 @@ type metaRecord struct {
 	Failed int    `json:"failed"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "validate",
+		Short: "JSONL schema validator — validates records against schema",
+		Flags: []shared.FlagMeta{
+			{Name: "schema", Shorthand: "s", Usage: "JSON schema or file path (required)"},
+			{Name: "strict", Usage: "exit 1 on first invalid line"},
+			{Name: "fix", Usage: "attempt to repair invalid lines via prompt"},
+			{Name: "json", Shorthand: "j", Usage: "append metadata record to stdout at end"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk validate. Returns 0, 1, or 2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("validate", pflag.ContinueOnError)

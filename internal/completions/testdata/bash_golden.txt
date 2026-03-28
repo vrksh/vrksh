@@ -1,0 +1,20 @@
+_vrk() {
+    local cur prev words cword
+    _init_completion || return
+
+    if [[ $cword -eq 1 ]]; then
+        COMPREPLY=($(compgen -W "bar foo" -- "$cur"))
+        return
+    fi
+
+    local tool="${words[1]}"
+    case "$tool" in
+        bar)
+            COMPREPLY=($(compgen -W "--verbose --quiet -q" -- "$cur"))
+            ;;
+        foo)
+            COMPREPLY=($(compgen -W "--json -j --count -n" -- "$cur"))
+            ;;
+    esac
+}
+complete -F _vrk vrk

@@ -550,6 +550,24 @@ func printExplainEndpoint(w io.Writer, endpointURL, model, prompt string, schema
 	return 0
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "prompt",
+		Short: "Send a prompt to an LLM and print the response",
+		Flags: []shared.FlagMeta{
+			{Name: "model", Shorthand: "m", Usage: "LLM model (default: claude-sonnet-4-5 or VRK_DEFAULT_MODEL)"},
+			{Name: "budget", Usage: "exit 1 if prompt exceeds N tokens (0 = disabled)"},
+			{Name: "fail", Shorthand: "f", Usage: "fail on non-2xx API response or schema mismatch"},
+			{Name: "json", Shorthand: "j", Usage: "emit response as JSON envelope with metadata"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+			{Name: "schema", Shorthand: "s", Usage: "JSON schema string or file path for response validation"},
+			{Name: "explain", Usage: "print equivalent curl command and exit, no API call"},
+			{Name: "retry", Usage: "retry N times on schema mismatch with temperature escalation"},
+			{Name: "endpoint", Usage: "OpenAI-compatible API base URL (e.g. http://localhost:11434/v1)"},
+		},
+	})
+}
+
 // Run is the entry point for vrk prompt. Returns 0 (success), 1 (runtime
 // error), or 2 (usage error). Never calls os.Exit.
 func Run() int {

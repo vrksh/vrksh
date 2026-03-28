@@ -24,6 +24,18 @@ var isTerminal = shared.IsTerminal
 // readAll is a var so tests can inject I/O errors.
 var readAll = io.ReadAll
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "base",
+		Short: "Encoding converter — base64, base64url, hex, base32",
+		Flags: []shared.FlagMeta{
+			{Name: "to", Usage: "target encoding (base64, base64url, hex, base32)"},
+			{Name: "from", Usage: "source encoding (base64, base64url, hex, base32)"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk base. Returns 0/1/2. Never calls os.Exit.
 func Run() int {
 	if len(os.Args) < 2 {

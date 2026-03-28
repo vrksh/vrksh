@@ -20,6 +20,19 @@ type tokOutput struct {
 	Model  string `json:"model"`
 }
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "tok",
+		Short: "Token counter — cl100k_base, --budget guard",
+		Flags: []shared.FlagMeta{
+			{Name: "json", Shorthand: "j", Usage: "emit output as JSON"},
+			{Name: "budget", Usage: "exit 1 if token count exceeds N"},
+			{Name: "model", Shorthand: "m", Usage: "tokenizer model (currently only cl100k_base is supported)"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+		},
+	})
+}
+
 // Run is the entry point for vrk tok. Returns 0 (success), 1 (runtime/budget
 // error), or 2 (usage error). Never calls os.Exit.
 func Run() int {

@@ -14,6 +14,22 @@ import (
 	"github.com/vrksh/vrksh/internal/shared"
 )
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "coax",
+		Short: "Retry wrapper — re-runs a command on failure with backoff",
+		Flags: []shared.FlagMeta{
+			{Name: "times", Usage: "number of retries (first attempt is free; total attempts = N+1)"},
+			{Name: "backoff", Usage: "delay between retries: 100ms for fixed, exp:100ms for exponential"},
+			{Name: "backoff-max", Usage: "cap for exponential backoff; 0 = uncapped"},
+			{Name: "quiet", Shorthand: "q", Usage: "suppress coax's own retry progress lines (subprocess stderr always passes through)"},
+			{Name: "on", Usage: "retry only when exit code matches; repeatable: --on 1 --on 2 (default: any non-zero)"},
+			{Name: "until", Usage: "shell command; retry until it exits 0"},
+			{Name: "json", Shorthand: "j", Usage: "emit errors as JSON"},
+		},
+	})
+}
+
 // Run is the entry point for vrk coax.
 func Run() int {
 	fs := pflag.NewFlagSet("coax", pflag.ContinueOnError)

@@ -51,6 +51,19 @@ var (
 	fieldKeyMsg   = []byte(`"msg":`)
 )
 
+func init() {
+	shared.Register(shared.ToolMeta{
+		Name:  "emit",
+		Short: "Wrap stdin lines as structured JSONL log records with timestamps and levels",
+		Flags: []shared.FlagMeta{
+			{Name: "level", Shorthand: "l", Usage: "log level: debug, info, warn, error"},
+			{Name: "tag", Usage: "add tag field to every record"},
+			{Name: "msg", Usage: "override message; stdin treated as JSON to merge extra fields"},
+			{Name: "parse-level", Usage: "auto-detect level from line prefix (ERROR/WARN/WARNING/INFO/DEBUG)"},
+		},
+	})
+}
+
 // Run is the entry point for vrk emit. Returns 0, 1, or 2. Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("emit", pflag.ContinueOnError)
