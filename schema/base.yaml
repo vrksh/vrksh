@@ -1,0 +1,51 @@
+name: base
+tagline: Encoding converter — base64, base64url, hex, base32
+tier: utility
+when_to_use: When you need to encode or decode base64, hex, or base32 in a pipeline
+hero_command: echo 'hello' | vrk base encode --to base64
+primary_output: aGVsbG8=
+primary_context: reads from stdin or positional arg
+avoid: Do not use for encryption — base encoding is not a security mechanism
+contract:
+  input: stdin
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "base: usage: vrk base <encode|decode> [flags]"
+  example_command: vrk base
+mcp:
+  callable: true
+flags:
+  - name: to
+    default: ""
+    description: "Target encoding: base64, base64url, hex, base32 (encode)"
+  - name: from
+    default: ""
+    description: "Source encoding: base64, base64url, hex, base32 (decode)"
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Encode to base64
+    command: echo 'hello' | vrk base encode --to base64
+    output: aGVsbG8=
+    test: true
+  - title: failure case
+    command: vrk base
+    output: "usage error: base: usage: vrk base <encode|decode> [flags]"
+    is_failure: true
+before: |
+  import base64
+  print(base64.b64encode(b"hello").decode())
+after: echo 'hello' | vrk base encode --to base64
+exit_codes:
+  0: Success
+  1: Invalid encoded input (bad characters, wrong padding)
+  2: Missing subcommand, --to/--from missing or unsupported
+related:
+  - jwt
+  - digest
+composable_with:
+  - jwt
+  - digest

@@ -1,0 +1,56 @@
+name: mask
+tagline: Secret redactor — entropy + pattern-based, streaming
+tier: pipeline
+when_to_use: When text might contain secrets that must not reach an LLM or a log file
+hero_command: echo 'password=secret123' | vrk mask
+primary_output: password=[REDACTED]
+primary_context: reads from stdin
+avoid: Do not use as a security guarantee — mask is best-effort; audit sensitive pipelines manually
+contract:
+  input: stdin
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "mask: invalid pattern"
+  example_command: echo "test" | vrk mask --pattern '[invalid'
+mcp:
+  callable: true
+flags:
+  - name: pattern
+    default: ""
+    description: Additional Go regex to match and redact (repeatable)
+  - name: entropy
+    default: "4.0"
+    description: Shannon entropy threshold; lower catches more
+  - name: json
+    default: "false"
+    description: Append metadata trailer after output
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Redact secrets from text
+    command: echo 'password=secret123' | vrk mask
+    output: password=[REDACTED]
+    test: true
+  - title: failure case
+    command: echo "test" | vrk mask --pattern '[invalid'
+    output: 'usage error: mask: invalid pattern "[invalid": error parsing regexp: missing closing ]: `[invalid`'
+    is_failure: true
+before: |
+  import re
+  text = re.sub(r'password=\S+', 'password=[REDACTED]', text)
+  text = re.sub(r'Bearer \S+', 'Bearer [REDACTED]', text)
+after: cat output.txt | vrk mask
+exit_codes:
+  0: All lines processed
+  1: Stdin scanner error or write failure
+  2: Interactive TTY with no piped input, invalid regex
+related:
+  - prompt
+  - emit
+  - plain
+composable_with:
+  - prompt
+  - emit

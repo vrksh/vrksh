@@ -1,0 +1,52 @@
+name: bare
+tagline: "Symlink creator — use vrksh tools without the vrk prefix"
+tier: utility
+when_to_use: When you want shorter commands by calling tools directly as tok, jwt, grab instead of vrk tok
+hero_command: vrk --bare --dry-run
+primary_output: "Would link assert   \u2192 /usr/local/bin/assert\nWould link chunk    \u2192 /usr/local/bin/chunk\n..."
+primary_context: operates on the filesystem
+avoid: Do not use in shared environments where tool names might conflict with existing commands
+contract:
+  input: none
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 1
+  stderr_contains: (filesystem error)
+  example_command: vrk --bare --force /nonexistent
+mcp:
+  callable: false
+flags:
+  - name: force
+    default: "false"
+    description: Overwrite existing files at symlink paths
+  - name: remove
+    default: "false"
+    description: Remove bare symlinks (only those pointing to vrk)
+  - name: list
+    default: "false"
+    description: List currently active bare symlinks
+  - name: dry-run
+    default: "false"
+    description: "Show what would happen, make no changes"
+examples:
+  - title: Preview bare symlinks
+    command: vrk --bare --dry-run
+    output: "Would link assert   \u2192 /usr/local/bin/assert\n..."
+    test: false
+  - title: failure case
+    command: vrk --bare (in read-only dir)
+    output: (filesystem error)
+    is_failure: true
+before: |
+  for tool in tok jwt epoch; do
+      ln -sf /usr/local/bin/vrk /usr/local/bin/$tool
+  done
+after: vrk --bare
+exit_codes:
+  0: Success
+  1: Filesystem error creating or removing symlinks
+  2: Usage error
+related:
+  - completions
+composable_with: []

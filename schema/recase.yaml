@@ -1,0 +1,51 @@
+name: recase
+tagline: "Naming convention converter - snake, camel, kebab, pascal, title"
+tier: utility
+when_to_use: When converting between naming conventions for code generation or API field mapping
+hero_command: echo 'getUserName' | vrk recase --to snake
+primary_output: get_user_name
+primary_context: reads from stdin
+avoid: Do not use for natural language text - recase handles identifiers, not prose
+contract:
+  input: stdin
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "--to is required"
+  example_command: echo 'test' | vrk recase
+mcp:
+  callable: true
+flags:
+  - name: to
+    default: ""
+    description: "Target convention: camel, pascal, snake, kebab, screaming, title, lower, upper"
+  - name: json
+    default: "false"
+    description: "Emit JSON per line: {input, output, from, to}"
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Convert camelCase to snake_case
+    command: echo 'getUserName' | vrk recase --to snake
+    output: get_user_name
+    test: true
+  - title: failure case
+    command: echo 'test' | vrk recase
+    output: "usage error: --to is required"
+    is_failure: true
+before: |
+  import re
+  name = re.sub(r'([A-Z])', r'_\1', "getUserName").lower().lstrip('_')
+after: echo 'getUserName' | vrk recase --to snake
+exit_codes:
+  0: Success
+  1: Runtime error (I/O failure)
+  2: "--to missing or invalid value, interactive TTY with no stdin"
+related:
+  - slug
+  - plain
+composable_with:
+  - jq
+  - xargs

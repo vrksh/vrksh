@@ -1,0 +1,69 @@
+name: digest
+tagline: "Universal hasher - sha256/md5/sha512, --hmac, --compare"
+tier: utility
+when_to_use: When you need to hash a string or file, compute an HMAC, or verify a checksum
+hero_command: vrk digest 'hello'
+primary_output: "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+primary_context: reads positional arg or stdin
+avoid: Do not use for password hashing - digest computes fast hashes, not bcrypt/scrypt
+contract:
+  input: arg
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "digest: --hmac requires --key"
+  example_command: echo 'test' | vrk digest --hmac
+mcp:
+  callable: true
+flags:
+  - name: algo
+    default: "sha256"
+    description: "Hash algorithm: sha256, md5, sha512"
+  - name: bare
+    default: "false"
+    description: "Output hex hash only, without algo: prefix"
+  - name: file
+    default: ""
+    description: Path to file to hash (repeatable)
+  - name: compare
+    default: "false"
+    description: Compare hashes of all --file inputs
+  - name: hmac
+    default: "false"
+    description: Compute HMAC instead of plain hash
+  - name: key
+    default: ""
+    description: HMAC secret key (required with --hmac)
+  - name: verify
+    default: ""
+    description: Known HMAC hex to verify against
+  - name: json
+    default: "false"
+    description: "Emit JSON object instead of algo:hash line"
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Hash a string
+    command: vrk digest 'hello'
+    output: "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    test: true
+  - title: failure case
+    command: echo 'test' | vrk digest --hmac
+    output: "usage error: digest: --hmac requires --key"
+    is_failure: true
+before: |
+  import hashlib
+  print("sha256:" + hashlib.sha256(b"hello").hexdigest())
+after: vrk digest 'hello'
+exit_codes:
+  0: "Success, hash written, or --verify matched"
+  1: "File not found, read error, or --verify mismatch"
+  2: "Unknown algorithm, --hmac without --key, --verify without --hmac"
+related:
+  - base
+  - grab
+composable_with:
+  - grab
+  - xargs

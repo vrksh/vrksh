@@ -1,0 +1,54 @@
+name: uuid
+tagline: UUID generator — v4/v7, --count, --json
+tier: utility
+when_to_use: When you need unique IDs for pipeline runs, batch jobs, or temporary keys
+hero_command: vrk uuid
+primary_output: aa4b0064-0dcb-4308-ba77-35d0b6711158
+primary_context: generates output (no input)
+avoid: Do not use for cryptographic randomness — UUIDs are identifiers, not secrets
+contract:
+  input: none
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "uuid: count must be >= 1"
+  example_command: vrk uuid --count 0
+mcp:
+  callable: true
+flags:
+  - name: v7
+    default: "false"
+    description: Generate a v7 (time-ordered) UUID instead of v4
+  - name: count
+    default: "1"
+    description: Number of UUIDs to generate
+  - name: json
+    default: "false"
+    description: Emit JSON with uuid, version, generated_at
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Generate a UUID
+    command: vrk uuid
+    output: aa4b0064-0dcb-4308-ba77-35d0b6711158
+    test: false
+  - title: failure case
+    command: vrk uuid --count 0
+    output: "usage error: uuid: count must be >= 1"
+    is_failure: true
+before: |
+  import uuid
+  print(uuid.uuid4())
+after: vrk uuid
+exit_codes:
+  0: Success
+  1: Runtime error (generation failure)
+  2: --count less than 1, unknown flag
+related:
+  - moniker
+  - kv
+composable_with:
+  - kv
+  - xargs

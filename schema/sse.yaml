@@ -1,0 +1,50 @@
+name: sse
+tagline: SSE stream parser — text/event-stream to JSONL
+tier: pipeline
+when_to_use: When consuming Server-Sent Event streams from LLM APIs or webhooks
+hero_command: curl -sN https://api.example.com/stream | vrk sse
+primary_output: '{"event":"message","data":{"id":"chatcmpl-...","choices":[{"delta":{"content":"Hello"}}]}}'
+primary_context: reads from stdin
+avoid: Do not use for parsing non-SSE HTTP responses — sse expects text/event-stream format
+contract:
+  input: stdin
+  output: stdout
+  output_format: jsonl
+failure:
+  exit_code: 2
+  stderr_contains: "sse: no input: pipe an SSE stream to stdin"
+  example_command: vrk sse
+mcp:
+  callable: false
+flags:
+  - name: event
+    default: ""
+    description: Only emit events of this type
+  - name: field
+    default: ""
+    description: Extract dot-path field from record as plain text
+examples:
+  - title: Parse SSE stream to JSONL
+    command: curl -sN https://api.example.com/stream | vrk sse
+    output: '{"event":"message","data":{...}}'
+    test: false
+  - title: failure case
+    command: vrk sse
+    output: "usage error: sse: no input: pipe an SSE stream to stdin"
+    is_failure: true
+before: |
+  import sseclient
+  for event in sseclient.SSEClient(response):
+      print(json.dumps({"event": event.event, "data": json.loads(event.data)}))
+after: curl -sN https://api.example.com/stream | vrk sse
+exit_codes:
+  0: Success, including clean [DONE] termination
+  1: I/O error reading stdin
+  2: Usage error — interactive terminal with no piped input, unknown flag
+related:
+  - prompt
+  - grab
+composable_with:
+  - curl
+  - jq
+  - tee

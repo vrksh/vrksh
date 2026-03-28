@@ -1,0 +1,55 @@
+name: links
+tagline: "Hyperlink extractor - markdown, HTML, bare URLs to JSONL"
+tier: utility
+when_to_use: When you need to extract all URLs from a document for checking, crawling, or processing
+hero_command: echo '[test](https://example.com)' | vrk links
+primary_output: '{"text":"test","url":"https://example.com","line":1}'
+primary_context: reads from stdin
+avoid: Do not use for URL validation - links extracts URLs, it does not check if they resolve
+contract:
+  input: stdin
+  output: stdout
+  output_format: jsonl
+failure:
+  exit_code: 2
+  stderr_contains: "links: no input: pipe text to stdin"
+  example_command: vrk links
+mcp:
+  callable: true
+flags:
+  - name: bare
+    default: "false"
+    description: "Output URLs only, one per line"
+  - name: json
+    default: "false"
+    description: Append metadata trailer after all records
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Extract links as JSONL
+    command: echo '[test](https://example.com)' | vrk links
+    output: '{"text":"test","url":"https://example.com","line":1}'
+    test: true
+  - title: failure case
+    command: vrk links
+    output: "usage error: links: no input: pipe text to stdin"
+    is_failure: true
+before: |
+  import re
+  for m in re.finditer(r'\[([^\]]+)\]\(([^)]+)\)', text):
+      print(json.dumps({"text": m.group(1), "url": m.group(2)}))
+after: cat README.md | vrk links
+exit_codes:
+  0: "Success, including empty input and documents with no links"
+  1: I/O error reading stdin
+  2: "Interactive TTY with no piped input, unknown flag"
+related:
+  - grab
+  - urlinfo
+  - plain
+composable_with:
+  - grab
+  - urlinfo
+  - jq
+  - xargs

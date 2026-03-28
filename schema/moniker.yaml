@@ -1,0 +1,63 @@
+name: moniker
+tagline: "Memorable name generator - run IDs, job labels, temp dirs"
+tier: utility
+when_to_use: When you need a human-readable, pronounceable identifier instead of a UUID
+hero_command: vrk moniker --seed 42
+primary_output: distant-shore
+primary_context: generates output (no input)
+avoid: Do not use when uniqueness must be cryptographically guaranteed - use uuid instead
+contract:
+  input: none
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "moniker: --count must be >= 1"
+  example_command: vrk moniker --count 0
+mcp:
+  callable: true
+flags:
+  - name: count
+    default: "1"
+    description: Number of names to generate
+  - name: separator
+    default: "-"
+    description: Word separator
+  - name: words
+    default: "2"
+    description: Words per name (minimum 2)
+  - name: seed
+    default: "0"
+    description: Random seed for deterministic output
+  - name: json
+    default: "false"
+    description: "Emit JSON per name: {name, words}"
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Generate a deterministic name
+    command: vrk moniker --seed 42
+    output: distant-shore
+    test: true
+  - title: failure case
+    command: vrk moniker --count 0
+    output: "usage error: moniker: --count must be >= 1, got 0"
+    is_failure: true
+before: |
+  import random
+  adj = random.choice(["swift", "quiet", "bold"])
+  noun = random.choice(["falcon", "river", "peak"])
+  print(f"{adj}-{noun}")
+after: vrk moniker
+exit_codes:
+  0: Success
+  1: Word pool exhausted for requested count
+  2: "--count less than 1, --words less than 2"
+related:
+  - uuid
+  - slug
+  - kv
+composable_with:
+  - kv
+  - xargs

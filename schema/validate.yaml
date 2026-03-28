@@ -1,0 +1,61 @@
+name: validate
+tagline: JSONL schema validator — --schema, --strict, --fix, --json
+tier: pipeline
+when_to_use: When you need to verify JSON records match an expected shape before downstream processing
+hero_command: "echo '{\"name\":\"Alice\",\"age\":30}' | vrk validate --schema '{\"name\":\"string\",\"age\":\"number\"}'"
+primary_output: '{"name":"Alice","age":30}'
+primary_context: reads from stdin
+avoid: Do not use for JSON Schema (draft-07) validation — validate uses a simplified type-map format
+contract:
+  input: stdin
+  output: stdout
+  output_format: jsonl
+failure:
+  exit_code: 2
+  stderr_contains: "validate: --schema is required"
+  example_command: echo '{}' | vrk validate
+mcp:
+  callable: true
+flags:
+  - name: schema
+    default: ""
+    description: JSON schema inline or path to .json file (required)
+  - name: strict
+    default: "false"
+    description: Exit 1 on first invalid record
+  - name: fix
+    default: "false"
+    description: Send invalid records to vrk prompt for repair
+  - name: json
+    default: "false"
+    description: Append metadata trailer after all output
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Validate a JSON record
+    command: "echo '{\"name\":\"Alice\",\"age\":30}' | vrk validate --schema '{\"name\":\"string\",\"age\":\"number\"}'"
+    output: '{"name":"Alice","age":30}'
+    test: true
+  - title: failure case
+    command: echo '{}' | vrk validate
+    output: "usage error: validate: --schema is required"
+    is_failure: true
+before: |
+  schema = {"name": str, "age": int}
+  for line in sys.stdin:
+      record = json.loads(line)
+      for k, t in schema.items():
+          assert isinstance(record.get(k), t)
+after: "cat records.jsonl | vrk validate --schema '{\"name\":\"string\",\"age\":\"number\"}' --strict"
+exit_codes:
+  0: All records passed
+  1: Record failed in --strict mode or scanner error
+  2: --schema missing, schema JSON invalid, unknown flag
+related:
+  - prompt
+  - assert
+  - jsonl
+composable_with:
+  - jq
+  - prompt

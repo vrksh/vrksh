@@ -1,0 +1,60 @@
+name: assert
+tagline: "Pipeline condition check — jq conditions, --contains, --matches"
+tier: utility
+when_to_use: When you need a gate in a pipeline that stops on unexpected data
+hero_command: "echo 'build succeeded' | vrk assert --contains 'succeeded'"
+primary_output: build succeeded
+primary_context: reads from stdin
+avoid: "Do not use for complex validation logic — use validate with --schema for structural checks"
+contract:
+  input: stdin
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 1
+  stderr_contains: "assert: assertion failed: input does not contain"
+  example_command: "echo 'build failed' | vrk assert --contains 'succeeded'"
+mcp:
+  callable: true
+flags:
+  - name: contains
+    default: ""
+    description: Assert stdin contains this literal substring
+  - name: matches
+    default: ""
+    description: Assert stdin matches this regular expression
+  - name: message
+    default: ""
+    description: Custom message on failure
+  - name: json
+    default: "false"
+    description: Emit errors as JSON to stdout
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output on failure
+examples:
+  - title: Assert text contains a substring
+    command: "echo 'build succeeded' | vrk assert --contains 'succeeded'"
+    output: build succeeded
+    test: true
+  - title: failure case
+    command: "echo 'build failed' | vrk assert --contains 'succeeded'"
+    output: 'assert: assertion failed: input does not contain "succeeded"'
+    is_failure: true
+before: |
+  if "succeeded" not in output:
+      sys.exit(1)
+  print(output)
+after: "echo 'build succeeded' | vrk assert --contains 'succeeded'"
+exit_codes:
+  0: "All conditions passed; input passed through to stdout"
+  1: "Assertion failed, or runtime error"
+  2: "No condition specified, mixed modes, invalid regex, interactive TTY"
+related:
+  - validate
+  - coax
+  - grab
+composable_with:
+  - grab
+  - prompt
+  - jq

@@ -1,0 +1,42 @@
+name: completions
+tagline: "Shell completion script generator — bash, zsh, fish"
+tier: utility
+when_to_use: When setting up Tab completion for vrk tool names and flags in your shell
+hero_command: vrk completions bash
+primary_output: (bash completion script)
+primary_context: takes a shell name as positional arg
+avoid: "Do not run in a pipeline — completions generates a script for sourcing, not data"
+contract:
+  input: arg
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "completions: shell argument required (bash, zsh, fish)"
+  example_command: vrk completions
+mcp:
+  callable: false
+flags:
+  - name: json
+    default: "false"
+    description: Emit errors as JSON
+examples:
+  - title: Generate bash completions
+    command: vrk completions bash
+    output: (bash completion script)
+    test: false
+  - title: failure case
+    command: vrk completions
+    output: "usage error: completions: shell argument required (bash, zsh, fish)"
+    is_failure: true
+before: |
+  # No standard equivalent — hand-write completion scripts
+  complete -W "tok jwt epoch uuid" vrk
+after: vrk completions bash > ~/.bash_completion.d/vrk
+exit_codes:
+  0: Script emitted to stdout
+  1: Unknown shell argument
+  2: No shell argument provided
+related:
+  - bare
+composable_with: []

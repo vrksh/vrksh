@@ -1,0 +1,57 @@
+name: slug
+tagline: "URL/filename slug generator - --separator, --max, --json"
+tier: utility
+when_to_use: When you need URL-safe or filesystem-safe identifiers from arbitrary text
+hero_command: echo 'Hello World' | vrk slug
+primary_output: hello-world
+primary_context: reads from stdin
+avoid: Do not use for unique IDs - slug is deterministic; same input always gives same output
+contract:
+  input: stdin
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "slug: no input"
+  example_command: vrk slug
+mcp:
+  callable: true
+flags:
+  - name: separator
+    default: "-"
+    description: Word separator character or string
+  - name: max
+    default: "0"
+    description: "Max output length; truncated at last separator (0 = no limit)"
+  - name: json
+    default: "false"
+    description: "Emit JSON per line: {input, output}"
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Generate a slug
+    command: echo 'Hello World' | vrk slug
+    output: hello-world
+    test: true
+  - title: failure case
+    command: vrk slug
+    output: "usage error: slug: no input: pipe text to stdin"
+    is_failure: true
+before: |
+  import re, unicodedata
+  s = unicodedata.normalize('NFD', text)
+  s = re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')
+after: echo 'Hello World' | vrk slug
+exit_codes:
+  0: Success
+  1: Runtime error (I/O failure)
+  2: Interactive TTY with no stdin
+related:
+  - recase
+  - pct
+  - moniker
+composable_with:
+  - jq
+  - kv
+  - xargs

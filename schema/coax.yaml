@@ -1,0 +1,67 @@
+name: coax
+tagline: Retry wrapper — --times, --backoff, --on, --until
+tier: pipeline
+when_to_use: When a command might fail transiently and needs automatic retries with backoff
+hero_command: vrk coax -- curl -sf https://api.example.com/data
+primary_output: (output of wrapped command)
+primary_context: wraps a command
+avoid: Do not use for permanent failures — coax retries do not fix usage errors or missing credentials
+contract:
+  input: stdin
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "missing command: use -- to separate command from coax flags"
+  example_command: vrk coax
+mcp:
+  callable: false
+flags:
+  - name: times
+    default: "3"
+    description: Number of retries (total attempts = N+1)
+  - name: backoff
+    default: ""
+    description: Delay between retries (500ms or exp:100ms)
+  - name: backoff-max
+    default: "0"
+    description: Cap for exponential backoff
+  - name: "on"
+    default: "[]"
+    description: Retry only on these exit codes
+  - name: until
+    default: ""
+    description: Shell condition; retry while this exits non-zero
+  - name: quiet
+    default: "false"
+    description: Suppress retry progress lines
+  - name: json
+    default: "false"
+    description: Emit errors as JSON
+examples:
+  - title: Retry a command 3 times
+    command: vrk coax -- curl -sf https://api.example.com/data
+    output: (output from curl)
+    test: false
+  - title: failure case
+    command: vrk coax
+    output: "usage error: missing command: use -- to separate command from coax flags"
+    is_failure: true
+before: |
+  for i in range(4):
+      result = subprocess.run(cmd)
+      if result.returncode == 0:
+          break
+      time.sleep(2 ** i)
+after: vrk coax --times 3 --backoff exp:200ms -- curl -sf https://api.example.com
+exit_codes:
+  0: Command succeeded
+  1: All retries exhausted (last exit code)
+  2: Missing command after --, invalid --backoff spec
+related:
+  - prompt
+  - grab
+composable_with:
+  - curl
+  - prompt
+  - grab

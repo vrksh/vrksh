@@ -1,0 +1,66 @@
+name: sip
+tagline: "Stream sampler — --first, --count, --every, --sample"
+tier: utility
+when_to_use: When you need a representative sample from a large stream without reading it all into memory
+hero_command: "printf 'a\\nb\\nc\\nd\\ne\\n' | vrk sip --first 2"
+primary_output: "a\nb"
+primary_context: reads from stdin only
+avoid: "Do not use for selecting specific lines by number — sip samples, it does not seek"
+contract:
+  input: stdin
+  output: stdout
+  output_format: text
+failure:
+  exit_code: 2
+  stderr_contains: "sip: a sampling flag is required"
+  example_command: echo 'test' | vrk sip
+mcp:
+  callable: true
+flags:
+  - name: first
+    default: "0"
+    description: Take first N lines
+  - name: count
+    default: "0"
+    description: Reservoir sample of exactly N lines
+  - name: every
+    default: "0"
+    description: Emit every Nth line
+  - name: sample
+    default: "0"
+    description: Include each line with N% probability (1-100)
+  - name: seed
+    default: "0"
+    description: Random seed for reproducibility
+  - name: json
+    default: "false"
+    description: Append metadata record after all output
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Take first 2 lines
+    command: "printf 'a\\nb\\nc\\n' | vrk sip --first 2"
+    output: "a\nb"
+    test: true
+  - title: failure case
+    command: echo 'test' | vrk sip
+    output: "usage error: sip: a sampling flag is required"
+    is_failure: true
+before: |
+  import random
+  lines = open("huge.jsonl").readlines()
+  sample = random.sample(lines, 100)
+after: cat huge.jsonl | vrk sip --count 100 --seed 42
+exit_codes:
+  0: Success
+  1: I/O failure reading stdin
+  2: "No strategy specified, multiple strategies, --sample outside 1-100, interactive TTY"
+related:
+  - throttle
+  - validate
+  - assert
+composable_with:
+  - validate
+  - prompt
+  - jq

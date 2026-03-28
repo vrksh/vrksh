@@ -1,0 +1,57 @@
+name: emit
+tagline: "Structured logger — wraps stdin lines as JSONL log records"
+tier: utility
+when_to_use: When you need to convert unstructured text output into timestamped JSONL log records
+hero_command: vrk emit "deployment complete"
+primary_output: '{"ts":"2026-03-28T20:59:48.669Z","level":"info","msg":"deployment complete"}'
+primary_context: reads positional arg or stdin
+avoid: "Do not use as a replacement for structured logging libraries — emit is for pipeline output, not application logs"
+contract:
+  input: stdin
+  output: stdout
+  output_format: jsonl
+failure:
+  exit_code: 2
+  stderr_contains: 'emit: unknown level "invalid": must be debug, info, warn, or error'
+  example_command: echo 'test' | vrk emit --level invalid
+mcp:
+  callable: true
+flags:
+  - name: level
+    default: info
+    description: "Log level: debug, info, warn, error"
+  - name: tag
+    default: ""
+    description: Value for the tag field on every record
+  - name: msg
+    default: ""
+    description: "Fixed message override; stdin lines parsed as JSON and merged"
+  - name: parse-level
+    default: "false"
+    description: Auto-detect level from ERROR/WARN/INFO/DEBUG line prefixes
+examples:
+  - title: Emit a log record
+    command: vrk emit "deployment complete"
+    output: '{"ts":"...","level":"info","msg":"deployment complete"}'
+    test: false
+  - title: failure case
+    command: echo 'test' | vrk emit --level invalid
+    output: 'usage error: emit: unknown level "invalid": must be debug, info, warn, or error'
+    is_failure: true
+before: |
+  import json, datetime
+  print(json.dumps({"ts": datetime.utcnow().isoformat() + "Z",
+                    "level": "info", "msg": line}))
+after: some-script.sh | vrk emit --level info --tag my-script
+exit_codes:
+  0: All non-empty lines emitted as JSONL records
+  1: Stdin scanner error or write failure
+  2: "Interactive TTY with no positional arg, or unknown --level value"
+related:
+  - mask
+  - coax
+  - jsonl
+composable_with:
+  - coax
+  - mask
+  - kv

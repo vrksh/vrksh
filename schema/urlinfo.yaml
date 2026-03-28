@@ -1,0 +1,54 @@
+name: urlinfo
+tagline: "URL parser — scheme, host, port, path, query, --field"
+tier: utility
+when_to_use: When you need to extract components from URLs without writing a custom parser
+hero_command: "echo 'https://example.com/path?q=1' | vrk urlinfo"
+primary_output: '{"scheme":"https","host":"example.com","port":0,"path":"/path","query":{"q":"1"},"fragment":"","user":""}'
+primary_context: reads from stdin or positional arg
+avoid: "Do not use for URL validation — urlinfo parses structure, it does not check if URLs resolve"
+contract:
+  input: stdin
+  output: stdout
+  output_format: json
+failure:
+  exit_code: 1
+  stderr_contains: "urlinfo: invalid URL"
+  example_command: "echo 'not a url' | vrk urlinfo"
+mcp:
+  callable: true
+flags:
+  - name: field
+    default: ""
+    description: Extract a single field as plain text (supports dot-path for query params)
+  - name: json
+    default: "false"
+    description: Append metadata trailer
+  - name: quiet
+    default: "false"
+    description: Suppress stderr output
+examples:
+  - title: Parse a URL to JSON
+    command: "echo 'https://example.com/path?q=1' | vrk urlinfo"
+    output: '{"scheme":"https","host":"example.com","port":0,"path":"/path","query":{"q":"1"},"fragment":"","user":""}'
+    test: true
+  - title: failure case
+    command: "echo 'not a url' | vrk urlinfo"
+    output: "error: urlinfo: invalid URL: not a url"
+    is_failure: true
+before: |
+  from urllib.parse import urlparse
+  u = urlparse("https://example.com/path?q=1")
+  print(json.dumps({"scheme": u.scheme, "host": u.hostname}))
+after: "echo 'https://example.com/path?q=1' | vrk urlinfo --field host"
+exit_codes:
+  0: Success
+  1: "Invalid URL that cannot be parsed, I/O error"
+  2: Interactive TTY with no stdin or positional arg
+related:
+  - links
+  - pct
+  - grab
+composable_with:
+  - links
+  - jq
+  - sort
