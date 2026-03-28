@@ -15,7 +15,7 @@ Exit 2: --count < 1, unknown flag
 
 Example:
 
-    ID=$(vrk uuid) && vrk prompt "summarise" < doc.txt | vrk kv set "result:$ID"
+    ID=$(vrk uuid) && vrk prompt --system "summarise" < doc.txt | vrk kv set "result:$ID"
 
 Anti-pattern:
 - Don't pipe input to uuid -- stdin is silently ignored. It generates from embedded randomness only.

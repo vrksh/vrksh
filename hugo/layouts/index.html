@@ -51,8 +51,8 @@ CONTENT=$(vrk grab https://example.com/article)
 <span style="color: var(--color-muted);"># Guard: fail if content exceeds token budget</span>
 echo "$CONTENT" | vrk tok --budget 8000 \
 <span style="color: var(--color-muted);">  # Summarize with an LLM</span>
-  && printf '%s\n\nSummarize in 3 bullet points.' "$CONTENT" \
-     | vrk prompt \
+  && echo "$CONTENT" \
+     | vrk prompt --system "Summarize in 3 bullet points." \
 <span style="color: var(--color-muted);">  # Validate the response against a JSON schema</span>
      | vrk validate --schema summary.json \
 <span style="color: var(--color-muted);">  # Store the result</span>

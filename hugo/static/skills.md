@@ -237,7 +237,7 @@ Exit 1: I/O error
 Exit 2: Interactive terminal, unknown flag, invalid --pattern regex
 
 ```bash
-vrk prompt "summarise" < doc.txt | vrk mask | vrk kv set summary
+vrk prompt --system "summarise" < doc.txt | vrk mask | vrk kv set summary
 ```
 
 ## prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
@@ -247,6 +247,7 @@ Group: execute
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--model` | -m | LLM model (default from VRK_DEFAULT_MODEL or claude-sonnet-4-6) |
+| `--system` |   | System prompt text, or `@file.txt` to read from file |
 | `--budget` |   | Exit 1 if prompt exceeds N tokens |
 | `--fail` | -f | Fail on non-2xx API response or schema mismatch |
 | `--json` | -j | Emit response as JSON envelope with metadata |
@@ -281,7 +282,7 @@ Exit (last): All retries exhausted
 Exit 2: --times < 1, no command, unknown flag
 
 ```bash
-vrk coax --times 3 --backoff exp:1s --on 1 -- vrk prompt "summarise" < doc.txt
+vrk coax --times 3 --backoff exp:1s --on 1 -- vrk prompt --system "summarise" < doc.txt
 ```
 
 ## kv - Key-value store - SQLite-backed, namespaces, TTL, atomic counters.

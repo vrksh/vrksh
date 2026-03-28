@@ -52,14 +52,14 @@ Always tok before prompt. Always validate after prompt if schema matters. Use gr
 
 ## Anti-patterns
 
-1. **Don't pipe grab directly to prompt without tok budget check.** The page may exceed the model's context window. Always: `vrk grab URL | vrk tok --budget N && vrk grab URL | vrk prompt "..."`.
+1. **Don't pipe grab directly to prompt without tok budget check.** The page may exceed the model's context window. Always: `vrk grab URL | vrk tok --budget N && vrk grab URL | vrk prompt --system "..."`.
 2. **Don't use --fail without handling exit 1 in the calling script.** A failed assertion kills the pipeline silently. Check `$?` or use `|| handle_error`.
 3. **Don't store secrets in kv without --ns isolation.** The database is plaintext SQLite at `~/.vrk.db`. Use namespaces to separate sensitive data.
 
 ## Example: budget-safe LLM call
 
 ```bash
-cat context.txt | vrk tok --budget 4000 && cat context.txt | vrk prompt "summarise this"
+cat context.txt | vrk tok --budget 4000 && cat context.txt | vrk prompt --system "summarise this"
 ```
 
 ## Per-tool references

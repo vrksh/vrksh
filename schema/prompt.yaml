@@ -11,6 +11,10 @@ flags:
     short: "-m"
     type: string
     description: LLM model (default from VRK_DEFAULT_MODEL or claude-sonnet-4-6)
+  - flag: --system
+    short: ""
+    type: string
+    description: System prompt text, or @file.txt to read from file
   - flag: --budget
     short: ""
     type: int

@@ -69,7 +69,7 @@ Fetch a page, check it fits the context window, then send to an LLM:
 
 ```bash
 vrk grab https://example.com/article | vrk tok --budget 8000 && \
-vrk grab https://example.com/article | vrk prompt "Summarize this"
+vrk grab https://example.com/article | vrk prompt --system "Summarize this"
 ```
 
 Extract all links from a remote page:

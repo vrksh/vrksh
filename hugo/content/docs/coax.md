@@ -94,7 +94,7 @@ Retry a prompt call that might hit a rate limit, then store the result:
 
 ```bash
 vrk coax --times 3 --backoff 2s --on 1 -- \
-  sh -c 'echo "Summarize this document" | vrk prompt --model claude-sonnet-4-6' \
+  sh -c 'cat doc.txt | vrk prompt --system "Summarize this document" --model claude-sonnet-4-6' \
   | vrk kv set --ns summaries doc_latest
 ```
 

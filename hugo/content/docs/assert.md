@@ -105,7 +105,7 @@ vrk grab https://api.example.com/health \
   | vrk assert --contains '"status":"ok"' \
       --message "API health check failed" \
   && cat user-data.jsonl \
-  | vrk prompt "Analyze this data" \
+  | vrk prompt --system "Analyze this data" \
   | vrk kv set --ns results latest
 ```
 
@@ -114,7 +114,7 @@ Filter a JSONL stream to only high-confidence records before downstream processi
 ```bash
 cat predictions.jsonl \
   | vrk assert '.confidence > 0.8' \
-  | vrk prompt "These are high-confidence predictions. Summarize the key themes."
+  | vrk prompt --system "These are high-confidence predictions. Summarize the key themes."
 ```
 
 Verify that a generated file has the expected structure before committing:

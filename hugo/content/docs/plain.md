@@ -50,7 +50,7 @@ cat docs/guide.md | vrk plain --json
 `vrk grab` returns markdown by default. Pipe it through `vrk plain` before sending it to an LLM to keep the prompt lean.
 
 ```bash
-vrk grab https://example.com/article | vrk plain | vrk prompt "Summarize this in three bullets"
+vrk grab https://example.com/article | vrk plain | vrk prompt --system "Summarize this in three bullets"
 ```
 
 **Inline markdown in a shell one-liner**

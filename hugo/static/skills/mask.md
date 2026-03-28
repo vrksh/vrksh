@@ -15,7 +15,7 @@ Exit 2: interactive terminal, unknown flag, invalid --pattern regex
 
 Example:
 
-    vrk prompt "summarise" < doc.txt | vrk mask | vrk kv set summary
+    vrk prompt --system "summarise" < doc.txt | vrk mask | vrk kv set summary
 
 Anti-pattern:
 - Don't rely on mask as a security boundary -- it is best-effort. UUIDs and SHA hashes trigger false positives; short passwords trigger false negatives.

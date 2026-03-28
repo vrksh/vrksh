@@ -96,7 +96,7 @@ Sample a large JSONL log, validate each record has the expected shape, then summ
 cat huge.jsonl \
   | vrk sip --count 100 --seed 42 \
   | vrk validate --schema '{"msg":"string","ts":"number"}' \
-  | vrk prompt "What patterns do you see in these log entries?"
+  | vrk prompt --system "What patterns do you see in these log entries?"
 ```
 
 Or check that a 1% sample of your data passes a quality assertion before running an expensive job:

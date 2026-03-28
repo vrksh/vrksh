@@ -85,7 +85,7 @@ vrk chunk --size 500 "This is the text to split into chunks."
 ```bash
 cat long_doc.txt | vrk chunk --size 2000 --overlap 100 | \
   while IFS= read -r chunk; do
-    echo "$chunk" | jq -r '.text' | vrk prompt "Summarize this section in one sentence."
+    echo "$chunk" | jq -r '.text' | vrk prompt --system "Summarize this section in one sentence."
   done
 ```
 
@@ -97,7 +97,7 @@ Chunk a fetched article, send each chunk to a model, collect summaries, then sto
 vrk grab --text https://example.com/long-article \
   | vrk chunk --size 2000 --overlap 200 --by paragraph \
   | while IFS= read -r chunk; do
-      echo "$chunk" | jq -r '.text' | vrk prompt "Extract the key claim from this passage."
+      echo "$chunk" | jq -r '.text' | vrk prompt --system "Extract the key claim from this passage."
     done \
   | vrk kv set --ns research article_claims
 ```

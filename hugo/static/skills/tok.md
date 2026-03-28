@@ -16,7 +16,7 @@ Exit 2: unknown flag, interactive terminal with no input
 
 Example:
 
-    cat prompt.txt | vrk tok --budget 4000 && cat prompt.txt | vrk prompt "summarise"
+    cat prompt.txt | vrk tok --budget 4000 && cat prompt.txt | vrk prompt --system "summarise"
 
 Anti-pattern:
 - Don't skip tok before prompt on untrusted input -- a 200k-token page will blow the context window and waste API spend.

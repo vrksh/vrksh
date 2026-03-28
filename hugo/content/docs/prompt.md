@@ -97,7 +97,7 @@ Fetch a page, check it fits the context window, then summarize:
 
 ```bash
 vrk grab https://example.com/article | vrk tok --budget 8000 && \
-vrk grab https://example.com/article | vrk prompt "Summarize this article"
+vrk grab https://example.com/article | vrk prompt --system "Summarize this article"
 ```
 
 Extract structured data from a web page:
@@ -112,6 +112,7 @@ vrk grab --text https://example.com/product | \
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--model` | `-m` | string | `VRK_DEFAULT_MODEL` or `claude-sonnet-4-6` | LLM model |
+| `--system` | | string | `""` | System prompt text, or `@file.txt` to read from file |
 | `--budget` | | int | `0` | Exit 1 if prompt exceeds N tokens |
 | `--fail` | `-f` | bool | `false` | Fail on non-2xx API response or schema mismatch |
 | `--json` | `-j` | bool | `false` | Emit response as JSON envelope with metadata |
@@ -120,6 +121,20 @@ vrk grab --text https://example.com/product | \
 | `--explain` | | bool | `false` | Print equivalent curl command, no API call |
 | `--retry` | | int | `0` | Retry N times on schema mismatch (escalates temperature) |
 | `--endpoint` | | string | `""` | OpenAI-compatible API base URL |
+
+## Two-input model
+
+`vrk prompt` separates **content** from **instruction**:
+
+- **stdin** (or positional argument) is the content — the data to process.
+- **`--system`** is the instruction — what to do with the content.
+
+```bash
+echo "$CONTENT" | vrk prompt --system "Summarize in 3 bullets."
+```
+
+When `--system` is omitted, stdin is sent as the user message with no system prompt.
+Use `--system @file.txt` to read a long system prompt from a file.
 
 ## Exit codes
 

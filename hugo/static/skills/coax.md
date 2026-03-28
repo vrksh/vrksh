@@ -18,7 +18,7 @@ Exit 2: --times < 1, no command, unknown flag, bad --backoff format
 
 Example:
 
-    vrk coax --times 3 --backoff exp:1s --on 1 -- vrk prompt "summarise" < doc.txt
+    vrk coax --times 3 --backoff exp:1s --on 1 -- vrk prompt --system "summarise" < doc.txt
 
 Anti-pattern:
 - Don't forget `--` to separate coax flags from the retried command -- without it, coax exits 2.

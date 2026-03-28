@@ -249,7 +249,7 @@ vrk uuid --count 5 --json
 
 # Use as a correlation ID in a pipeline
 ID=$(vrk uuid)
-vrk prompt "Summarise this" | vrk kv set "result:$ID"
+vrk prompt --system "Summarise this" < input.txt | vrk kv set "result:$ID"
 ```
 
 ### Compose patterns
@@ -257,7 +257,7 @@ vrk prompt "Summarise this" | vrk kv set "result:$ID"
 ```bash
 # Generate a request ID and thread it through a pipeline
 REQ=$(vrk uuid)
-cat payload.json | vrk prompt "process this" | vrk kv set "response:$REQ"
+cat payload.json | vrk prompt --system "process this" | vrk kv set "response:$REQ"
 
 # Use v7 UUIDs as time-ordered database keys (sortable without a separate created_at column)
 vrk uuid --v7 --count 100 | while read id; do
@@ -333,10 +333,10 @@ echo "hello world" | vrk tok --model cl100k_base
 
 ```bash
 # Pre-flight check before sending to an LLM — abort if too large
-cat prompt.txt | vrk tok --budget 4000 && cat prompt.txt | vrk prompt "summarise this"
+cat prompt.txt | vrk tok --budget 4000 && cat prompt.txt | vrk prompt --system "summarise this"
 
 # Gate in a pipeline — nothing downstream runs if over budget
-cat big_context.txt | vrk tok --budget 8000 | vrk prompt "answer: $QUESTION"
+cat big_context.txt | vrk tok --budget 8000 | vrk prompt --system "answer: $QUESTION"
 # (vrk tok exits 1 and passes nothing to vrk prompt when over budget)
 
 # Count tokens and store result
@@ -561,7 +561,7 @@ vrk kv incr counter          # → exit 1, stderr "value is not a number"
 ```bash
 # Cache an LLM response keyed by UUID
 REQ=$(vrk uuid)
-vrk prompt "Summarise this" < input.txt | vrk kv set "response:$REQ"
+vrk prompt --system "Summarise this" < input.txt | vrk kv set "response:$REQ"
 vrk kv get "response:$REQ"
 
 # Per-user key from a JWT sub claim
@@ -583,7 +583,7 @@ if [ "$DONE" = "1" ]; then echo "already done"; fi
 
 # 10 parallel workers, each storing results by worker ID
 for i in $(seq 1 10); do
-  vrk prompt "process batch $i" | vrk kv set --ns run:$RUN "result:$i" &
+  vrk prompt --system "process batch $i" < batch_$i.txt | vrk kv set --ns run:$RUN "result:$i" &
 done
 wait
 ```
@@ -674,12 +674,12 @@ vrk coax --quiet --times 3 -- my-command
 ```bash
 # Retry an LLM prompt call — useful when the API returns transient errors
 vrk coax --times 3 --backoff exp:1s --on 1 -- \
-  vrk prompt "Summarise this document" < doc.txt
+  vrk prompt --system "Summarise this document" < doc.txt
 
 # Gate a pipeline: retry the expensive fetch, then process
 vrk coax --times 5 --backoff 2s -- \
   curl -sf https://api.example.com/data > data.json
-cat data.json | vrk prompt "Extract key facts"
+cat data.json | vrk prompt --system "Extract key facts"
 
 # Wait for a background job to write a sentinel key, then proceed
 vrk coax --times 20 --backoff 3s \
@@ -767,8 +767,8 @@ When `--endpoint` or `VRK_LLM_URL` is set, `--model` is required (exit 2 if abse
 # Basic call — stdin form
 echo "Summarise this in one sentence." | vrk prompt
 
-# Positional arg form — same result
-vrk prompt "Summarise this in one sentence."
+# System prompt form — instruction separate from content
+echo "$CONTENT" | vrk prompt --system "Summarise this in one sentence."
 
 # Pick a different model
 echo "hello" | vrk prompt --model gpt-4o
@@ -822,14 +822,14 @@ echo "$RESULT" | jq -r '.response' | vrk kv set "cache:$HASH"
 # Budget gate before sending: count tokens first, then prompt
 TOKENS=$(cat doc.txt | vrk tok)
 if [ "$TOKENS" -le 4000 ]; then
-  cat doc.txt | vrk prompt "Summarise this."
+  cat doc.txt | vrk prompt --system "Summarise this."
 else
   echo "Document too large: $TOKENS tokens" >&2
   exit 1
 fi
 
 # Or use the built-in budget flag (same effect, one command)
-cat doc.txt | vrk prompt --budget 4000 "Summarise this."
+cat doc.txt | vrk prompt --budget 4000 --system "Summarise this."
 
 # Schema-validated extraction with retry
 echo "Extract name and age from: Alice is 30." | \
@@ -837,7 +837,7 @@ echo "Extract name and age from: Alice is 30." | \
 
 # Thread a request ID through a pipeline
 REQ=$(vrk uuid)
-cat payload.txt | vrk prompt "Classify this." | vrk kv set "result:$REQ"
+cat payload.txt | vrk prompt --system "Classify this." | vrk kv set "result:$REQ"
 
 # Retry transient API errors using coax
 vrk coax --times 3 --backoff exp:1s --on 1 -- \
@@ -936,12 +936,12 @@ cat doc.txt | vrk chunk --size 500 | jq -e '[.tokens] | max <= 500'
 cat corpus.txt | vrk chunk --size 512 --overlap 64 | while read -r line; do
   text=$(echo "$line" | jq -r '.text')
   idx=$(echo "$line" | jq -r '.index')
-  echo "$text" | vrk prompt "Embed this passage." | vrk kv set "embed:$idx"
+  echo "$text" | vrk prompt --system "Embed this passage." | vrk kv set "embed:$idx"
 done
 
 # Budget-safe chunked summarisation
 cat long_doc.txt | vrk chunk --size 3000 | jq -r '.text' | while read -r chunk; do
-  echo "$chunk" | vrk tok --budget 3000 && echo "$chunk" | vrk prompt "Summarise."
+  echo "$chunk" | vrk tok --budget 3000 && echo "$chunk" | vrk prompt --system "Summarise."
 done
 
 # Store all chunks in kv, keyed by document ID and chunk index
@@ -1043,7 +1043,7 @@ vrk grab https://example.com | vrk chunk --size 1000
 ```bash
 # Fetch, count tokens, guard before sending to LLM
 vrk grab https://example.com | vrk tok --budget 8000 && \
-  vrk grab https://example.com | vrk prompt "Summarise this page."
+  vrk grab https://example.com | vrk prompt --system "Summarise this page."
 
 # Store fetched content in kv keyed by URL
 PAGE=$(vrk grab https://example.com --json)
@@ -1135,7 +1135,7 @@ vrk plain '**bold** _italic_'
 
 ```bash
 # Strip markdown before sending to a model that expects plain text
-vrk plain < doc.md | vrk prompt "summarise this"
+vrk plain < doc.md | vrk prompt --system "summarise this"
 
 # Check token count of stripped prose
 vrk plain < README.md | vrk tok
@@ -1429,7 +1429,7 @@ echo 'token: sk-abc123XYZ' | vrk mask --json
 #   {"_vrk":"mask","lines":1,"redacted":1,"patterns_matched":["token"]}
 
 # Pipeline: scrub LLM output before storing
-vrk prompt "summarise this" < doc.txt | vrk mask | vrk kv set summary
+vrk prompt --system "summarise this" < doc.txt | vrk mask | vrk kv set summary
 ```
 
 ### Gotchas
@@ -1522,7 +1522,7 @@ printf 'ERROR: disk full\nWARN: low memory\nall good\n' | vrk emit --parse-level
 vrk emit 'Starting job'
 
 # Pipeline: emit LLM output as structured log, then store
-vrk prompt "run analysis" | vrk emit --parse-level --tag llm | vrk kv set last-run
+vrk prompt --system "run analysis" < data.txt | vrk emit --parse-level --tag llm | vrk kv set last-run
 ```
 
 ### Gotchas
@@ -1578,7 +1578,7 @@ seq 5 | vrk throttle --rate 2/s --json
 # → {"_vrk":"throttle","rate":"2/s","lines":5,"elapsed_ms":2500}
 
 # Combine with prompt to stay under an API rate limit
-cat prompts.jsonl | vrk throttle --rate 10/m | vrk prompt --model gpt-4o
+cat prompts.jsonl | vrk throttle --rate 10/m | vrk prompt --system "process" --model gpt-4o
 ```
 
 ### Gotchas
