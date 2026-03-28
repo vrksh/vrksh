@@ -9,137 +9,137 @@ noindex: false
 
 ## The problem
 
-You need to call an LLM from a shell script. You could write a curl command
-with the right headers, body format, and error handling - or you could write
-a Python script that imports the SDK. Either way, it's 20+ lines for what
-should be a one-liner. And if you need structured JSON output, schema
-validation, or automatic retries, the complexity multiplies.
+You need to call an LLM from a shell script or pipeline. Every other option
+requires knowing the API shape, handling streaming, and parsing the response
+manually. curl to the Anthropic API is 8 lines of headers and JSON. A Python
+one-liner pulls in an SDK, a virtualenv, and a dependency you have to maintain.
+There is no simple stdin-to-stdout tool that behaves like a Unix filter.
 
-## The fix
-
-```bash
-echo "Summarize this in one sentence" | vrk prompt
-```
-
-<!-- output: verify against binary -->
-
-That sends the input to the default model and prints the response to stdout.
-The model is controlled by `VRK_DEFAULT_MODEL` or defaults to `claude-sonnet-4-6`.
-
-## Walkthrough
-
-### Structured output with --schema
-
-When you need JSON back from the LLM, not free-form text:
+## The simplest call
 
 ```bash
-echo "Extract the name and age" | vrk prompt --schema '{"name":"string","age":"number"}'
+$ echo "What is the capital of France?" | vrk prompt
+Paris.
 ```
 
-<!-- output: verify against binary -->
+stdin is the user message. stdout is the response. No flags, no config file,
+no SDK. The default model is `claude-sonnet-4-6` via the Anthropic API. Override
+it with `--model` or set `VRK_DEFAULT_MODEL` in your environment.
+
+## Adding a system instruction
+
+`vrk prompt` separates **content** from **instruction**:
+
+- **stdin** (or positional argument) is the content -- the data to process.
+- **`--system`** is the instruction -- what to do with the content.
+
+```bash
+$ echo "$CONTENT" | vrk prompt --system "Summarize in 3 bullets."
+```
+
+When `--system` is omitted, stdin is sent as the user message with no system
+prompt. Use `--system @file.txt` to read a long system prompt from a file
+instead of inlining it.
+
+## Schema-validated output
+
+When you need structured JSON back from the model, not free-form text:
+
+```bash
+$ echo "$CONTENT" | vrk prompt --system "Extract the date." \
+    --schema '{"date":"string","confidence":"number"}'
+```
 
 The `--schema` flag instructs the LLM to respond in JSON matching the given
-schema. If the response doesn't validate, the call fails - unless you add
-`--retry`.
+schema. If the response does not validate, prompt exits 1.
 
-### Automatic retries on schema mismatch
+What failure looks like on stderr:
 
-```bash
-echo "Extract fields" | vrk prompt --schema '{"title":"string"}' --retry 3
+```
+error: prompt: response does not match schema
 ```
 
-Each retry escalates the temperature slightly, giving the model a better chance
-of producing valid output on the next attempt.
-
-### What failure looks like
-
-When the API key is missing or the API returns an error:
+Add `--retry` for automatic retries on schema mismatch. Each retry escalates
+the temperature slightly, giving the model a better chance of producing valid
+output:
 
 ```bash
-echo "Hello" | vrk prompt
-echo $?
-# 1
+$ echo "$CONTENT" | vrk prompt --schema '{"title":"string"}' --retry 3
 ```
 
-<!-- output: verify against binary -->
-
-Exit 1. Stderr gets the error message (or stdout gets JSON if `--json` is active).
-The pipeline stops.
-
-### Explain mode
+## The --explain flag
 
 See what would be sent without making the API call:
 
 ```bash
-echo "Hello" | vrk prompt --explain
+$ echo "Hello world" | vrk prompt --explain
+curl https://api.anthropic.com/v1/messages \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model":"claude-sonnet-4-6","max_tokens":4096,"messages":[{"role":"user","content":"Hello world"}]}'
 ```
 
-<!-- output: verify against binary -->
-
-This prints the equivalent curl command. Useful for debugging or auditing
-what your pipeline is actually sending.
-
-### JSON envelope
+With a system prompt:
 
 ```bash
-echo "Hello" | vrk prompt --json
+$ echo "Hello world" | vrk prompt --explain --system "Summarize this."
+curl https://api.anthropic.com/v1/messages \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model":"claude-sonnet-4-6","max_tokens":4096,"system":"Summarize this.","messages":[{"role":"user","content":"Hello world"}]}'
 ```
 
-<!-- output: verify against binary -->
+No API call is made. Exit code 0. Useful for debugging what your pipeline is
+actually sending, or for piping the curl command into a script that runs it
+later.
+
+## JSON envelope
+
+```bash
+$ echo "Hello" | vrk prompt --json
+```
 
 The `--json` flag wraps the response in a JSON object with metadata (model,
-tokens used, latency). It does **not** instruct the LLM to respond in JSON  - 
-that's what `--schema` is for.
+tokens used). It does **not** instruct the LLM to respond in JSON -- that is
+what `--schema` is for. Use `--json` when a script needs to parse the response
+or log metadata alongside it.
 
-## Pipeline example
-
-Fetch a page, check it fits the context window, then summarize:
-
-```bash
-vrk grab https://example.com/article | vrk tok --budget 8000 && \
-vrk grab https://example.com/article | vrk prompt --system "Summarize this article"
-```
-
-Extract structured data from a web page:
+## Real pipeline with tok guard
 
 ```bash
-vrk grab --text https://example.com/product | \
-  vrk prompt --schema '{"name":"string","price":"string","description":"string"}'
+CONTENT=$(vrk grab https://example.com/article)
+echo "$CONTENT" | vrk tok --budget 8000 \
+  && echo "$CONTENT" | vrk prompt --system "Summarize in 3 bullets."
 ```
+
+The `&&` means: only run the right side if the left side exits 0. If tok
+exits 1 (over budget), prompt never runs. No API call, no wasted money.
+
+We capture the content in a variable first to avoid fetching the URL twice.
+Fetching twice is wasteful and can return different content if the page changes
+between requests.
 
 ## Flags
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--model` | `-m` | string | `VRK_DEFAULT_MODEL` or `claude-sonnet-4-6` | LLM model |
 | `--system` | | string | `""` | System prompt text, or `@file.txt` to read from file |
+| `--model` | `-m` | string | `claude-sonnet-4-6` | LLM model (or `VRK_DEFAULT_MODEL` env var) |
+| `--schema` | `-s` | string | `""` | JSON schema for response validation |
+| `--retry` | | int | `0` | Retry N times on schema mismatch (escalates temperature) |
 | `--budget` | | int | `0` | Exit 1 if prompt exceeds N tokens |
-| `--fail` | `-f` | bool | `false` | Fail on non-2xx API response or schema mismatch |
+| `--explain` | | bool | `false` | Print equivalent curl command, no API call |
 | `--json` | `-j` | bool | `false` | Emit response as JSON envelope with metadata |
 | `--quiet` | `-q` | bool | `false` | Suppress stderr output |
-| `--schema` | `-s` | string | `""` | JSON schema for response validation |
-| `--explain` | | bool | `false` | Print equivalent curl command, no API call |
-| `--retry` | | int | `0` | Retry N times on schema mismatch (escalates temperature) |
+| `--fail` | `-f` | bool | `false` | Fail on non-2xx API response or schema mismatch |
 | `--endpoint` | | string | `""` | OpenAI-compatible API base URL |
-
-## Two-input model
-
-`vrk prompt` separates **content** from **instruction**:
-
-- **stdin** (or positional argument) is the content — the data to process.
-- **`--system`** is the instruction — what to do with the content.
-
-```bash
-echo "$CONTENT" | vrk prompt --system "Summarize in 3 bullets."
-```
-
-When `--system` is omitted, stdin is sent as the user message with no system prompt.
-Use `--system @file.txt` to read a long system prompt from a file.
 
 ## Exit codes
 
 | Exit | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | API failure, budget exceeded, or schema mismatch |
-| 2 | Usage error - no input, missing flags |
+| 1 | API failure, budget exceeded, or schema mismatch after retries |
+| 2 | No input, unknown flag |

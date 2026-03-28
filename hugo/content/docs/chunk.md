@@ -9,100 +9,111 @@ noindex: false
 
 ## The problem
 
-LLMs have context windows. A document that fits comfortably in your terminal might be 50,000 tokens - ten times what a model can see at once. Splitting by character count is wrong because token boundaries do not align with character boundaries. Splitting by word count is closer but still inaccurate. Most ad-hoc chunking libraries count tokens incorrectly or do not support overlap, which means adjacent chunks have no shared context and coherence breaks at every boundary.
+A document is too long to fit in a single LLM context window. You could
+truncate it -- but you lose content. You could chunk it manually -- but now
+you are writing Python to split on sentence boundaries, count tokens, and
+reassemble later. Splitting by character count is wrong because token boundaries
+do not align with character boundaries. There is no Unix tool that does this
+cleanly with a known token budget per chunk.
 
 ## The fix
 
 ```bash
-cat article.txt | vrk chunk --size 2000
+$ cat long-doc.md | vrk chunk --size 4000
+{"index":0,"text":"...first chunk...","tokens":3847}
+{"index":1,"text":"...second chunk...","tokens":4000}
+{"index":2,"text":"...last chunk...","tokens":1293}
 ```
 
-Each chunk is a JSONL record with its index, text, and exact token count:
+One JSONL record per chunk. Each record has the chunk index, the text, and the
+exact token count. `--size` is required -- there is no default because silently
+guessing a budget leads to silent token overflows downstream.
 
-```
-{"index":0,"text":"...","tokens":1987}
-{"index":1,"text":"...","tokens":2000}
-{"index":2,"text":"...","tokens":431}
-```
+The last chunk will have fewer tokens than `--size` if the input does not
+divide evenly. Empty input produces no output and exits 0.
 
-`--size` is required. There is no default because silently guessing a budget leads to silent token overflows downstream.
+## Processing each chunk
 
-## Walkthrough
-
-**Happy path** - split a document into 2000-token chunks and count how many you get:
+The most common pattern: send each chunk to a model independently.
 
 ```bash
-cat long_report.txt | vrk chunk --size 2000 | wc -l
+cat long-doc.md | vrk chunk --size 4000 \
+  | while IFS= read -r chunk; do
+      echo "$chunk" | jq -r '.text' | vrk prompt \
+        --system "Summarize this section."
+    done
 ```
 
-Each `index` field is zero-based and sequential. The last chunk will have fewer tokens than `--size` if the input does not divide evenly.
+Line by line: `vrk chunk` splits the document into JSONL records. The `while`
+loop reads one record at a time. `jq -r '.text'` extracts the plain text from
+each JSON record. That text is piped to `vrk prompt` as the user message.
 
-**Empty input** - an empty pipe produces no output and exits 0. This is intentional: if nothing went in, nothing should come out.
+## Overlap for context continuity
 
 ```bash
-printf '' | vrk chunk --size 1000
-# (no output, exit 0)
+$ cat long-doc.md | vrk chunk --size 4000 --overlap 200
 ```
 
-**Failure cases** - `--size` is required; omitting it is a usage error:
+The last 200 tokens of each chunk are repeated at the start of the next. This
+prevents losing context at chunk boundaries. The `tokens` field in each record
+reflects the actual token count including any overlap tokens.
+
+When to use overlap:
+
+- **Summarization** -- usually do not need it. Each chunk stands alone.
+- **Entity extraction** -- use it. Entities span sentences, and a split at the
+  wrong point means you miss one.
+- **Q&A over documents** -- use it. The answer to a question might straddle
+  two chunks.
+
+`--overlap` must be less than `--size`. If they are equal or overlap is larger,
+the split would never advance:
 
 ```bash
-cat article.txt | vrk chunk
-# usage error: chunk: --size is required
+$ cat doc.txt | vrk chunk --size 100 --overlap 100
+usage error: chunk: --overlap must be less than --size
 ```
 
-`--overlap` must be less than `--size`. If they are equal or overlap is larger, the split would never advance:
+## Paragraph-aware chunking
 
 ```bash
-cat article.txt | vrk chunk --size 100 --overlap 100
-# usage error: chunk: --overlap must be less than --size
+$ cat essay.txt | vrk chunk --size 1500 --by paragraph
 ```
 
-**Overlap** - `--overlap` prepends the last N tokens of the previous chunk to the start of the next. This gives the model context about where the chunk came from:
+`--by paragraph` splits at double-newline boundaries first, then greedily packs
+paragraphs into chunks that fit within `--size`. This preserves natural text
+boundaries -- a sentence that starts in one chunk will not be split mid-word
+into the next. A paragraph that is itself larger than `--size` falls back to
+token-level splitting automatically.
 
-```bash
-cat article.txt | vrk chunk --size 2000 --overlap 200
+## JSON output fields
+
+Each line of output is a JSON object with three fields:
+
+```json
+{"index":0,"text":"The quick brown fox...","tokens":30}
 ```
 
-The `tokens` field in each record reflects the actual token count of that chunk's text, including any prepended overlap tokens.
-
-**Paragraph-aware chunking** - `--by paragraph` splits at double-newline boundaries first, then greedily packs paragraphs into chunks that fit within `--size`. A paragraph that is itself larger than `--size` falls back to token-level splitting automatically.
-
-This preserves natural text boundaries: a sentence that starts one chunk will not be split mid-word into the next.
-
-```bash
-cat essay.txt | vrk chunk --size 1500 --by paragraph
-```
-
-**Positional argument** - like every vrk tool, chunk accepts input as a positional arg:
-
-```bash
-vrk chunk --size 500 "This is the text to split into chunks."
-```
-
-**Combining with prompt** - the most common use. Each chunk goes to the model independently; results can be aggregated:
-
-```bash
-cat long_doc.txt | vrk chunk --size 2000 --overlap 100 | \
-  while IFS= read -r chunk; do
-    echo "$chunk" | jq -r '.text' | vrk prompt --system "Summarize this section in one sentence."
-  done
-```
+| Field | Type | Description |
+|-------|------|-------------|
+| `index` | int | Zero-based chunk number, sequential |
+| `text` | string | The chunk content |
+| `tokens` | int | Exact token count of this chunk's text |
 
 ## Pipeline example
 
-Chunk a fetched article, send each chunk to a model, collect summaries, then store the final one:
+Chunk a fetched article, summarize each section, collect results:
 
 ```bash
 vrk grab --text https://example.com/long-article \
   | vrk chunk --size 2000 --overlap 200 --by paragraph \
   | while IFS= read -r chunk; do
-      echo "$chunk" | jq -r '.text' | vrk prompt --system "Extract the key claim from this passage."
-    done \
-  | vrk kv set --ns research article_claims
+      echo "$chunk" | jq -r '.text' \
+        | vrk prompt --system "Extract the key claim from this passage."
+    done
 ```
 
-Check that no chunk exceeds a token budget before sending to a model:
+Verify no chunk exceeds a token budget before sending to a model:
 
 ```bash
 cat document.txt \
@@ -116,15 +127,15 @@ cat document.txt \
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--size` | | int | (required) | Max tokens per chunk. Must be >= 1. No default - always specify explicitly. |
-| `--overlap` | | int | 0 | Token overlap between adjacent chunks. Must be less than `--size`. |
-| `--by` | | string | `""` | Chunking strategy. Supported: `paragraph` (split at double-newlines, then pack greedily). Default is fixed token-window. |
-| `--quiet` | `-q` | bool | false | Suppress stderr output |
+| `--size` | | int | (required) | Max tokens per chunk, must be >= 1 |
+| `--overlap` | | int | `0` | Token overlap between adjacent chunks, must be < `--size` |
+| `--by` | | string | `""` | Chunking strategy: `paragraph` (split at double-newlines, pack greedily) |
+| `--quiet` | `-q` | bool | `false` | Suppress stderr output |
 
 ## Exit codes
 
 | Exit | Meaning |
 |------|---------|
-| 0 | Success, including empty input (no chunks emitted) |
-| 1 | Runtime error - tokenizer failure, I/O error |
-| 2 | Usage error - `--size` missing or < 1, `--overlap` >= `--size`, unknown `--by` mode, interactive TTY with no input |
+| 0 | Success, including empty input |
+| 1 | I/O error |
+| 2 | No input, `--size` missing or < 1, `--overlap` >= `--size`, unknown flag |
