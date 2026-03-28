@@ -40,10 +40,9 @@ cat README.md | vrk plain | vrk tok --budget 4000
 When you need the input and output sizes - to compare compression, to charge for bytes, to log the reduction - use `--json`. The output is a single JSON object with the stripped text and both byte counts.
 
 ```bash
-cat docs/guide.md | vrk plain --json
+$ echo '## Hello\n\nSome **bold** text.' | vrk plain --json
+{"text":"Hello\n\nSome bold text.","input_bytes":30,"output_bytes":22}
 ```
-
-<!-- output: verify against binary -->
 
 **Feeding a scraped page to a prompt**
 
@@ -58,11 +57,9 @@ vrk grab https://example.com/article | vrk plain | vrk prompt --system "Summariz
 Both forms work identically:
 
 ```bash
-echo '**bold** and _italic_ and [link](https://example.com)' | vrk plain
-vrk plain '**bold** and _italic_ and [link](https://example.com)'
+$ echo '**bold** and _italic_ and [link](https://example.com)' | vrk plain
+bold and italic and link
 ```
-
-<!-- output: verify against binary -->
 
 ## Pipeline example
 

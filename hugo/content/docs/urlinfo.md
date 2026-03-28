@@ -25,41 +25,38 @@ $ echo "https://api.example.com:8443/v2/users?page=2&limit=50" | vrk urlinfo
 ### Full decomposition
 
 ```bash
-echo "https://user@api.example.com:8443/v2/resource?a=1&b=2#section" | vrk urlinfo
+$ echo "https://user@api.example.com:8443/v2/resource?a=1&b=2#section" | vrk urlinfo
+{"scheme":"https","host":"api.example.com","port":8443,"path":"/v2/resource","query":{"a":"1","b":"2"},"fragment":"section","user":"user"}
 ```
-
-<!-- output: verify against binary -->
 
 The output object always has the same keys in the same order: `scheme`, `host`, `port`, `path`, `query`, `fragment`, `user`. `port` is an integer - `0` when the URL has no explicit port. `query` is a `map[string]string`. Passwords are deliberately excluded from the output regardless of what's in the URL; they're stripped silently.
 
 ### Extract a single field
 
 ```bash
-echo "https://api.example.com/path" | vrk urlinfo --field host
-echo "https://api.example.com:9200/path" | vrk urlinfo --field port
+$ echo "https://api.example.com/path" | vrk urlinfo --field host
+api.example.com
+$ echo "https://api.example.com:9200/path" | vrk urlinfo --field port
+9200
 ```
-
-<!-- output: verify against binary -->
 
 `--field` emits the value of that key as plain text (no JSON wrapping). For string fields, just the value. For `port`, the integer as a decimal string. For `query`, the full query map as JSON.
 
 ### Extract a query parameter
 
 ```bash
-echo "https://example.com/search?q=hello+world&page=3" | vrk urlinfo --field query.page
+$ echo "https://example.com/search?q=hello+world&page=3" | vrk urlinfo --field query.page
+3
 ```
-
-<!-- output: verify against binary -->
 
 Dot-path syntax lets you reach into the query map. `query.page` returns the value of the `page` parameter as plain text. If the parameter is absent, the output is empty and the exit code is still 0.
 
 ### Invalid URL
 
 ```bash
-echo "not a url" | vrk urlinfo
+$ echo "not a url" | vrk urlinfo
+error: urlinfo: invalid URL: not a url
 ```
-
-<!-- output: verify against binary -->
 
 Exits 1. The error message goes to stderr (or stdout as JSON if `--json` is active). A URL with a missing scheme (like `example.com/path`) is parsed as a path-only relative reference, not an error - `scheme` will be empty.
 

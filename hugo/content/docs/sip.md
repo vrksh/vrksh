@@ -19,8 +19,6 @@ You have a million-line log file and need a representative sample for analysis. 
 cat huge.jsonl | vrk sip --count 100 --seed 42
 ```
 
-<!-- output: verify against binary -->
-
 100 lines drawn uniformly at random from the entire stream, using a fixed seed for reproducibility.
 
 ## Walkthrough
@@ -30,8 +28,6 @@ cat huge.jsonl | vrk sip --count 100 --seed 42
 ```bash
 cat events.jsonl | vrk sip --count 1000
 ```
-
-<!-- output: verify against binary -->
 
 Uses Vitter's Algorithm R. Memory usage is bounded by the sample size N, not the stream size. The full stream is read once. Output order is the original line order of the sampled records - not shuffled. Every line in the stream had an equal probability of being selected.
 
@@ -50,8 +46,6 @@ Both invocations produce identical output when the input is the same. `--seed 0`
 cat metrics.jsonl | vrk sip --every 10
 ```
 
-<!-- output: verify against binary -->
-
 Emits line 10, 20, 30, ... - deterministic, no randomness, no memory accumulation. Useful for downsampling a high-frequency time series to a manageable rate while preserving the shape of the data.
 
 ### Probabilistic inclusion (--sample)
@@ -60,8 +54,6 @@ Emits line 10, 20, 30, ... - deterministic, no randomness, no memory accumulatio
 cat access.log | vrk sip --sample 5
 ```
 
-<!-- output: verify against binary -->
-
 Each line is included independently with a 5% probability. The output size is approximately 5% of the input but is not guaranteed. Suitable for quick exploration where approximate counts are fine. Use `--count` when you need an exact N.
 
 ### First N lines (--first)
@@ -69,8 +61,6 @@ Each line is included independently with a 5% probability. The output size is ap
 ```bash
 cat data.jsonl | vrk sip --first 50
 ```
-
-<!-- output: verify against binary -->
 
 Equivalent to `head -n 50` but integrated into the same interface so you can swap strategies by changing one flag. The stream is stopped immediately after N lines - no unnecessary reading.
 

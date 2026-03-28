@@ -19,8 +19,6 @@ Your pipeline fetches data, transforms it, and passes it downstream - but you ha
 vrk grab https://api.example.com/health | vrk assert --contains '"status":"ok"'
 ```
 
-<!-- output: verify against binary -->
-
 If the response body contains the substring, the body is passed through to stdout and the exit code is 0. If it doesn't, exit 1 and a failure message goes to stderr (or JSON to stdout if `--json`).
 
 ## Walkthrough
@@ -28,22 +26,24 @@ If the response body contains the substring, the body is passed through to stdou
 ### Plain text: --contains
 
 ```bash
-echo "build succeeded" | vrk assert --contains "succeeded"
-echo "build failed" | vrk assert --contains "succeeded"
-```
+$ echo "build succeeded" | vrk assert --contains "succeeded"
+build succeeded
 
-<!-- output: verify against binary -->
+$ echo "build failed" | vrk assert --contains "succeeded"
+assert: assertion failed: input does not contain "succeeded"
+```
 
 `--contains` is a literal substring check - no glob, no regex. The full stdin is read, checked, and passed through on success. On failure, exit 1.
 
 ### Plain text: --matches
 
 ```bash
-echo "request_id: abc-123" | vrk assert --matches '^request_id: [a-z]+-[0-9]+'
-echo "no id here" | vrk assert --matches '^request_id:'
-```
+$ echo "request_id: abc-123" | vrk assert --matches '^request_id: [a-z]+-[0-9]+'
+request_id: abc-123
 
-<!-- output: verify against binary -->
+$ echo "no id here" | vrk assert --matches '^request_id:'
+assert: assertion failed: input does not match "^request_id:"
+```
 
 `--matches` takes a Go regular expression. Invalid regex exits 2. The match is applied to the full input, not line by line. Data passes through on success.
 
@@ -55,18 +55,17 @@ vrk grab https://api.example.com/health \
       --message "health check failed - API may be down"
 ```
 
-<!-- output: verify against binary -->
-
 `--message` replaces the default failure message on stderr. Useful in CI scripts where the default "assertion failed" message doesn't have enough context for whoever reads the log.
 
 ### jq mode: JSONL conditions
 
 ```bash
-echo '{"score": 0.9, "label": "positive"}' | vrk assert '.score > 0.5'
-echo '{"score": 0.1, "label": "negative"}' | vrk assert '.score > 0.5'
-```
+$ echo '{"score": 0.9, "label": "positive"}' | vrk assert '.score > 0.5'
+{"score": 0.9, "label": "positive"}
 
-<!-- output: verify against binary -->
+$ echo '{"score": 0.1, "label": "negative"}' | vrk assert '.score > 0.5'
+assert: assertion failed: .score > 0.5
+```
 
 Positional arguments are jq expressions applied to each line of JSONL input. A line passes if the expression evaluates to something other than `null` or `false`. The passing line is emitted to stdout. A failing line exits 1.
 
@@ -75,11 +74,10 @@ Positional arguments are jq expressions applied to each line of JSONL input. A l
 ### Multiple jq conditions (AND logic)
 
 ```bash
-echo '{"score": 0.9, "label": "positive"}' \
+$ echo '{"score": 0.9, "label": "positive"}' \
   | vrk assert '.score > 0.5' '.label != null'
+{"score": 0.9, "label": "positive"}
 ```
-
-<!-- output: verify against binary -->
 
 Multiple positional arguments are AND-ed. All conditions must pass for a line to be emitted. The first failing condition determines the failure message.
 

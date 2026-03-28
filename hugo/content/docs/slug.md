@@ -25,33 +25,33 @@ my-article-title-2024-edition
 ### Basic slugging
 
 ```bash
-echo "Hello, World!" | vrk slug
-echo "Ångström Unit" | vrk slug
-echo "  leading and trailing  " | vrk slug
+$ echo "Hello, World!" | vrk slug
+hello-world
+$ echo "Ångström Unit" | vrk slug
+angstrom-unit
+$ echo "  leading and trailing  " | vrk slug
+leading-and-trailing
 ```
-
-<!-- output: verify against binary -->
 
 The accent on `Å` is decomposed via NFD, the base letter `A` is kept, and the combining diacritic is dropped. Input is trimmed of surrounding whitespace before processing.
 
 ### Custom separator
 
 ```bash
-echo "my project name" | vrk slug --separator _
-echo "hello world" | vrk slug --separator .
+$ echo "my project name" | vrk slug --separator _
+my_project_name
+$ echo "hello world" | vrk slug --separator .
+hello.world
 ```
-
-<!-- output: verify against binary -->
 
 The separator can be any string. An empty string `--separator ""` concatenates words with no separator, which is useful for generating identifiers rather than URLs.
 
 ### Length limit
 
 ```bash
-echo "A Very Long Title That Would Break Your Database Column" | vrk slug --max 40
+$ echo "A Very Long Title That Would Break Your Database Column" | vrk slug --max 40
+a-very-long-title-that-would-break-your
 ```
-
-<!-- output: verify against binary -->
 
 `--max` truncates at the last separator that fits within the limit. You never get a half-word at the end. If the first word already exceeds `--max`, it's truncated at the character boundary.
 

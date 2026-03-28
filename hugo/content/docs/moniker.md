@@ -25,52 +25,61 @@ swift-falcon
 ### Generate one name
 
 ```bash
-vrk moniker
+$ vrk moniker
+distant-shore
 ```
 
-<!-- output: verify against binary -->
+<!-- output varies: a new name each run -->
 
 No stdin required. `moniker` is purely generative - it doesn't read from stdin at all.
 
 ### Generate multiple names
 
 ```bash
-vrk moniker --count 5
+$ vrk moniker --count 5
+frozen-waterfall
+distant-slough
+bare-overhang
+radiant-dale
+obsidian-overhang
 ```
 
-<!-- output: verify against binary -->
+<!-- output varies: different names each run -->
 
 One name per line. Names within a single invocation are unique - no two lines will be the same. Uniqueness is guaranteed within a run using a Fisher-Yates shuffle of the word pool; it's not just random sampling.
 
 ### Deterministic output with --seed
 
 ```bash
-vrk moniker --seed 42
-vrk moniker --seed 42
+$ vrk moniker --seed 42
+distant-shore
+$ vrk moniker --seed 42
+distant-shore
 ```
-
-<!-- output: verify against binary -->
 
 Both invocations produce the same name. `--seed 0` is valid and deterministic - it's not "unset". If you need reproducible pipeline runs for debugging, seed with a fixed value or with a run number from your CI environment.
 
 ### More words for lower collision probability
 
 ```bash
-vrk moniker --words 3 --count 3
+$ vrk moniker --words 3 --count 3
+shallow-soaring-trail
+wintry-clay-rill
+murky-misty-floodplain
 ```
 
-<!-- output: verify against binary -->
+<!-- output varies: different names each run -->
 
 The minimum is 2 words. Adding a third word multiplies the namespace significantly. Useful when you're generating names at high concurrency and need stronger collision avoidance.
 
 ### Custom separator
 
 ```bash
-vrk moniker --separator _
-vrk moniker --separator ""
+$ vrk moniker --separator _ --seed 42
+distant_shore
+$ vrk moniker --separator "" --seed 42
+distantshore
 ```
-
-<!-- output: verify against binary -->
 
 Underscores make the name valid as a Python identifier or shell variable name. An empty separator produces a single concatenated word.
 

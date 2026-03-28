@@ -25,44 +25,44 @@ hello%20world%20%26%20goodbye
 ### Encoding a query parameter value
 
 ```bash
-echo "search query with spaces" | vrk pct --encode
-echo "hello+world" | vrk pct --decode
+$ echo "search query with spaces" | vrk pct --encode
+search%20query%20with%20spaces
+$ echo "hello+world" | vrk pct --decode
+hello+world
 ```
-
-<!-- output: verify against binary -->
 
 By default, encoding follows RFC 3986 - spaces become `%20`. Reserved characters like `&`, `=`, and `?` are encoded so they're safe to embed as a query parameter value.
 
 ### Form encoding (spaces as +)
 
 ```bash
-echo "hello world" | vrk pct --encode --form
-echo "hello+world" | vrk pct --decode --form
+$ echo "hello world" | vrk pct --encode --form
+hello+world
+$ echo "hello+world" | vrk pct --decode --form
+hello world
 ```
-
-<!-- output: verify against binary -->
 
 `--form` switches to `application/x-www-form-urlencoded` rules. Spaces become `+`, and `+` in the input decodes back to a space. Use this for form POST bodies, not for URL path segments.
 
 ### Unicode input
 
 ```bash
-echo "café au lait" | vrk pct --encode
-echo "日本語" | vrk pct --encode
+$ echo "café au lait" | vrk pct --encode
+caf%C3%A9%20au%20lait
+$ echo "日本語" | vrk pct --encode
+%E6%97%A5%E6%9C%AC%E8%AA%9E
 ```
-
-<!-- output: verify against binary -->
 
 Multi-byte UTF-8 characters are encoded byte by byte. Each byte becomes its own `%XX` sequence, which is the correct behavior per RFC 3987.
 
 ### Decoding a URL-encoded string
 
 ```bash
-echo "hello%20world%21" | vrk pct --decode
-echo "search%3Fq%3Dhello%20world" | vrk pct --decode
+$ echo "hello%20world%21" | vrk pct --decode
+hello world!
+$ echo "search%3Fq%3Dhello%20world" | vrk pct --decode
+search?q=hello world
 ```
-
-<!-- output: verify against binary -->
 
 Decoding is the exact inverse of encoding. Invalid percent sequences (like `%GG` or a truncated `%2`) cause an exit 1 with an error message identifying the bad sequence.
 

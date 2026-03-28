@@ -17,10 +17,9 @@ website. You could write a Python script, but that's overkill for a quick check.
 ## The fix
 
 ```bash
-vrk jwt eyJhbGciOiJIUzI1NiJ9...
+$ vrk jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzQyIiwiZXhwIjoxNzExNjAwMDAwLCJpYXQiOjE3MTE1OTY0MDB9.test
+{"exp":1711600000,"iat":1711596400,"sub":"user_42"}
 ```
-
-<!-- output: verify against binary -->
 
 That decodes the JWT and prints the payload to stdout. No network calls,
 no dependencies, no secrets leaving your machine.
@@ -30,21 +29,20 @@ no dependencies, no secrets leaving your machine.
 ### Extract a single claim
 
 ```bash
-vrk jwt --claim sub eyJhbGciOiJIUzI1NiJ9...
+$ vrk jwt --claim sub eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzQyIiwiZXhwIjoxNzExNjAwMDAwLCJpYXQiOjE3MTE1OTY0MDB9.test
+user_42
 ```
-
-<!-- output: verify against binary -->
 
 Prints just the value of the `sub` claim. Clean output, ready for piping.
 
 ### Check if a token is expired
 
 ```bash
-vrk jwt --expired eyJhbGciOiJIUzI1NiJ9...
-echo $?
+$ vrk jwt --expired eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzQyIiwiZXhwIjoxNzExNjAwMDAwLCJpYXQiOjE3MTE1OTY0MDB9.test
+error: jwt: token expired (exp: 2024-03-28T04:26:40Z)
+$ echo $?
+1
 ```
-
-<!-- output: verify against binary -->
 
 Exit 0 if the token is still valid. Exit 1 if it's expired. Use this as a
 gate in shell scripts.

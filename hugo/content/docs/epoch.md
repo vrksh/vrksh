@@ -14,18 +14,18 @@ Unix timestamps show up everywhere - API responses, log files, JWT claims, cron 
 ## The fix
 
 ```bash
-vrk epoch 1740009600 --iso
+$ vrk epoch 1740009600 --iso
+2025-02-20T00:00:00Z
 ```
-
-<!-- output: verify against binary -->
 
 Or the other direction - get a Unix timestamp for a relative offset from now:
 
 ```bash
-vrk epoch '+3d'
+$ vrk epoch '+3d'
+1774990111
 ```
 
-<!-- output: verify against binary -->
+<!-- output varies: shows timestamp for 3 days from run date -->
 
 Both the positional argument and stdin forms work identically:
 

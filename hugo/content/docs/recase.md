@@ -25,24 +25,26 @@ get_user_name
 ### Basic conversion
 
 ```bash
-echo "getUserName" | vrk recase --to snake
-echo "get_user_name" | vrk recase --to camel
-echo "MyComponent" | vrk recase --to kebab
-echo "http_response_code" | vrk recase --to pascal
+$ echo "getUserName" | vrk recase --to snake
+get_user_name
+$ echo "get_user_name" | vrk recase --to camel
+getUserName
+$ echo "MyComponent" | vrk recase --to kebab
+my-component
+$ echo "http_response_code" | vrk recase --to pascal
+HttpResponseCode
 ```
-
-<!-- output: verify against binary -->
 
 `recase` auto-detects the input convention from the word boundaries it finds - underscores for snake, hyphens for kebab, capital letters for camel and pascal. You never specify the source; only the target matters.
 
 ### Acronym handling
 
 ```bash
-echo "HTMLParser" | vrk recase --to snake
-echo "parseHTTPSRequest" | vrk recase --to snake
+$ echo "HTMLParser" | vrk recase --to snake
+html_parser
+$ echo "parseHTTPSRequest" | vrk recase --to snake
+parse_https_request
 ```
-
-<!-- output: verify against binary -->
 
 Consecutive capitals are treated as a single word. `HTMLParser` becomes `html_parser`, not `h_t_m_l_parser`. `parseHTTPSRequest` becomes `parse_https_request`.
 

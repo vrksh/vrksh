@@ -14,18 +14,20 @@ You need a unique ID for a pipeline run, a batch job, or a temporary key in your
 ## The fix
 
 ```bash
-vrk uuid
+$ vrk uuid
+aa4b0064-0dcb-4308-ba77-35d0b6711158
 ```
 
-<!-- output: verify against binary -->
+<!-- output varies: a new UUID each run -->
 
 Generate a time-ordered v7 UUID for use as a sortable key:
 
 ```bash
-vrk uuid --v7
+$ vrk uuid --v7
+019d3634-9388-7733-94e3-068f13f3a72c
 ```
 
-<!-- output: verify against binary -->
+<!-- output varies: a new UUID each run -->
 
 ## Walkthrough
 
@@ -34,10 +36,15 @@ By default, `vrk uuid` generates a single v4 (random) UUID and prints it to stdo
 **Multiple IDs** - `--count` generates a batch, one per line:
 
 ```bash
-vrk uuid --count 5
+$ vrk uuid --count 5
+dcc5af61-026d-4162-a15e-546281eae15c
+b1805dff-ee98-45b6-940f-94bd05f68912
+1fc8469e-82de-4e64-8a17-0962a2e312ea
+22bf143d-e25e-4ceb-9e53-8095f580aa5c
+bccd948b-608d-4acd-bcbf-8f88a78dfd77
 ```
 
-<!-- output: verify against binary -->
+<!-- output varies: different UUIDs each run -->
 
 **Structured output** - `--json` wraps each UUID in a record with version and generation timestamp. With `--count > 1` it emits JSONL:
 

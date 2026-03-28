@@ -29,28 +29,29 @@ Both produce the same output: `sha256:<hex>`. SHA-256 is the default. Swap to an
 Positional argument and stdin are equivalent. The positional form hashes the string as-is, without adding a newline. The stdin form hashes bytes verbatim, including any trailing newline from `echo`.
 
 ```bash
-vrk digest 'hello world'
-echo 'hello world' | vrk digest
+$ vrk digest 'hello world'
+sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
+$ echo 'hello world' | vrk digest
+sha256:a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447
 ```
-
-<!-- output: verify against binary -->
 
 Note: these two produce different hashes because `echo` appends a newline.
 
 **Choosing an algorithm**
 
 ```bash
-vrk digest --algo md5 'hello'
-vrk digest --algo sha512 'hello'
+$ vrk digest --algo md5 'hello'
+md5:5d41402abc4b2a76b9719d911017c592
+$ vrk digest --algo sha512 'hello'
+sha512:9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043
 ```
 
 `--bare` strips the `algo:` prefix when you need just the hex:
 
 ```bash
-vrk digest --bare 'hello'
+$ vrk digest --bare 'hello'
+2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
 ```
-
-<!-- output: verify against binary -->
 
 **Hashing a file**
 
@@ -103,10 +104,9 @@ Exit 0 means the signature is valid. Exit 1 means it is not.
 `--json` emits a single object instead of the `algo:hash` line. For HMAC mode, the field is `hmac` instead of `hash`.
 
 ```bash
-echo 'data' | vrk digest --json
+$ echo 'data' | vrk digest --json
+{"algo":"sha256","hash":"6667b2d1aab6a00caa5aee5af8ad9f1465e567abf1c209d15727d57b3e8f6e5f","input_bytes":5}
 ```
-
-<!-- output: verify against binary -->
 
 ## Pipeline example
 

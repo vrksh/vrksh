@@ -74,10 +74,11 @@ Recognised prefixes: `ERROR`, `WARNING`, `WARN`, `INFO`, `DEBUG` - case-insensit
 When `--msg` is set, the fixed message overrides `msg` for every record, and each stdin line is parsed as a JSON object whose fields are merged into the record. Use this when stdin is already structured but missing the standard log envelope.
 
 ```bash
-echo '{"user_id":"abc","action":"login"}' | vrk emit --msg "user event" --level info --tag auth
+$ echo '{"user_id":"abc","action":"login"}' | vrk emit --msg "user event" --level info --tag auth
+{"ts":"2026-03-28T20:48:34.376Z","level":"info","tag":"auth","msg":"user event","action":"login","user_id":"abc"}
 ```
 
-<!-- output: verify against binary -->
+<!-- output varies: ts field reflects current time -->
 
 Core field names in the merged JSON (`ts`, `level`, `tag`, `msg`) are suppressed - your flag values always win.
 

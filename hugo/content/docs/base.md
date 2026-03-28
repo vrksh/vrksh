@@ -27,13 +27,15 @@ vrk base decode --from base64 'aGVsbG8='
 All four encodings use the same `encode --to` flag. The output is always a single line of ASCII.
 
 ```bash
-echo 'hello' | vrk base encode --to base64
-echo 'hello' | vrk base encode --to base64url
-echo 'hello' | vrk base encode --to hex
-echo 'hello' | vrk base encode --to base32
+$ echo 'hello' | vrk base encode --to base64
+aGVsbG8=
+$ echo 'hello' | vrk base encode --to base64url
+aGVsbG8
+$ echo 'hello' | vrk base encode --to hex
+68656c6c6f
+$ echo 'hello' | vrk base encode --to base32
+NBSWY3DP
 ```
-
-<!-- output: verify against binary -->
 
 `base64url` uses the URL-safe alphabet (`-` and `_` instead of `+` and `/`) with no padding. `hex` output is lowercase. `base32` output is uppercase with `=` padding.
 
@@ -53,11 +55,11 @@ Decoded output is raw bytes with no trailing newline added. If you decode to tex
 Both `encode` and `decode` accept a positional argument so you can hash inline without `echo`:
 
 ```bash
-vrk base encode --to hex 'hello world'
-vrk base decode --from hex '68656c6c6f20776f726c64'
+$ vrk base encode --to hex 'hello world'
+68656c6c6f20776f726c64
+$ vrk base decode --from hex '68656c6c6f20776f726c64'
+hello world
 ```
-
-<!-- output: verify against binary -->
 
 **Handling trailing newlines**
 
@@ -71,15 +73,11 @@ JWT payloads are base64url-encoded with no padding. Combine `vrk jwt` to extract
 vrk jwt --claim payload "$TOKEN" | vrk base decode --from base64url
 ```
 
-<!-- output: verify against binary -->
-
 **Decoding a Kubernetes secret**
 
 ```bash
 kubectl get secret my-secret -o jsonpath='{.data.password}' | vrk base decode --from base64
 ```
-
-<!-- output: verify against binary -->
 
 **Empty input**
 

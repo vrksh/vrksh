@@ -17,10 +17,13 @@ returns just the content.
 ## The fix
 
 ```bash
-$ vrk grab https://example.com/blog-post
-```
+$ vrk grab https://example.com
+# Example Domain
 
-<!-- output: verify against binary -->
+This domain is for use in documentation examples without needing permission. Avoid use in operations.
+
+[Learn more](https://iana.org/domains/example)
+```
 
 The output is clean markdown -- article text only, no navigation, no
 scripts, no boilerplate. Ready to pipe into `tok`, `prompt`, or any
@@ -37,10 +40,13 @@ Exit 1. The pipeline stops.
 ## Plain text for LLM input
 
 ```bash
-$ vrk grab --text https://example.com/blog-post
-```
+$ vrk grab --text https://example.com
+Example Domain
 
-<!-- output: verify against binary -->
+This domain is for use in documentation examples without needing permission. Avoid use in operations.
+
+Learn more
+```
 
 The `--text` flag strips markdown syntax too -- no headings, no link
 brackets, no emphasis markers. Pure prose. Use this when passing content
