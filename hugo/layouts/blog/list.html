@@ -14,7 +14,7 @@
       {{ range .Pages.ByDate.Reverse }}
       <article>
         <h2 class="text-xl font-semibold">
-          <a href="{{ .Permalink }}">{{ .Title }}</a>
+          <a href="{{ .RelPermalink }}">{{ .Title }}</a>
         </h2>
         {{ with .Date }}
         <time class="text-sm" style="color: var(--color-muted);">{{ .Format "January 2, 2006" }}</time>
