@@ -41,6 +41,15 @@ body {
   background-size: 24px 24px;
 }
 
+/* Logo */
+.vrk-logo {
+  color: #63eb96;
+}
+
+[data-theme="light"] .vrk-logo {
+  color: #1c9e52;
+}
+
 /* CTA glow */
 .cta-glow {
   box-shadow: 0 0 40px rgba(110, 231, 183, 0.15), 0 0 80px rgba(110, 231, 183, 0.05);
