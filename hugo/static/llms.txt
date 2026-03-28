@@ -55,3 +55,6 @@ Utility:
 
 For complete flag documentation, exit codes, and compose patterns:
 https://vrk.sh/skills.md
+
+All machine-readable endpoints:
+https://vrk.sh/agents/

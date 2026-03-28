@@ -72,3 +72,7 @@ cat context.txt | vrk tok --budget 4000 && cat context.txt | vrk prompt "summari
 - [jwt](https://vrk.sh/skills/jwt.md) | [epoch](https://vrk.sh/skills/epoch.md) | [uuid](https://vrk.sh/skills/uuid.md) | [moniker](https://vrk.sh/skills/moniker.md) | [digest](https://vrk.sh/skills/digest.md) | [sse](https://vrk.sh/skills/sse.md) | [sip](https://vrk.sh/skills/sip.md) | [throttle](https://vrk.sh/skills/throttle.md) | [urlinfo](https://vrk.sh/skills/urlinfo.md)
 
 Full reference: `vrk --skills` or https://vrk.sh/skills.md
+
+## All machine-readable endpoints
+
+https://vrk.sh/agents/ - index of all endpoints, CLI equivalents, and CLAUDE.md snippet

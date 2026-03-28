@@ -55,3 +55,5 @@ Or `vrk --skills` for the full reference with flags, exit codes, and gotchas:
 ```bash
 vrk --skills tok
 ```
+
+See the [agent endpoints page](/agents/) for a complete index of all machine-readable surfaces.
