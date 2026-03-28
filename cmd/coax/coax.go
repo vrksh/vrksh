@@ -169,6 +169,21 @@ func parseBackoff(spec string) (isExp bool, base time.Duration, err error) {
 	return false, d, nil
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("coax", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Int("times", 3, "number of retries (first attempt is free; total attempts = N+1)")
+	fs.String("backoff", "", "delay between retries: 100ms for fixed, exp:100ms for exponential")
+	fs.Duration("backoff-max", 0, "cap for exponential backoff; 0 = uncapped")
+	fs.BoolP("quiet", "q", false, "suppress coax's own retry progress lines (subprocess stderr always passes through)")
+	fs.IntSlice("on", []int{}, "retry only when exit code matches; repeatable: --on 1 --on 2 (default: any non-zero)")
+	fs.String("until", "", "shell command; retry until it exits 0")
+	fs.BoolP("json", "j", false, "emit errors as JSON")
+	return fs
+}
+
 // printCoaxUsage writes usage to stdout and returns 0. Called when --help is passed.
 func printCoaxUsage(fs *pflag.FlagSet) int {
 	lines := []string{

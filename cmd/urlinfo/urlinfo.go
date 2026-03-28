@@ -246,6 +246,17 @@ func extractField(rec *urlRecord, rawQuery, path string) string {
 	}
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("urlinfo", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringP("field", "F", "", "extract a single field (dot-path for query params, e.g. query.page)")
+	fs.BoolP("json", "j", false, `append {"_vrk":"urlinfo","count":N} after all records`)
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: vrk urlinfo [flags] [url]",

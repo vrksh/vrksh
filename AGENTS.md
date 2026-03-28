@@ -121,10 +121,23 @@ vrk kv get run_id
 
 ---
 
+## Utilities
+
+| Utility | What it does | Key flags |
+|---------|-------------|-----------|
+| `mcp` | Discovery-only MCP server — exposes all tools via JSON-RPC 2.0 over stdio | `--list` |
+
+`mcp` is not a pipeline tool. It makes pipeline tools discoverable by MCP clients.
+Add `vrk mcp` to your Claude Code MCP config to see all tools in discovery.
+
+---
+
 ## Discovery
 
 ```bash
 vrk --manifest    # JSON list of all tools and descriptions
 vrk --skills      # full reference: flags, exit codes, gotchas, compose patterns
+vrk mcp           # MCP server for tool discovery (stdio JSON-RPC)
+vrk mcp --list    # human-readable list of all exposed tools
 vrk <tool> --help # per-tool usage
 ```

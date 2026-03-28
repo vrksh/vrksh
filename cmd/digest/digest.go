@@ -333,6 +333,23 @@ func hashFuncFor(algo string) (func() hash.Hash, error) {
 	}
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("digest", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringP("algo", "a", "sha256", "hash algorithm: sha256, md5, sha512")
+	fs.BoolP("bare", "b", false, "output hash only, no algo: prefix")
+	fs.StringArray("file", nil, "file to hash (repeatable)")
+	fs.Bool("compare", false, "compare hashes of all --file inputs; exits 0 either way")
+	fs.Bool("hmac", false, "compute HMAC instead of plain hash")
+	fs.StringP("key", "k", "", "HMAC secret key (required with --hmac)")
+	fs.String("verify", "", "known HMAC hex; exits 0 if match, 1 if mismatch")
+	fs.BoolP("json", "j", false, "emit JSON object")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 // writeJSONResult encodes v as JSON to stdout and returns 0 on success.
 func writeJSONResult(v map[string]any) int {
 	if err := shared.PrintJSON(v); err != nil {

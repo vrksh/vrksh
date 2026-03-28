@@ -266,6 +266,18 @@ func buildMatchedList(fired map[string]bool, customs []compiledCustom) []string 
 	return matched
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("mask", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringArray("pattern", nil, "additional pattern regex (repeatable)")
+	fs.Float64("entropy", 4.0, "Shannon entropy threshold (default 4.0; lower = more aggressive)")
+	fs.BoolP("json", "j", false, "append metadata JSON record after text output")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 // printUsage writes usage information to stdout and returns 0.
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{

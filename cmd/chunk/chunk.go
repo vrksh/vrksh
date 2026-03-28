@@ -253,6 +253,18 @@ func splitByParagraph(text string, size, overlap int) ([]chunkRecord, error) {
 	return records, nil
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("chunk", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Int("size", 0, "max tokens per chunk (required, >= 1)")
+	fs.Int("overlap", 0, `token overlap between adjacent chunks (must be < --size)`)
+	fs.String("by", "", `chunking strategy; supported: "paragraph"`)
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: chunk [flags] [text]",

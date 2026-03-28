@@ -357,6 +357,21 @@ func runSample(s *bufio.Scanner, pct int, rng *rand.Rand, w *bufio.Writer) (retu
 	return returned, totalSeen, nil, nil
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("sip", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Int("first", 0, "take first N lines (deterministic)")
+	fs.IntP("count", "n", 0, "reservoir sample of exactly N lines (random, O(N) memory)")
+	fs.Int("every", 0, "emit every Nth line (deterministic)")
+	fs.Int("sample", 0, "include each line with N% probability (approximate)")
+	fs.Int64("seed", 0, "fix random seed for deterministic output (0 is valid)")
+	fs.BoolP("json", "j", false, `append {"_vrk":"sip",...} metadata record after output`)
+	fs.BoolP("quiet", "q", false, "suppress stderr; exit codes unchanged")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: vrk sip [flags]",

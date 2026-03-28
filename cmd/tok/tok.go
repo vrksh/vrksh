@@ -99,6 +99,18 @@ func Run() int {
 	return 0
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("tok", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.BoolP("json", "j", false, "emit output as JSON")
+	fs.Int("budget", 0, "exit 1 if token count exceeds N")
+	fs.StringP("model", "m", "cl100k_base", "tokenizer model (currently only cl100k_base is supported)")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 // printUsage writes usage information to stdout and returns 0.
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{

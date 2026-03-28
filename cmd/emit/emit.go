@@ -234,6 +234,18 @@ func buildRecord(level, tag, msg string, extra map[string]json.RawMessage) []byt
 	return buf.Bytes()
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("emit", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringP("level", "l", "info", "log level: debug, info, warn, error")
+	fs.String("tag", "", "add tag field to every record")
+	fs.String("msg", "", "override message; stdin treated as JSON to merge extra fields")
+	fs.Bool("parse-level", false, "auto-detect level from line prefix (ERROR/WARN/WARNING/INFO/DEBUG)")
+	return fs
+}
+
 // printUsage writes usage information to stdout and returns 0.
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{

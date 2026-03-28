@@ -352,6 +352,17 @@ func capitalize(s string) string {
 	return string(runes)
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("recase", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.String("to", "", "target naming convention (required): camel, pascal, snake, kebab, screaming, title, lower, upper")
+	fs.BoolP("json", "j", false, "emit JSON object per line with input, output, from, to fields")
+	fs.BoolP("quiet", "q", false, "suppress stderr output; exit codes unchanged")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: vrk recase --to <convention> [flags]",

@@ -185,6 +185,16 @@ func runCollect(r io.Reader) int {
 	return 0
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("jsonl", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.BoolP("collect", "c", false, "collect JSONL lines into a JSON array")
+	fs.BoolP("json", "j", false, `append {"_vrk":"jsonl","count":N} after all records (split mode only)`)
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: vrk jsonl [flags]",

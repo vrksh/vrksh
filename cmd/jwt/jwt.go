@@ -283,6 +283,19 @@ func formatClaim(v any) string {
 	}
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("jwt", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.BoolP("json", "j", false, "emit output as JSON")
+	fs.StringP("claim", "c", "", "print value of a single claim as plain text")
+	fs.BoolP("expired", "e", false, "exit 1 if the token is expired")
+	fs.Bool("valid", false, "exit 1 if token is expired, not yet valid (nbf), or issued in the future (iat)")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 // printUsage writes usage to stdout and returns 0. Called when --help is passed.
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{

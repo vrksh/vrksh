@@ -520,6 +520,20 @@ func kvIncrDecr(args []string, name string, sign int64) int {
 	return 0
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own per subcommand.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("kv", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.String("ns", "default", "namespace")
+	fs.Duration("ttl", 0, "expiry duration (e.g. 1s, 5m, 24h); 0 = no expiry")
+	fs.Bool("dry-run", false, "print intent without writing to db")
+	fs.BoolP("json", "j", false, "emit errors as JSON")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	fs.Int64("by", 1, "delta (must be >= 1)")
+	return fs
+}
+
 // printUsage writes top-level kv help to stdout and returns 0.
 func printUsage() int {
 	lines := []string{

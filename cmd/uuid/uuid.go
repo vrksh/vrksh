@@ -96,6 +96,18 @@ func generate(v7 bool) (string, error) {
 	return googleuuid.New().String(), nil
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("uuid", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Bool("v7", false, "generate a v7 (time-ordered) UUID instead of v4")
+	fs.IntP("count", "n", 1, "number of UUIDs to generate (>= 1)")
+	fs.BoolP("json", "j", false, "emit output as JSON (JSONL when --count > 1)")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 // printUsage writes usage to stdout and returns 0.
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{

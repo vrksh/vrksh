@@ -2,12 +2,14 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/cmd/assert"
 	"github.com/vrksh/vrksh/cmd/base"
 	"github.com/vrksh/vrksh/cmd/chunk"
@@ -34,6 +36,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/urlinfo"
 	"github.com/vrksh/vrksh/cmd/uuid"
 	"github.com/vrksh/vrksh/cmd/validate"
+	mcppkg "github.com/vrksh/vrksh/internal/mcp"
 )
 
 //go:embed integrations/skills/SKILLS.md
@@ -84,6 +87,10 @@ func main() {
 				fmt.Print(skillsDoc)
 			}
 			os.Exit(0)
+		case "mcp":
+			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+			desc, flagsFn, stdinReq := mcpMaps()
+			os.Exit(mcppkg.Run(desc, flagsFn, stdinReq))
 		case "--bare":
 			names := make([]string, 0, len(tools))
 			for name := range tools {
@@ -150,4 +157,94 @@ func skillsSection(tool string) string {
 		}
 	}
 	return strings.Join(lines[start:end], "\n") + "\n"
+}
+
+// mcpMaps builds the descriptions, flagsFn, and stdinRequired maps for mcp.
+// main() calls this and passes the results to mcp.Run().
+// main_test.go also calls this to verify coverage.
+func mcpMaps() (
+	descriptions map[string]string,
+	flagsFn map[string]func() *pflag.FlagSet,
+	stdinRequired map[string]bool,
+) {
+	// Parse descriptions from embedded manifest.json.
+	var manifest struct {
+		Tools []struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		} `json:"tools"`
+	}
+	_ = json.Unmarshal([]byte(manifestJSON), &manifest)
+
+	descriptions = make(map[string]string, len(manifest.Tools))
+	for _, t := range manifest.Tools {
+		descriptions[t.Name] = t.Description
+	}
+
+	flagsFn = map[string]func() *pflag.FlagSet{
+		"assert":   assert.Flags,
+		"base":     base.Flags,
+		"chunk":    chunk.Flags,
+		"coax":     coax.Flags,
+		"digest":   digest.Flags,
+		"emit":     emit.Flags,
+		"epoch":    epoch.Flags,
+		"grab":     grab.Flags,
+		"jsonl":    jsonl.Flags,
+		"jwt":      jwt.Flags,
+		"kv":       kv.Flags,
+		"links":    links.Flags,
+		"mask":     mask.Flags,
+		"moniker":  moniker.Flags,
+		"pct":      pct.Flags,
+		"plain":    plain.Flags,
+		"prompt":   prompt.Flags,
+		"recase":   recase.Flags,
+		"sip":      sip.Flags,
+		"slug":     slug.Flags,
+		"sse":      sse.Flags,
+		"throttle": throttle.Flags,
+		"tok":      tok.Flags,
+		"urlinfo":  urlinfo.Flags,
+		"uuid":     uuid.Flags,
+		"validate": validate.Flags,
+	}
+
+	stdinRequired = map[string]bool{
+		// No stdin — generate output without input
+		"uuid":    false,
+		"epoch":   false,
+		"moniker": false,
+
+		// Optional stdin — ReadInputOptional, empty stdin = exit 0
+		"tok":   false,
+		"chunk": false,
+
+		// Optional stdin — subcommand-dependent or optional buffering
+		"coax": false, // stdin is optional buffering for subprocess
+		"kv":   false, // set reads stdin only when no positional value
+
+		// Required — stdin or positional args needed
+		"jwt":      true, // single token input
+		"grab":     true, // single URL input
+		"slug":     true, // line-by-line text input
+		"pct":      true, // line-by-line encode/decode
+		"validate": true, // streaming JSONL input
+		"sse":      true, // streaming SSE input
+		"plain":    true, // full markdown input
+		"digest":   true, // streaming bytes to hash
+		"urlinfo":  true, // URL(s) to parse
+		"assert":   true, // JSONL or text to check conditions against
+		"mask":     true, // streaming text to redact
+		"links":    true, // full text to extract links from
+		"jsonl":    true, // JSON array or JSONL to convert
+		"sip":      true, // streaming lines to sample
+		"emit":     true, // streaming lines to wrap as log records
+		"recase":   true, // line-by-line naming convention conversion
+		"base":     true, // full input to encode/decode
+		"throttle": true, // streaming lines to rate-limit
+		"prompt":   true, // stdin text becomes the LLM prompt body
+	}
+
+	return descriptions, flagsFn, stdinRequired
 }

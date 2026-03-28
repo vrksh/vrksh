@@ -867,6 +867,23 @@ func Run() int {
 	return 0
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("prompt", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringP("model", "m", "", "LLM model (default: claude-sonnet-4-5 or VRK_DEFAULT_MODEL)")
+	fs.Int("budget", 0, "exit 1 if prompt exceeds N tokens (0 = disabled)")
+	fs.BoolP("fail", "f", false, "fail on non-2xx API response or schema mismatch")
+	fs.BoolP("json", "j", false, "emit response as JSON envelope with metadata")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	fs.StringP("schema", "s", "", "JSON schema string or file path for response validation")
+	fs.Bool("explain", false, "print equivalent curl command and exit, no API call")
+	fs.Int("retry", 0, "retry N times on schema mismatch with temperature escalation")
+	fs.String("endpoint", "", "OpenAI-compatible API base URL (e.g. http://localhost:11434/v1)")
+	return fs
+}
+
 // printUsage writes usage information to stdout and returns 0.
 func printUsage(fs *pflag.FlagSet) int {
 	bw := bufio.NewWriter(os.Stdout)

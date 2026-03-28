@@ -365,6 +365,19 @@ func emitPlainTextJSON(passed bool, condition, failMsg, userMessage string) int 
 	return 0
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("assert", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.BoolP("json", "j", false, "emit JSON result to stdout")
+	fs.BoolP("quiet", "q", false, "suppress stderr on failure")
+	fs.StringP("message", "m", "", "custom failure message")
+	fs.String("contains", "", "assert stdin contains substring")
+	fs.String("matches", "", "assert stdin matches regex")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: vrk assert [flags] <condition> [<condition>...]",

@@ -299,6 +299,19 @@ func execPromptFix(line, schemaJSON string) (string, bool) {
 	return fixed, true
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("validate", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringP("schema", "s", "", "JSON schema or file path (required)")
+	fs.Bool("strict", false, "exit 1 on first invalid line")
+	fs.Bool("fix", false, "attempt to repair invalid lines via prompt")
+	fs.BoolP("json", "j", false, "append metadata record to stdout at end")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 // printUsage writes usage information to stdout and returns 0.
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{

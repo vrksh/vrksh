@@ -207,6 +207,20 @@ func generateN(rng *rand.Rand, count, numWords int, sep string) ([]entry, error)
 	return result, nil
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("moniker", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.IntP("count", "n", 1, "number of names to generate (default 1)")
+	fs.String("separator", "-", "word separator (default \"-\")")
+	fs.Int("words", 2, "number of words per name, minimum 2 (default 2)")
+	fs.Int64("seed", 0, "fix random seed for deterministic output")
+	fs.BoolP("json", "j", false, `emit {"name":"...","adjective":"...","noun":"..."} per name`)
+	fs.BoolP("quiet", "q", false, "suppress stderr error messages; exit codes unchanged")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: vrk moniker [flags]",

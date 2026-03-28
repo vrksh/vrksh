@@ -174,6 +174,19 @@ func isUnreserved(b byte) bool {
 		b == '-' || b == '_' || b == '.' || b == '~'
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("pct", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Bool("encode", false, "percent-encode input (RFC 3986)")
+	fs.Bool("decode", false, "percent-decode input")
+	fs.Bool("form", false, "form encoding mode: spaces↔+ instead of %20")
+	fs.BoolP("json", "j", false, "emit JSON object per line: {input, output, op, mode}")
+	fs.BoolP("quiet", "q", false, "suppress stderr; exit codes unchanged")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: vrk pct [--encode|--decode] [flags]",

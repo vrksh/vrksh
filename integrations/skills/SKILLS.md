@@ -2391,3 +2391,56 @@ echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set last_result
 - **`.field > 0` on a missing field** — compares `null > 0` which is false. Check for presence first if the field may be absent.
 - **`--quiet` suppresses stderr only** — it does not suppress `--json` output (which goes to stdout).
 - **`--json` fail: `message` field omitted when `--message` not set** — only included when explicitly provided via `--message`.
+
+---
+
+# Utilities
+
+These are not pipeline tools — they support discovery and integration.
+
+---
+
+## mcp — MCP Server (Discovery Only)
+
+Starts a discovery-only MCP server over stdio (JSON-RPC 2.0). Exposes all vrksh
+pipeline tools for MCP client discovery via `tools/list`. Does not execute tools —
+`tools/call` is not implemented.
+
+Add `vrk mcp` to your Claude Code MCP config to see all tools in discovery.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--list` | — | Print all exposed tools and exit (human-readable) |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Clean shutdown (SIGINT/EOF) or `--list` completed |
+| 1 | Startup error |
+| 2 | Usage error — unknown flag |
+
+### Examples
+
+```bash
+# Start MCP server (stdio mode, for Claude Code)
+vrk mcp
+
+# List all exposed tools at the terminal
+vrk mcp --list
+
+# Send an initialize request
+printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' | vrk mcp
+
+# Send a tools/list request
+printf '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}\n' | vrk mcp
+```
+
+### Gotchas
+
+- **Discovery only** — `tools/call` returns method-not-found (-32601). Use shell invocation (`vrk <tool> [flags]`) to call tools.
+- **Stdout purity** — nothing goes to stdout except JSON-RPC responses. All logging goes to stderr.
+- **Tool names are prefixed** — MCP tool names use `vrk_` prefix (e.g. `vrk_tok`, `vrk_jwt`) to avoid collisions in MCP clients.
+- **`input` field in schemas** — tools that require stdin have `"input"` in their inputSchema's `required` array. Tools that don't need stdin (uuid, epoch, moniker) do not.

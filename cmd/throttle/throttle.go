@@ -310,6 +310,19 @@ func dotGet(obj map[string]any, path string) (any, error) {
 	return dotGet(nested, parts[1])
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("throttle", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringP("rate", "r", "", "rate limit: N/s or N/m (required)")
+	fs.Int("burst", 0, "emit first N lines without delay")
+	fs.String("tokens-field", "", "rate by token count of a JSONL field")
+	fs.BoolP("json", "j", false, `emit {"_vrk":"throttle","rate":"...","lines":N,"elapsed_ms":N} after all lines`)
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	usage := []string{
 		"usage: vrk throttle --rate N/s [flags]",

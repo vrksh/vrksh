@@ -99,6 +99,15 @@ func TestNoArgs(t *testing.T) {
 	}
 }
 
+func TestStdinRequiredCoversAllTools(t *testing.T) {
+	_, flagsFn, stdinRequired := mcpMaps()
+	for name := range flagsFn {
+		if _, ok := stdinRequired[name]; !ok {
+			t.Errorf("tool %q is in flagsFn but missing from stdinRequired — add an explicit true/false entry", name)
+		}
+	}
+}
+
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }

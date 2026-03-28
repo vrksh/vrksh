@@ -197,6 +197,18 @@ func decodeWith(enc string, data []byte) ([]byte, error) {
 	}
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+// Registers the union of encode and decode flags.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("base", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.String("to", "", "target encoding (base64, base64url, hex, base32)")
+	fs.String("from", "", "source encoding (base64, base64url, hex, base32)")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 func printUsage() int {
 	lines := []string{
 		"usage: vrk base encode --to <encoding> [flags]",

@@ -279,6 +279,17 @@ func overlaps(start, end int, consumed [][2]int) bool {
 	return false
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("links", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.BoolP("bare", "b", false, "output URLs only, one per line")
+	fs.BoolP("json", "j", false, `append {"_vrk":"links","count":N} after all records`)
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	usage := []string{
 		"usage: vrk links [flags]",

@@ -418,6 +418,20 @@ func parseNumericOffset(s string) (*time.Location, error) {
 	return time.FixedZone(s, offsetSeconds), nil
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("epoch", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Bool("iso", false, "output as ISO 8601 string instead of Unix integer")
+	fs.BoolP("json", "j", false, "emit output as JSON: {input, unix, iso, ref?, tz?}")
+	fs.String("tz", "", "timezone for --iso or --json output (IANA name or +HH:MM offset)")
+	fs.Bool("now", false, "print current Unix timestamp and exit")
+	fs.String("at", "", "reference timestamp for relative input (unix integer), e.g. --at 1740009600")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 // printUsage writes usage information to stdout and returns 0.
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{

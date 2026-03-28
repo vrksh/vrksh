@@ -262,6 +262,18 @@ func emitJSON(v any) int {
 	return 0
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("grab", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.BoolP("text", "t", false, "plain prose output, no markdown syntax")
+	fs.Bool("raw", false, "raw HTML, no processing")
+	fs.BoolP("json", "j", false, "emit JSON envelope with metadata")
+	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: grab [flags] <url>",

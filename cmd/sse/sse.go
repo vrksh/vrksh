@@ -226,6 +226,16 @@ func renderValue(v interface{}) string {
 	}
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("sse", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringP("event", "e", "", "only emit events of this type; skip all others")
+	fs.StringP("field", "F", "", "extract dot-path field from the record and print as plain text")
+	return fs
+}
+
 // printUsage writes usage information to stdout and returns 0.
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{

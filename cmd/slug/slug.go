@@ -183,6 +183,18 @@ func slugify(input, sep string, maxLen int) string {
 	return result
 }
 
+// Flags returns flag metadata for MCP schema generation.
+// This FlagSet is never used for parsing — Run() creates its own.
+func Flags() *pflag.FlagSet {
+	fs := pflag.NewFlagSet("slug", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.String("separator", "-", "word separator (default: -)")
+	fs.Int("max", 0, "max output length, truncated at word boundary (0 = unlimited)")
+	fs.BoolP("json", "j", false, `emit {"input":"...","output":"..."} per line`)
+	fs.BoolP("quiet", "q", false, "suppress stderr; exit codes unchanged")
+	return fs
+}
+
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: vrk slug [flags]",
