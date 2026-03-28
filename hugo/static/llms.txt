@@ -4,11 +4,52 @@
 
 ## Tools
 
+Input:
 - vrk grab - URL fetcher - clean markdown, plain text, or raw HTML.
-- vrk jwt - JWT inspector - decode, --claim, --expired, --valid.
-- vrk kv - Key-value store - SQLite-backed, namespaces, TTL, atomic counters.
-- vrk prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
+- vrk links - Hyperlink extractor - markdown, HTML, bare URLs to JSONL.
+
+Transform:
 - vrk tok - Token counter - cl100k_base, --budget guard, --json.
+- vrk chunk - Token-aware text splitter - JSONL chunks within a token budget.
+- vrk plain - Markdown stripper - removes syntax, keeps prose.
+- vrk recase - Naming convention converter - snake, camel, kebab, pascal, title.
+- vrk slug - URL/filename slug generator - --separator, --max, --json.
+- vrk pct - Percent encoder/decoder - RFC 3986, --encode, --decode, --form.
+- vrk base - Encoding converter - base64, base64url, hex, base32.
+- vrk jsonl - JSON array to JSONL converter - --collect, --json.
+
+Guard:
+- vrk assert - Pipeline condition check - jq conditions, --contains, --matches.
+- vrk validate - JSONL schema validator - --schema, --strict, --fix, --json.
+- vrk mask - Secret redactor - entropy + pattern-based, streaming.
+
+Execute:
+- vrk prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
+- vrk coax - Retry wrapper - --times, --backoff, --on, --until.
+
+Store:
+- vrk kv - Key-value store - SQLite-backed, namespaces, TTL, atomic counters.
+- vrk emit - Structured logger - wraps stdin lines as JSONL log records.
+
+Utility:
+- vrk jwt - JWT inspector - decode, --claim, --expired, --valid.
+- vrk epoch - Timestamp converter - unix to ISO, relative time, --tz.
+- vrk uuid - UUID generator - v4/v7, --count, --json.
+- vrk moniker - Memorable name generator - run IDs, job labels, temp dirs.
+- vrk digest - Universal hasher - sha256/md5/sha512, --hmac, --compare.
+- vrk sse - SSE stream parser - text/event-stream to JSONL.
+- vrk sip - Stream sampler - --first, --count, --every, --sample.
+- vrk throttle - Rate limiter for pipes - --rate N/s or N/m.
+- vrk urlinfo - URL parser - scheme, host, port, path, query, --field.
+
+## Per-tool skill files
+
+- /skills/grab.md | /skills/links.md
+- /skills/tok.md | /skills/chunk.md | /skills/plain.md | /skills/recase.md | /skills/slug.md | /skills/pct.md | /skills/base.md | /skills/jsonl.md
+- /skills/assert.md | /skills/validate.md | /skills/mask.md
+- /skills/prompt.md | /skills/coax.md
+- /skills/kv.md | /skills/emit.md
+- /skills/jwt.md | /skills/epoch.md | /skills/uuid.md | /skills/moniker.md | /skills/digest.md | /skills/sse.md | /skills/sip.md | /skills/throttle.md | /skills/urlinfo.md
 
 ## Full reference
 
