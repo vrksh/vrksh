@@ -1,4 +1,4 @@
-package main
+package bare
 
 import (
 	"bytes"
@@ -10,8 +10,8 @@ import (
 	"testing"
 )
 
-// testBare creates a temp bin dir with a fake vrk binary, overrides osExecutable,
-// captures stdout/stderr, calls runBare, and returns the results.
+// testBare creates a temp bin dir with a fake vrk binary, overrides OsExecutable,
+// captures stdout/stderr, calls Run, and returns the results.
 // The setup function receives (binDir, vrkPath) for pre-test filesystem setup.
 func testBare(t *testing.T, args, toolNames []string, setup func(binDir, vrkPath string)) (binDir, stdout, stderr string, code int) {
 	t.Helper()
@@ -33,9 +33,9 @@ func testBare(t *testing.T, args, toolNames []string, setup func(binDir, vrkPath
 		setup(binDir, vrkPath)
 	}
 
-	origExec := osExecutable
-	osExecutable = func() (string, error) { return vrkPath, nil }
-	t.Cleanup(func() { osExecutable = origExec })
+	origExec := OsExecutable
+	OsExecutable = func() (string, error) { return vrkPath, nil }
+	t.Cleanup(func() { OsExecutable = origExec })
 
 	origStdout := os.Stdout
 	origStderr := os.Stderr
@@ -55,7 +55,7 @@ func testBare(t *testing.T, args, toolNames []string, setup func(binDir, vrkPath
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
-	code = runBare(args, toolNames)
+	code = Run(args, toolNames)
 
 	_ = stdoutW.Close()
 	_ = stderrW.Close()
@@ -206,9 +206,9 @@ func TestBareIdempotent(t *testing.T) {
 
 	// Run again — symlinks already exist.
 	vrkPath := filepath.Join(binDir, "vrk")
-	origExec := osExecutable
-	osExecutable = func() (string, error) { return vrkPath, nil }
-	defer func() { osExecutable = origExec }()
+	origExec := OsExecutable
+	OsExecutable = func() (string, error) { return vrkPath, nil }
+	defer func() { OsExecutable = origExec }()
 
 	origStdout := os.Stdout
 	origStderr := os.Stderr
@@ -228,7 +228,7 @@ func TestBareIdempotent(t *testing.T) {
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
-	code = runBare(nil, tools)
+	code = Run(nil, tools)
 
 	_ = stdoutW.Close()
 	_ = stderrW.Close()
@@ -586,15 +586,15 @@ func TestBareSymlinkResolution(t *testing.T) {
 }
 
 // testBareWithDir reuses an existing binDir (for tests that need link-then-operate).
-// It overrides osExecutable to point at binDir/vrk and captures stdout/stderr.
+// It overrides OsExecutable to point at binDir/vrk and captures stdout/stderr.
 func testBareWithDir(t *testing.T, binDir string, args, toolNames []string) (_, stdout, stderr string, code int) {
 	t.Helper()
 
 	vrkPath := filepath.Join(binDir, "vrk")
 
-	origExec := osExecutable
-	osExecutable = func() (string, error) { return vrkPath, nil }
-	t.Cleanup(func() { osExecutable = origExec })
+	origExec := OsExecutable
+	OsExecutable = func() (string, error) { return vrkPath, nil }
+	t.Cleanup(func() { OsExecutable = origExec })
 
 	origStdout := os.Stdout
 	origStderr := os.Stderr
@@ -614,7 +614,7 @@ func testBareWithDir(t *testing.T, binDir string, args, toolNames []string) (_, 
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
-	code = runBare(args, toolNames)
+	code = Run(args, toolNames)
 
 	_ = stdoutW.Close()
 	_ = stderrW.Close()

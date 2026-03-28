@@ -36,6 +36,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/urlinfo"
 	"github.com/vrksh/vrksh/cmd/uuid"
 	"github.com/vrksh/vrksh/cmd/validate"
+	"github.com/vrksh/vrksh/internal/bare"
 	mcppkg "github.com/vrksh/vrksh/internal/mcp"
 )
 
@@ -97,7 +98,7 @@ func main() {
 				names = append(names, name)
 			}
 			sort.Strings(names)
-			os.Exit(runBare(os.Args[2:], names))
+			os.Exit(bare.Run(os.Args[2:], names))
 		case "--help", "-h":
 			fmt.Fprintf(os.Stderr, "usage: vrk <tool> [args]\n")
 			fmt.Fprintf(os.Stderr, "       vrk --bare [--force] [--remove] [--list] [--dry-run] [tools...]\n")

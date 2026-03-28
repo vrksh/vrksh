@@ -1,4 +1,4 @@
-package main
+package bare
 
 import (
 	"errors"
@@ -13,13 +13,13 @@ import (
 	"github.com/vrksh/vrksh/internal/shared"
 )
 
-// osExecutable is a var so tests can inject a fake binary path.
-var osExecutable = os.Executable
+// OsExecutable is a var so tests can inject a fake binary path.
+var OsExecutable = os.Executable
 
-// runBare implements `vrk --bare`. It receives the args after "--bare" and a
+// Run implements `vrk --bare`. It receives the args after "--bare" and a
 // sorted list of known tool names (from the tools map in main.go). It does NOT
 // access the tools map directly — this keeps it testable with arbitrary names.
-func runBare(args []string, toolNames []string) int {
+func Run(args []string, toolNames []string) int {
 	fs := pflag.NewFlagSet("bare", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -109,7 +109,7 @@ func runBare(args []string, toolNames []string) int {
 
 // resolveVrkBin returns the fully resolved absolute path of the running binary.
 func resolveVrkBin() (string, error) {
-	exe, err := osExecutable()
+	exe, err := OsExecutable()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine binary path: %v", err)
 	}
