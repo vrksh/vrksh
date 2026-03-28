@@ -11,6 +11,7 @@
   --color-muted: #707070;
   --color-accent: #6EE7B7;
   --color-accent-dim: #3D8B6E;
+  --color-dot: #2A2A2A;
 }
 
 /* Light overrides */
@@ -22,6 +23,7 @@
   --color-muted: #6B6B6B;
   --color-accent: #059669;
   --color-accent-dim: #A7F3D0;
+  --color-dot: #B8B8B8;
 }
 
 /* Base styles */
@@ -35,7 +37,7 @@ body {
 
 /* Dot grid background */
 .dot-grid {
-  background-image: radial-gradient(circle, var(--color-border) 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--color-dot) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 

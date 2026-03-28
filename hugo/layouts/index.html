@@ -8,13 +8,20 @@
 
   <main>
     <!-- Hero -->
-    <section class="max-w-4xl mx-auto px-4 pt-20 pb-16 text-center">
+    <section class="dot-grid max-w-4xl mx-auto px-4 pt-20 pb-16 text-center">
       <h1 class="text-4xl md:text-6xl font-bold mb-4" style="font-family: var(--font-sans); line-height: 1.1;">
-        Unix tools for AI pipelines.
+        Your LLM call didn't fail.
       </h1>
-      <p class="text-xl md:text-2xl mb-8" style="font-family: var(--font-serif); font-style: italic; color: var(--color-muted);">
-        One binary. No dependencies. Composable.
+      <p class="text-xl md:text-2xl mb-6" style="font-family: var(--font-sans); font-weight: 500; color: var(--color-muted); line-height: 1.4;">
+        The API silently truncated your prompt at the context limit.
       </p>
+
+      <p class="text-lg md:text-xl mb-8" style="font-family: var(--font-mono); color: var(--color-accent);">
+        vrk — Unix tools for AI pipelines.
+      </p>
+
+      <pre class="text-left max-w-xl mx-auto mb-8"><code style="font-size: 0.9375rem;">cat prompt.txt | vrk tok --budget 4000 \
+  && cat prompt.txt | vrk prompt</code></pre>
 
       <!-- CTA -->
       <div class="inline-block cta-glow rounded-lg px-6 py-3 mb-4" style="background-color: var(--color-surface);">
@@ -31,29 +38,25 @@
         <span>macOS &middot; Linux</span>
       </div>
 
-      <p class="mt-4" style="color: var(--color-muted); font-family: var(--font-sans); font-size: 0.875rem;">
-        <a href="/docs/" style="color: var(--color-muted);">&rarr; Read the docs</a>
+      <p class="mt-6" style="font-family: var(--font-sans); font-size: 0.875rem;">
+        <a href="/docs/" style="color: var(--color-accent); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">&rarr; Read the docs</a>
       </p>
     </section>
 
-    <!-- Silent truncation moment -->
+    <!-- Canonical pipeline -->
     <section class="max-w-4xl mx-auto px-4 pb-16">
-      <div class="grid md:grid-cols-2 gap-4">
-        <div class="trunc-card relative rounded-lg p-4" style="background-color: var(--color-surface); border: 1px solid var(--color-border); opacity: 0.75;">
-          <p class="text-xs mb-3 uppercase tracking-wider" style="font-family: var(--font-sans); color: var(--color-muted);">before</p>
-          <pre style="background: transparent; border: none; padding: 0; margin: 0; font-size: 0.875rem;"><code style="color: var(--color-muted);">curl -sN $API | python3 -c "
-import sys, json
-for line in sys.stdin:
-    if line.startswith('data: '):
-        d = json.loads(line[6:])
-        print(d['delta']['text'], end='')
-"</code></pre>
-        </div>
-        <div class="trunc-card relative rounded-lg p-4" style="background-color: var(--color-surface); border: 1px solid var(--color-accent-dim);">
-          <p class="text-xs mb-3 uppercase tracking-wider" style="font-family: var(--font-sans); color: var(--color-accent);">after</p>
-          <pre style="background: transparent; border: none; padding: 0; margin: 0; font-size: 1rem;"><code style="color: var(--color-accent);">curl -sN $API | vrk sse --field data.delta.text</code></pre>
-        </div>
-      </div>
+      <pre class="text-left"><code style="font-size: 0.875rem;"><span style="color: var(--color-muted);"># Fetch the page</span>
+CONTENT=$(vrk grab https://example.com/article)
+
+<span style="color: var(--color-muted);"># Guard: fail if content exceeds token budget</span>
+echo "$CONTENT" | vrk tok --budget 8000 \
+<span style="color: var(--color-muted);">  # Summarize with an LLM</span>
+  && printf '%s\n\nSummarize in 3 bullet points.' "$CONTENT" \
+     | vrk prompt \
+<span style="color: var(--color-muted);">  # Validate the response against a JSON schema</span>
+     | vrk validate --schema summary.json \
+<span style="color: var(--color-muted);">  # Store the result</span>
+     | vrk kv set "summary:latest"</code></pre>
     </section>
 
     <!-- Tool grid -->
