@@ -177,13 +177,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Group badges */
-.badge-v1 { background-color: rgba(110, 231, 183, 0.15); color: #6EE7B7; }
-.badge-v2 { background-color: rgba(96, 165, 250, 0.15); color: #60A5FA; }
-.badge-v3 { background-color: rgba(251, 191, 36, 0.15); color: #FBBF24; }
+.badge-core { background-color: rgba(110, 231, 183, 0.15); color: #6EE7B7; }
+.badge-pipeline { background-color: rgba(96, 165, 250, 0.15); color: #60A5FA; }
+.badge-utilities { background-color: rgba(251, 191, 36, 0.15); color: #FBBF24; }
 
-[data-theme="light"] .badge-v1 { background-color: rgba(5, 150, 105, 0.1); color: #059669; }
-[data-theme="light"] .badge-v2 { background-color: rgba(37, 99, 235, 0.1); color: #2563EB; }
-[data-theme="light"] .badge-v3 { background-color: rgba(217, 119, 6, 0.1); color: #D97706; }
+[data-theme="light"] .badge-core { background-color: rgba(5, 150, 105, 0.1); color: #059669; }
+[data-theme="light"] .badge-pipeline { background-color: rgba(37, 99, 235, 0.1); color: #2563EB; }
+[data-theme="light"] .badge-utilities { background-color: rgba(217, 119, 6, 0.1); color: #D97706; }
 
 /* Anchor bar active state */
 .anchor-link.active {
