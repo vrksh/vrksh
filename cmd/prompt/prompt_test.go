@@ -593,6 +593,217 @@ func TestJSONUsageErrorsToStdout(t *testing.T) {
 	})
 }
 
+// --- --system flag tests ---
+
+// TestPromptSystemBasic checks that --system 'text' + --explain produces Anthropic
+// curl output with a "system" field containing the provided text.
+func TestPromptSystemBasic(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--system", "You are a classifier.", "--explain"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "You are a classifier.") {
+		t.Errorf("stdout does not contain system prompt text:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, `"system"`) {
+		t.Errorf("stdout does not contain \"system\" key:\n%s", stdout)
+	}
+}
+
+// TestPromptSystemFromFile checks that --system @tmpfile reads the file and
+// includes its content in the explain output.
+func TestPromptSystemFromFile(t *testing.T) {
+	tmp, err := os.CreateTemp("", "vrk-sys-*.txt")
+	if err != nil {
+		t.Fatalf("creating temp file: %v", err)
+	}
+	defer os.Remove(tmp.Name()) //nolint:errcheck
+	if _, err := tmp.WriteString("You are a summariser."); err != nil {
+		t.Fatalf("writing temp file: %v", err)
+	}
+	_ = tmp.Close()
+
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--system", "@" + tmp.Name(), "--explain"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "You are a summariser.") {
+		t.Errorf("stdout does not contain file content:\n%s", stdout)
+	}
+}
+
+// TestPromptSystemFromAbsolutePath confirms that @/absolute/path works correctly
+// and the @ stripping doesn't break absolute paths (e.g. via naive filepath.Join).
+func TestPromptSystemFromAbsolutePath(t *testing.T) {
+	tmp, err := os.CreateTemp("", "vrk-sys-abs-*.txt")
+	if err != nil {
+		t.Fatalf("creating temp file: %v", err)
+	}
+	defer os.Remove(tmp.Name()) //nolint:errcheck
+	if _, err := tmp.WriteString("Absolute path content."); err != nil {
+		t.Fatalf("writing temp file: %v", err)
+	}
+	_ = tmp.Close()
+
+	// tmp.Name() is already an absolute path
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--system", "@" + tmp.Name(), "--explain"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "Absolute path content.") {
+		t.Errorf("stdout does not contain file content:\n%s", stdout)
+	}
+}
+
+// TestPromptSystemFileNotFound checks that --system @missing.txt exits 1 with
+// the exact error format: "prompt: system prompt file not found: missing.txt"
+func TestPromptSystemFileNotFound(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	_, stderr, code := runPrompt(t, env, []string{"--system", "@missing.txt"}, "hello")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "prompt: system prompt file not found: missing.txt") {
+		t.Errorf("stderr does not contain expected message, got: %q", stderr)
+	}
+}
+
+// TestPromptSystemEmptyValue checks that --system with an empty string exits 2
+// with the message: "prompt: --system value cannot be empty"
+func TestPromptSystemEmptyValue(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	_, stderr, code := runPrompt(t, env, []string{"--system", ""}, "hello")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "prompt: --system value cannot be empty") {
+		t.Errorf("stderr does not contain expected message, got: %q", stderr)
+	}
+}
+
+// TestPromptSystemWithPositional checks that --system and a positional arg both
+// appear in the explain output.
+func TestPromptSystemWithPositional(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--system", "You are a reviewer.", "--explain", "Review this code"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "You are a reviewer.") {
+		t.Errorf("stdout missing system prompt:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "Review this code") {
+		t.Errorf("stdout missing positional arg:\n%s", stdout)
+	}
+}
+
+// TestPromptSystemWithStdin checks that --system and stdin input both appear in
+// the explain output.
+func TestPromptSystemWithStdin(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--system", "You are a support agent.", "--explain"}, "My app is crashing")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "You are a support agent.") {
+		t.Errorf("stdout missing system prompt:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "My app is crashing") {
+		t.Errorf("stdout missing stdin content:\n%s", stdout)
+	}
+}
+
+// TestPromptSystemAbsent verifies that when --system is not set, the Anthropic
+// --explain output does not contain a "system" key in the JSON body.
+func TestPromptSystemAbsent(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--explain"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	// The curl body should not have a "system" field when --system is absent
+	// and --schema is also absent.
+	if strings.Contains(stdout, `"system"`) {
+		t.Errorf("stdout contains \"system\" key when --system not set:\n%s", stdout)
+	}
+}
+
+// TestPromptSystemJSONOutput checks that --system + --json includes the
+// system_prompt field in the JSON output with the correct value.
+func TestPromptSystemJSONOutput(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--system", "You are helpful.", "--endpoint", srv.URL, "--model", "llama3.2", "--json"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %s", err, stdout)
+	}
+	sp, ok := obj["system_prompt"]
+	if !ok {
+		t.Fatal("system_prompt key missing from JSON output")
+	}
+	if sp != "You are helpful." {
+		t.Errorf("system_prompt = %q, want %q", sp, "You are helpful.")
+	}
+}
+
+// TestPromptSystemJSONOutputAbsent checks that when --system is not set, the
+// system_prompt key is absent from --json output.
+func TestPromptSystemJSONOutputAbsent(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", srv.URL, "--model", "llama3.2", "--json"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %s", err, stdout)
+	}
+	if _, ok := obj["system_prompt"]; ok {
+		t.Error("system_prompt key present in JSON output when --system not set")
+	}
+}
+
+// TestPromptSystemExplain checks that --system text appears verbatim in the
+// --explain curl output.
+func TestPromptSystemExplain(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--system", "You are helpful.", "--explain"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "You are helpful.") {
+		t.Errorf("system prompt text not found in --explain output:\n%s", stdout)
+	}
+}
+
+// TestPromptSystemOpenAI checks that --system with an OpenAI model produces a
+// system role message in the --explain output's messages array.
+func TestPromptSystemOpenAI(t *testing.T) {
+	env := map[string]string{"OPENAI_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--system", "You are a translator.", "--model", "gpt-4o", "--explain"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, `"role":"system"`) {
+		t.Errorf("stdout missing system role message:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "You are a translator.") {
+		t.Errorf("stdout missing system prompt text:\n%s", stdout)
+	}
+}
+
 // --- --quiet flag tests ---
 
 // TestQuietSuppressesStderr verifies that --quiet suppresses stderr on error.

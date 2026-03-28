@@ -723,6 +723,7 @@ Input: positional argument or stdin.
 | `--schema <val>` | `-s` | string | "" | Inline JSON schema or file path; validates response keys and types |
 | `--explain` | — | bool | false | Print equivalent curl command and exit 0; no API call |
 | `--retry <N>` | — | int | 0 | Retry up to N times on schema mismatch with temperature escalation |
+| `--system <val>` | — | string | `""` | System prompt text, or `@path` to read from file |
 
 ### Exit codes
 
@@ -854,6 +855,7 @@ vrk coax --times 3 --backoff exp:1s --on 1 -- \
 - **`--schema` depth is top-level only.** Validation checks top-level keys and types (`string`, `number`, `boolean`, `array`, `object`). Nested schema structures are not validated.
 - **`--schema` with OpenAI uses `response_format.json_schema`.** Validation is API-enforced. With Anthropic, the schema is injected as a system prompt and the response is validated post-call.
 - **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.
+- **`--system @file` path resolution** — the path is relative to the working directory where `vrk` is invoked, not to the script containing the command. In CI, always use absolute paths or paths relative to the repo root.
 
 ---
 

@@ -167,6 +167,38 @@ else
 fi
 [ -z "$err" ] && pass "--quiet --explain: stderr empty" || fail "--quiet --explain: stderr empty" "got: $err"
 
+# --- --system ---
+echo ""
+echo "--- --system ---"
+
+# system prompt with --explain
+out=$(echo 'hello' | "$BIN" prompt --system 'Reply with exactly: pong' --explain)
+echo "$out" | grep -q "Reply with exactly: pong" || fail "--system --explain: system prompt missing from output" "got: $out"
+pass "--system --explain shows system prompt"
+
+# system from file
+echo 'You are helpful.' > /tmp/vrk_sys_test.txt
+out=$(echo 'hello' | "$BIN" prompt --system @/tmp/vrk_sys_test.txt --explain)
+echo "$out" | grep -q "You are helpful." || fail "--system @file: file content missing from output" "got: $out"
+rm -f /tmp/vrk_sys_test.txt
+pass "--system @file reads from file"
+
+# file not found — must be exit 1 (runtime error, not usage error)
+set +e
+echo 'hello' | "$BIN" prompt --system @/tmp/vrk_nonexistent_sys.txt --explain 2>/dev/null; code=$?
+set -e
+[ "$code" -eq 1 ] || fail "--system @missing: expected exit 1, got $code" ""
+err=$(echo 'hello' | "$BIN" prompt --system @/tmp/vrk_nonexistent_sys.txt --explain 2>&1 >/dev/null) || true
+echo "$err" | grep -q "not found" || fail "--system @missing: error missing 'not found'" "got: $err"
+pass "--system @missing exits 1 with file-not-found message"
+
+# empty system — must be exit 2 (usage error)
+set +e
+echo 'hello' | "$BIN" prompt --system '' --explain 2>/dev/null; code=$?
+set -e
+[ "$code" -eq 2 ] || fail "--system '': expected exit 2, got $code" ""
+pass "--system '' exits 2"
+
 # --- summary ---
 echo ""
 echo "All smoke tests passed."

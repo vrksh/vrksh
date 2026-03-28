@@ -32,11 +32,12 @@ const (
 
 // promptOutput is the shape emitted by --json.
 type promptOutput struct {
-	Response    string `json:"response"`
-	Model       string `json:"model"`
-	TokensUsed  int    `json:"tokens_used"`
-	LatencyMs   int64  `json:"latency_ms"`
-	RequestHash string `json:"request_hash"`
+	Response     string `json:"response"`
+	Model        string `json:"model"`
+	TokensUsed   int    `json:"tokens_used"`
+	LatencyMs    int64  `json:"latency_ms"`
+	RequestHash  string `json:"request_hash"`
+	SystemPrompt string `json:"system_prompt,omitempty"`
 }
 
 // resolveModel returns what the user explicitly asked for via --model or
@@ -94,10 +95,30 @@ func scrubKey(s, key string) string {
 }
 
 // requestHash returns a stable SHA-256 hex string for the given inputs.
-func requestHash(model string, temp float64, prompt string) string {
-	input := model + "|" + strconv.FormatFloat(temp, 'f', 1, 64) + "|" + prompt
+func requestHash(model string, temp float64, system, prompt string) string {
+	input := model + "|" + strconv.FormatFloat(temp, 'f', 1, 64) + "|" + system + "|" + prompt
 	h := sha256.Sum256([]byte(input))
 	return fmt.Sprintf("%x", h)
+}
+
+// resolveSystemPrompt resolves the --system flag value. Empty → error (exit 2).
+// @path → read file. Literal text → return as-is.
+func resolveSystemPrompt(val string) (string, error) {
+	if val == "" {
+		return "", fmt.Errorf("prompt: --system value cannot be empty")
+	}
+	if strings.HasPrefix(val, "@") {
+		path := val[1:]
+		b, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return "", fmt.Errorf("prompt: system prompt file not found: %s", path)
+			}
+			return "", fmt.Errorf("prompt: cannot read system prompt file: %v", err)
+		}
+		return strings.TrimSuffix(string(b), "\n"), nil
+	}
+	return val, nil
 }
 
 // buildSystemPrompt returns a system prompt string that instructs the model to
@@ -277,14 +298,18 @@ type openAIJSONSchema struct {
 }
 
 // callOpenAI makes a single call to the OpenAI chat completions API.
-func callOpenAI(model, key, prompt string, temp float64, schema map[string]string) (string, int, error) {
+func callOpenAI(model, key, prompt string, temp float64, schema map[string]string, systemPrompt string) (string, int, error) {
+	var msgs []openAIMessage
+	if systemPrompt != "" {
+		msgs = append(msgs, openAIMessage{Role: "system", Content: systemPrompt})
+	}
+	msgs = append(msgs, openAIMessage{Role: "user", Content: prompt})
+
 	req := openAIRequest{
 		Model:     model,
 		MaxTokens: 4096,
 		Temp:      temp,
-		Messages: []openAIMessage{
-			{Role: "user", Content: prompt},
-		},
+		Messages:  msgs,
 	}
 	if schema != nil {
 		schemaObj := make(map[string]interface{}, len(schema))
@@ -352,18 +377,22 @@ func callOpenAI(model, key, prompt string, temp float64, schema map[string]strin
 
 // printExplain writes a curl equivalent command to stdout and returns 0.
 // The API key is always shown as an env var reference, never its value.
-func printExplain(w io.Writer, prov provider, model, prompt string, schema map[string]string) int {
+func printExplain(w io.Writer, prov provider, model, prompt string, schema map[string]string, systemPrompt string) int {
 	bw := bufio.NewWriter(w)
 
 	switch prov {
 	case providerOpenAI:
+		var msgs []map[string]string
+		if systemPrompt != "" {
+			msgs = append(msgs, map[string]string{"role": "system", "content": systemPrompt})
+		}
+		msgs = append(msgs, map[string]string{"role": "user", "content": prompt})
+
 		body := map[string]interface{}{
 			"model":       model,
 			"max_tokens":  4096,
 			"temperature": 0,
-			"messages": []map[string]string{
-				{"role": "user", "content": prompt},
-			},
+			"messages":    msgs,
 		}
 		if schema != nil {
 			schemaObj := make(map[string]interface{}, len(schema))
@@ -397,8 +426,9 @@ func printExplain(w io.Writer, prov provider, model, prompt string, schema map[s
 			MaxTokens: 4096,
 			Messages:  []anthropicMessage{{Role: "user", Content: prompt}},
 		}
-		if schema != nil {
-			mb.System = buildSystemPrompt(schema)
+		// systemPrompt is already combined with schema instructions by the caller.
+		if systemPrompt != "" {
+			mb.System = systemPrompt
 		}
 		bodyJSON, _ := json.Marshal(mb)
 		_, _ = fmt.Fprintf(bw, "curl https://api.anthropic.com/v1/messages \\\n")
@@ -454,13 +484,19 @@ type openAICompatRequest struct {
 // the assistant reply text, total token count, and any error.
 // Auth: reads VRK_LLM_KEY and sets Authorization: Bearer only if non-empty.
 // Never uses OPENAI_API_KEY or ANTHROPIC_API_KEY.
-func callOpenAICompatible(endpointURL, model, prompt string, schema map[string]string) (string, int, error) {
+func callOpenAICompatible(endpointURL, model, prompt string, schema map[string]string, systemPrompt string) (string, int, error) {
+	var msgs []openAIMessage
+	if systemPrompt != "" {
+		msgs = append(msgs, openAIMessage{Role: "system", Content: systemPrompt})
+	}
+	msgs = append(msgs, openAIMessage{Role: "user", Content: prompt})
+
 	req := openAICompatRequest{
 		Model:     model,
 		MaxTokens: 4096,
 		Temp:      0,
 		Stream:    false,
-		Messages:  []openAIMessage{{Role: "user", Content: prompt}},
+		Messages:  msgs,
 	}
 	if schema != nil {
 		req.ResponseFormat = &openAIRespFmt{Type: "json_object"}
@@ -520,17 +556,21 @@ func callOpenAICompatible(endpointURL, model, prompt string, schema map[string]s
 // printExplainEndpoint writes a curl command for a custom endpoint to w.
 // The Authorization header line is included only when VRK_LLM_KEY is set,
 // and is shown as $VRK_LLM_KEY — the actual value is never printed.
-func printExplainEndpoint(w io.Writer, endpointURL, model, prompt string, schema map[string]string) int {
+func printExplainEndpoint(w io.Writer, endpointURL, model, prompt string, schema map[string]string, systemPrompt string) int {
 	bw := bufio.NewWriter(w)
+
+	var msgs []map[string]string
+	if systemPrompt != "" {
+		msgs = append(msgs, map[string]string{"role": "system", "content": systemPrompt})
+	}
+	msgs = append(msgs, map[string]string{"role": "user", "content": prompt})
 
 	body := map[string]interface{}{
 		"model":       model,
 		"max_tokens":  4096,
 		"temperature": 0,
 		"stream":      false,
-		"messages": []map[string]string{
-			{"role": "user", "content": prompt},
-		},
+		"messages":    msgs,
 	}
 	if schema != nil {
 		body["response_format"] = map[string]string{"type": "json_object"}
@@ -564,6 +604,7 @@ func init() {
 			{Name: "explain", Usage: "print equivalent curl command and exit, no API call"},
 			{Name: "retry", Usage: "retry N times on schema mismatch with temperature escalation"},
 			{Name: "endpoint", Usage: "OpenAI-compatible API base URL (e.g. http://localhost:11434/v1)"},
+			{Name: "system", Usage: "system prompt text, or @path to read from file"},
 		},
 	})
 }
@@ -583,6 +624,7 @@ func Run() int {
 		explainFlag bool
 		retryCount  int
 		endpoint    string
+		systemArg   string
 	)
 
 	fs.StringVarP(&modelFlag, "model", "m", "", "LLM model (default: claude-sonnet-4-5 or VRK_DEFAULT_MODEL)")
@@ -594,6 +636,7 @@ func Run() int {
 	fs.BoolVar(&explainFlag, "explain", false, "print equivalent curl command and exit, no API call")
 	fs.IntVar(&retryCount, "retry", 0, "retry N times on schema mismatch with temperature escalation")
 	fs.StringVar(&endpoint, "endpoint", "", "OpenAI-compatible API base URL (e.g. http://localhost:11434/v1)")
+	fs.StringVar(&systemArg, "system", "", "system prompt text, or @path to read from file")
 
 	// Suppress pflag's auto-printing so all output goes through shared helpers.
 	fs.SetOutput(io.Discard)
@@ -629,6 +672,28 @@ func Run() int {
 		return shared.UsageErrorf("invalid endpoint URL")
 	}
 	endpoint = resolvedEndpoint
+
+	// Resolve --system flag before anything else that might use it.
+	var systemPrompt string
+	systemSet := fs.Changed("system")
+	if systemSet {
+		var sysErr error
+		systemPrompt, sysErr = resolveSystemPrompt(systemArg)
+		if sysErr != nil {
+			msg := sysErr.Error()
+			// Empty value is a usage error (exit 2); file errors are runtime (exit 1).
+			if strings.Contains(msg, "cannot be empty") {
+				if jsonFlag {
+					return shared.PrintJSONError(map[string]any{"error": msg, "code": 2})
+				}
+				return shared.UsageErrorf("%s", msg)
+			}
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{"error": msg, "code": 1})
+			}
+			return shared.Errorf("%s", msg)
+		}
+	}
 
 	model := resolveModel(modelFlag)
 
@@ -687,7 +752,7 @@ func Run() int {
 	// --endpoint (or VRK_LLM_URL) always uses OpenAI chat completions format.
 	if endpoint != "" {
 		if explainFlag {
-			return printExplainEndpoint(os.Stdout, endpoint, model, promptText, schema)
+			return printExplainEndpoint(os.Stdout, endpoint, model, promptText, schema, systemPrompt)
 		}
 		// Local model names cannot be guessed — require an explicit --model.
 		if model == "" {
@@ -698,7 +763,7 @@ func Run() int {
 		}
 
 		start := time.Now()
-		responseText, tokensUsed, callErr := callOpenAICompatible(endpoint, model, promptText, schema)
+		responseText, tokensUsed, callErr := callOpenAICompatible(endpoint, model, promptText, schema, systemPrompt)
 		if callErr != nil {
 			safeErr := scrubKey(callErr.Error(), os.Getenv("VRK_LLM_KEY"))
 			if jsonFlag {
@@ -718,7 +783,10 @@ func Run() int {
 				Model:       model,
 				TokensUsed:  tokensUsed,
 				LatencyMs:   latencyMs,
-				RequestHash: requestHash(model, 0, promptText),
+				RequestHash: requestHash(model, 0, systemPrompt, promptText),
+			}
+			if systemSet {
+				out.SystemPrompt = systemPrompt
 			}
 			enc := json.NewEncoder(bw)
 			if encErr := enc.Encode(out); encErr != nil {
@@ -777,7 +845,17 @@ func Run() int {
 	// --explain: print curl equivalent and exit 0.
 	if explainFlag {
 		bw := bufio.NewWriter(os.Stdout)
-		code := printExplain(bw, prov, model, promptText, schema)
+		// For --explain, combine system prompt with schema instructions for Anthropic.
+		explainSystem := systemPrompt
+		if schema != nil && prov == providerAnthropic {
+			schemaInstr := buildSystemPrompt(schema)
+			if explainSystem != "" {
+				explainSystem = explainSystem + "\n\n" + schemaInstr
+			} else {
+				explainSystem = schemaInstr
+			}
+		}
+		code := printExplain(bw, prov, model, promptText, schema, explainSystem)
 		_ = bw.Flush()
 		return code
 	}
@@ -801,21 +879,27 @@ func Run() int {
 		}
 		finalTemp = temp
 
-		var systemPrompt string
+		// Combine user system prompt with schema instructions for Anthropic.
+		apiSystem := systemPrompt
 		if schema != nil && prov == providerAnthropic {
-			systemPrompt = buildSystemPrompt(schema)
+			schemaInstr := buildSystemPrompt(schema)
+			if apiSystem != "" {
+				apiSystem = apiSystem + "\n\n" + schemaInstr
+			} else {
+				apiSystem = schemaInstr
+			}
 		}
 
 		var callErr error
 		switch prov {
 		case providerAnthropic:
-			responseText, tokensUsed, callErr = callAnthropic(model, apiKey, promptText, systemPrompt, temp)
+			responseText, tokensUsed, callErr = callAnthropic(model, apiKey, promptText, apiSystem, temp)
 		case providerOpenAI:
 			var schemaForOpenAI map[string]string
 			if schema != nil {
 				schemaForOpenAI = schema
 			}
-			responseText, tokensUsed, callErr = callOpenAI(model, apiKey, promptText, temp, schemaForOpenAI)
+			responseText, tokensUsed, callErr = callOpenAI(model, apiKey, promptText, temp, schemaForOpenAI, systemPrompt)
 		}
 
 		if callErr != nil {
@@ -861,7 +945,10 @@ func Run() int {
 			Model:       model,
 			TokensUsed:  tokensUsed,
 			LatencyMs:   latencyMs,
-			RequestHash: requestHash(model, finalTemp, promptText),
+			RequestHash: requestHash(model, finalTemp, systemPrompt, promptText),
+		}
+		if systemSet {
+			out.SystemPrompt = systemPrompt
 		}
 		enc := json.NewEncoder(bw)
 		if err := enc.Encode(out); err != nil {
@@ -899,6 +986,7 @@ func Flags() *pflag.FlagSet {
 	fs.Bool("explain", false, "print equivalent curl command and exit, no API call")
 	fs.Int("retry", 0, "retry N times on schema mismatch with temperature escalation")
 	fs.String("endpoint", "", "OpenAI-compatible API base URL (e.g. http://localhost:11434/v1)")
+	fs.String("system", "", "system prompt text, or @path to read from file")
 	return fs
 }
 
@@ -911,6 +999,9 @@ func printUsage(fs *pflag.FlagSet) int {
 		"",
 		"Send a prompt to an LLM and print the response. Reads from stdin or",
 		"a positional argument. Defaults to claude-sonnet-4-5 via Anthropic.",
+		"",
+		"  --system <text>      system prompt as literal text",
+		"  --system @file.txt   system prompt read from file",
 		"",
 		"flags:",
 	}
