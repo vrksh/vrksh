@@ -1,31 +1,109 @@
 {
   "version": "0.1.0",
   "tools": [
-    {"name": "jwt",    "description": "JWT inspector — decode, --claim, --expired"},
-    {"name": "epoch",  "description": "Timestamp converter — unix↔ISO, relative time"},
-    {"name": "uuid",   "description": "UUID generator — v4/v7, --count, --json"},
-    {"name": "tok",    "description": "Token counter — --budget, --fail, --model"},
-    {"name": "sse",    "description": "SSE stream parser — text/event-stream to JSONL"},
-    {"name": "coax",   "description": "Retry wrapper — --times, --backoff, --on, --until"},
-    {"name": "prompt", "description": "LLM prompt — --model, --budget, --schema, --fail"},
-    {"name": "kv",     "description": "Key-value store — set/get/del/list, SQLite-backed"},
-    {"name": "chunk",  "description": "Token-aware text splitter — JSONL chunks within a token budget"},
-    {"name": "grab",   "description": "URL fetcher — clean markdown, plain text, or raw HTML"},
-    {"name": "jsonl",  "description": "JSON array ↔ JSONL converter — --collect, --json"},
-    {"name": "links",  "description": "Hyperlink extractor — markdown, HTML, bare URLs to JSONL"},
-    {"name": "plain",    "description": "Markdown stripper — removes syntax, keeps prose"},
-    {"name": "validate", "description": "JSONL schema validator — --schema, --strict, --fix, --json"},
-    {"name": "mask",     "description": "Secret redactor — entropy + pattern-based, streaming"},
-    {"name": "emit",     "description": "Structured logger — wraps stdin lines as JSONL log records"},
-    {"name": "throttle", "description": "Rate limiter for pipes — --rate N/s or N/m"},
-    {"name": "digest",   "description": "Universal hasher — sha256/md5/sha512, --hmac, --compare"},
-    {"name": "base",     "description": "Encoding converter — base64, base64url, hex, base32"},
-    {"name": "recase",   "description": "Naming convention converter — snake, camel, kebab, pascal, title"},
-    {"name": "slug",     "description": "URL/filename slug generator — --separator, --max, --json"},
-    {"name": "moniker",  "description": "Memorable name generator — run IDs, job labels, temp dirs"},
-    {"name": "pct",      "description": "Percent encoder/decoder — RFC 3986, --encode, --decode, --form"},
-    {"name": "sip",      "description": "Stream sampler — --first, --count, --every, --sample"},
-    {"name": "urlinfo",  "description": "URL parser — scheme, host, port, path, query, --field"},
-    {"name": "assert",   "description": "Pipeline condition check — jq conditions, --contains, --matches"}
+    {
+      "name": "jwt",
+      "description": "JWT inspector — decode, --claim, --expired, --valid."
+    },
+    {
+      "name": "epoch",
+      "description": "Timestamp converter — unix↔ISO, relative time"
+    },
+    {
+      "name": "uuid",
+      "description": "UUID generator — v4/v7, --count, --json"
+    },
+    {
+      "name": "tok",
+      "description": "Token counter — cl100k_base, --budget guard, --json."
+    },
+    {
+      "name": "sse",
+      "description": "SSE stream parser — text/event-stream to JSONL"
+    },
+    {
+      "name": "coax",
+      "description": "Retry wrapper — --times, --backoff, --on, --until"
+    },
+    {
+      "name": "prompt",
+      "description": "LLM prompt — Anthropic/OpenAI, --schema, --retry, --explain."
+    },
+    {
+      "name": "kv",
+      "description": "Key-value store — SQLite-backed, namespaces, TTL, atomic counters."
+    },
+    {
+      "name": "chunk",
+      "description": "Token-aware text splitter — JSONL chunks within a token budget"
+    },
+    {
+      "name": "grab",
+      "description": "URL fetcher — clean markdown, plain text, or raw HTML."
+    },
+    {
+      "name": "jsonl",
+      "description": "JSON array ↔ JSONL converter — --collect, --json"
+    },
+    {
+      "name": "links",
+      "description": "Hyperlink extractor — markdown, HTML, bare URLs to JSONL"
+    },
+    {
+      "name": "plain",
+      "description": "Markdown stripper — removes syntax, keeps prose"
+    },
+    {
+      "name": "validate",
+      "description": "JSONL schema validator — --schema, --strict, --fix, --json"
+    },
+    {
+      "name": "mask",
+      "description": "Secret redactor — entropy + pattern-based, streaming"
+    },
+    {
+      "name": "emit",
+      "description": "Structured logger — wraps stdin lines as JSONL log records"
+    },
+    {
+      "name": "throttle",
+      "description": "Rate limiter for pipes — --rate N/s or N/m"
+    },
+    {
+      "name": "digest",
+      "description": "Universal hasher — sha256/md5/sha512, --hmac, --compare"
+    },
+    {
+      "name": "base",
+      "description": "Encoding converter — base64, base64url, hex, base32"
+    },
+    {
+      "name": "recase",
+      "description": "Naming convention converter — snake, camel, kebab, pascal, title"
+    },
+    {
+      "name": "slug",
+      "description": "URL/filename slug generator — --separator, --max, --json"
+    },
+    {
+      "name": "moniker",
+      "description": "Memorable name generator — run IDs, job labels, temp dirs"
+    },
+    {
+      "name": "pct",
+      "description": "Percent encoder/decoder — RFC 3986, --encode, --decode, --form"
+    },
+    {
+      "name": "sip",
+      "description": "Stream sampler — --first, --count, --every, --sample"
+    },
+    {
+      "name": "urlinfo",
+      "description": "URL parser — scheme, host, port, path, query, --field"
+    },
+    {
+      "name": "assert",
+      "description": "Pipeline condition check — jq conditions, --contains, --matches"
+    }
   ]
 }

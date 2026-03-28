@@ -1,0 +1,56 @@
+name: prompt
+tagline: LLM prompt — Anthropic/OpenAI, --schema, --retry, --explain.
+description: |
+  Send a prompt to an LLM and print the response. Supports Anthropic and
+  OpenAI APIs with optional JSON schema validation, retry with temperature
+  escalation, and budget guards. Temperature defaults to 0 for determinism.
+group: v1
+example: echo "Summarize this" | vrk prompt --model claude-sonnet-4-6 --json
+flags:
+  - flag: --model
+    short: "-m"
+    type: string
+    description: LLM model (default from VRK_DEFAULT_MODEL or claude-sonnet-4-6)
+  - flag: --budget
+    short: ""
+    type: int
+    description: Exit 1 if prompt exceeds N tokens
+  - flag: --fail
+    short: "-f"
+    type: bool
+    description: Fail on non-2xx API response or schema mismatch
+  - flag: --json
+    short: "-j"
+    type: bool
+    description: Emit response as JSON envelope with metadata
+  - flag: --quiet
+    short: "-q"
+    type: bool
+    description: Suppress stderr output
+  - flag: --schema
+    short: "-s"
+    type: string
+    description: JSON schema for response validation
+  - flag: --explain
+    short: ""
+    type: bool
+    description: Print equivalent curl command, no API call
+  - flag: --retry
+    short: ""
+    type: int
+    description: Retry N times on schema mismatch (escalates temperature)
+  - flag: --endpoint
+    short: ""
+    type: string
+    description: OpenAI-compatible API base URL
+exit_codes:
+  - code: 0
+    meaning: Success
+  - code: 1
+    meaning: API failure, budget exceeded, or schema mismatch
+  - code: 2
+    meaning: Usage error — no input, missing flags
+og_image:
+  headline: "Pipe text to any LLM. Validate the response."
+  code: "vrk prompt -m claude-sonnet-4-6 --schema spec.json"
+mcp_callable: true

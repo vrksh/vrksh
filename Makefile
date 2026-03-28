@@ -1,6 +1,6 @@
 export CGO_ENABLED=0
 
-.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean
+.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate validate-schemas
 
 # Build the binary. CGO_ENABLED=0 is mandatory - static binary promise depends on it.
 build:
@@ -48,7 +48,7 @@ cross:
 	@GOOS=darwin GOARCH=arm64 go build -o /dev/null . && echo "ok  darwin/arm64"
 
 # Full pre-commit check. Run before every commit. Takes ~30 seconds.
-check: build test lint cross smoke
+check: build test lint cross smoke validate-schemas
 	@echo ""
 	@echo "all checks passed"
 
@@ -61,6 +61,15 @@ smoke: build
 	done
 	@echo "--- cmd/grab/grab_smoke_test.go ---"
 	VRK=$(CURDIR)/vrk go test -tags smoke ./cmd/grab/... -v -timeout 60s
+
+# Generate Hugo content, static files, data JSON, OG images, and update manifest.
+generate:
+	go run ./internal/docgen/cmd
+	go run ./internal/oggen/cmd
+
+# Validate all schema YAMLs and check skills.md token budget.
+validate-schemas:
+	go run ./internal/schema/cmd/validate ./schema/
 
 # Remove build artifacts
 clean:

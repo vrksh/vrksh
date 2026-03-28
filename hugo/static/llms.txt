@@ -1,0 +1,16 @@
+# vrksh
+
+> Unix tools for AI pipelines. One static Go binary.
+
+## Tools
+
+- vrk grab — URL fetcher — clean markdown, plain text, or raw HTML.
+- vrk jwt — JWT inspector — decode, --claim, --expired, --valid.
+- vrk kv — Key-value store — SQLite-backed, namespaces, TTL, atomic counters.
+- vrk prompt — LLM prompt — Anthropic/OpenAI, --schema, --retry, --explain.
+- vrk tok — Token counter — cl100k_base, --budget guard, --json.
+
+## Full reference
+
+For complete flag documentation, exit codes, and compose patterns:
+https://vrk.sh/skills.md

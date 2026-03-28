@@ -1,0 +1,39 @@
+name: jwt
+tagline: JWT inspector — decode, --claim, --expired, --valid.
+description: |
+  Decode and inspect JWT tokens without verifying signatures. Extract
+  individual claims, check expiry, or validate time-based claims (exp, nbf, iat).
+group: v1
+example: vrk jwt --claim sub eyJhbGciOiJIUzI1NiJ9...
+flags:
+  - flag: --json
+    short: "-j"
+    type: bool
+    description: Emit decoded token as JSON
+  - flag: --claim
+    short: "-c"
+    type: string
+    description: Print value of a single claim
+  - flag: --expired
+    short: "-e"
+    type: bool
+    description: Exit 1 if the token is expired
+  - flag: --valid
+    short: ""
+    type: bool
+    description: Exit 1 if expired, not-yet-valid, or issued in the future
+  - flag: --quiet
+    short: "-q"
+    type: bool
+    description: Suppress stderr output
+exit_codes:
+  - code: 0
+    meaning: Success or token is valid
+  - code: 1
+    meaning: Token expired/invalid or runtime error
+  - code: 2
+    meaning: Usage error — bad format, too many args
+og_image:
+  headline: "Decode JWTs. Extract claims. Check expiry."
+  code: "vrk jwt --expired --json < token.txt"
+mcp_callable: true

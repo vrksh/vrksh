@@ -1,0 +1,36 @@
+name: grab
+tagline: URL fetcher — clean markdown, plain text, or raw HTML.
+description: |
+  Fetch a URL and return clean markdown (default), plain text (--text),
+  or raw HTML (--raw). Applies readability-style content extraction.
+  Static HTML only — no JavaScript execution.
+group: v1
+example: vrk grab --text https://example.com/article
+flags:
+  - flag: --text
+    short: "-t"
+    type: bool
+    description: Plain prose output, no markdown syntax
+  - flag: --raw
+    short: ""
+    type: bool
+    description: Raw HTML, no processing
+  - flag: --json
+    short: "-j"
+    type: bool
+    description: Emit JSON envelope with metadata
+  - flag: --quiet
+    short: "-q"
+    type: bool
+    description: Suppress stderr output
+exit_codes:
+  - code: 0
+    meaning: Success
+  - code: 1
+    meaning: HTTP error, fetch timeout, or I/O error
+  - code: 2
+    meaning: Usage error — invalid URL, no input, mutually exclusive flags
+og_image:
+  headline: "Fetch any URL. Get clean markdown back."
+  code: "vrk grab https://example.com/article --json"
+mcp_callable: true
