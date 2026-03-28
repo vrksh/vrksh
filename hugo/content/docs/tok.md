@@ -17,10 +17,7 @@ you send.
 ## The fix
 
 ```bash
-echo "Hello world" | vrk tok
-```
-
-```
+$ echo "Hello world" | vrk tok
 2
 ```
 
@@ -30,10 +27,7 @@ that costs money and takes seconds to fail.
 A larger input:
 
 ```bash
-cat my_system_prompt.txt | vrk tok
-```
-
-```
+$ cat my_system_prompt.txt | vrk tok
 12847
 ```
 
@@ -70,10 +64,7 @@ exits 1 (over budget), prompt never runs. No API call, no wasted money.
 ## JSON output
 
 ```bash
-echo "Hello world" | vrk tok --json
-```
-
-```json
+$ echo "Hello world" | vrk tok --json
 {"tokens":2,"model":"cl100k_base"}
 ```
 
@@ -81,10 +72,7 @@ When `--budget` is set and the count exceeds it, the error goes to stdout
 as JSON instead of stderr:
 
 ```bash
-echo "Hello world this is a longer sentence" | vrk tok --json --budget 3
-```
-
-```json
+$ echo "Hello world this is a longer sentence" | vrk tok --json --budget 3
 {"code":1,"error":"tok: 7 tokens exceeds budget of 3"}
 ```
 

@@ -12,14 +12,14 @@
       <article id="doc-content" class="flex-1 min-w-0">
         <!-- Title bar -->
         <div class="mb-8">
-          <h1 class="text-3xl font-bold mb-2" style="font-family: var(--font-sans);">{{ .Title }}</h1>
-          <div class="flex items-center gap-3 text-sm" style="font-family: var(--font-sans); color: var(--color-muted);">
+          <h1 class="text-3xl font-bold mb-2">{{ .Title }}</h1>
+          <div class="flex items-center gap-3 text-sm" style="color: var(--color-muted);">
             {{ with .Params.group }}<span class="px-1.5 py-0.5 rounded badge-{{ . }}">{{ . }}</span>{{ end }}
-            {{ if .Params.mcp_callable }}<span class="px-1.5 py-0.5 rounded" style="background: rgba(110, 231, 183, 0.1); color: var(--color-accent);">MCP</span>{{ end }}
+            {{ if .Params.mcp_callable }}<span class="px-1.5 py-0.5 rounded badge-mcp">MCP</span>{{ end }}
           </div>
         </div>
 
-        <div class="prose" style="font-family: var(--font-serif);">
+        <div class="prose">
           {{ .Content }}
         </div>
       </article>

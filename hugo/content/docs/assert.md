@@ -86,12 +86,7 @@ Multiple positional arguments are AND-ed. All conditions must pass for a line to
 ### JSON output on failure
 
 ```bash
-echo '{"score": 0.1}' | vrk assert --json '.score > 0.5'
-```
-
-<!-- output: verify against binary -->
-
-```json
+$ echo '{"score": 0.1}' | vrk assert --json '.score > 0.5'
 {"error":"assert: condition failed: .score > 0.5","code":1}
 ```
 

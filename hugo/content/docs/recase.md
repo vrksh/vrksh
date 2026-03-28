@@ -16,12 +16,7 @@ Every language has a different casing rule and they never agree. Python wants `s
 ## The fix
 
 ```bash
-echo "getUserName" | vrk recase --to snake
-```
-
-<!-- output: verify against binary -->
-
-```
+$ echo "getUserName" | vrk recase --to snake
 get_user_name
 ```
 
@@ -62,12 +57,7 @@ Each line is converted independently. Blank lines pass through as blank lines. L
 ### JSON output
 
 ```bash
-echo "myFieldName" | vrk recase --to snake --json
-```
-
-<!-- output: verify against binary -->
-
-```json
+$ echo "myFieldName" | vrk recase --to snake --json
 {"input":"myFieldName","output":"my_field_name","from":"camel","to":"snake"}
 ```
 

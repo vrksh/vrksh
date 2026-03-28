@@ -16,12 +16,7 @@ You're generating URLs from article titles, filenames from user-submitted projec
 ## The fix
 
 ```bash
-echo "My Article Title (2024 Edition)" | vrk slug
-```
-
-<!-- output: verify against binary -->
-
-```
+$ echo "My Article Title (2024 Edition)" | vrk slug
 my-article-title-2024-edition
 ```
 
@@ -63,12 +58,7 @@ echo "A Very Long Title That Would Break Your Database Column" | vrk slug --max 
 ### JSON output
 
 ```bash
-echo "My Post Title" | vrk slug --json
-```
-
-<!-- output: verify against binary -->
-
-```json
+$ echo "My Post Title" | vrk slug --json
 {"input":"My Post Title","output":"my-post-title"}
 ```
 

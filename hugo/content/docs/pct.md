@@ -16,12 +16,7 @@ You're building URLs with query parameters, decoding form data from a webhook pa
 ## The fix
 
 ```bash
-echo "hello world & goodbye" | vrk pct --encode
-```
-
-<!-- output: verify against binary -->
-
-```
+$ echo "hello world & goodbye" | vrk pct --encode
 hello%20world%20%26%20goodbye
 ```
 
@@ -74,12 +69,7 @@ Decoding is the exact inverse of encoding. Invalid percent sequences (like `%GG`
 ### JSON output
 
 ```bash
-echo "hello world" | vrk pct --encode --json
-```
-
-<!-- output: verify against binary -->
-
-```json
+$ echo "hello world" | vrk pct --encode --json
 {"input":"hello world","output":"hello%20world","op":"encode","mode":"rfc3986"}
 ```
 

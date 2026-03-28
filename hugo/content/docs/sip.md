@@ -80,8 +80,6 @@ Equivalent to `head -n 50` but integrated into the same interface so you can swa
 cat data.jsonl | vrk sip --count 10 --json
 ```
 
-<!-- output: verify against binary -->
-
 The sampled lines are emitted first, then a metadata record:
 
 ```json

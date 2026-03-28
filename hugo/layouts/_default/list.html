@@ -7,7 +7,7 @@
   {{ partial "nav.html" . }}
 
   <main class="max-w-6xl mx-auto px-4 py-12">
-    <h1 class="text-3xl font-bold mb-6" style="font-family: var(--font-sans);">{{ .Title }}</h1>
+    <h1 class="text-3xl font-bold mb-6">{{ .Title }}</h1>
 
     {{ if eq .Section "docs" }}
     <!-- Search -->
@@ -30,9 +30,9 @@
         <div class="flex items-center gap-2 mb-2">
           <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ .Params.tool }}</code>
           {{ with .Params.group }}<span class="text-xs px-1.5 py-0.5 rounded badge-{{ . }}">{{ . }}</span>{{ end }}
-          {{ if .Params.mcp_callable }}<span class="text-xs px-1.5 py-0.5 rounded" style="background: rgba(110, 231, 183, 0.1); color: var(--color-accent);">MCP</span>{{ end }}
+          {{ if .Params.mcp_callable }}<span class="text-xs px-1.5 py-0.5 rounded badge-mcp">MCP</span>{{ end }}
         </div>
-        <p class="text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">{{ .Description }}</p>
+        <p class="text-sm" style="color: var(--color-muted);">{{ .Description }}</p>
       </a>
       {{ end }}
     </div>
@@ -59,11 +59,11 @@
     <div class="space-y-6">
       {{ range .Pages }}
       <article>
-        <h2 class="text-xl" style="font-family: var(--font-sans);">
+        <h2 class="text-xl">
           <a href="{{ .Permalink }}">{{ .Title }}</a>
         </h2>
-        {{ with .Date }}<time class="text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">{{ .Format "January 2, 2006" }}</time>{{ end }}
-        {{ with .Description }}<p class="mt-1" style="color: var(--color-muted); font-family: var(--font-serif);">{{ . }}</p>{{ end }}
+        {{ with .Date }}<time class="text-sm" style="color: var(--color-muted);">{{ .Format "January 2, 2006" }}</time>{{ end }}
+        {{ with .Description }}<p class="mt-1" style="color: var(--color-muted);">{{ . }}</p>{{ end }}
       </article>
       {{ end }}
     </div>

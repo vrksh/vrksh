@@ -16,12 +16,7 @@ You need to extract the host from a URL in a shell script, pull a query paramete
 ## The fix
 
 ```bash
-echo "https://api.example.com:8443/v2/users?page=2&limit=50" | vrk urlinfo
-```
-
-<!-- output: verify against binary -->
-
-```json
+$ echo "https://api.example.com:8443/v2/users?page=2&limit=50" | vrk urlinfo
 {"scheme":"https","host":"api.example.com","port":8443,"path":"/v2/users","query":{"limit":"50","page":"2"},"fragment":"","user":""}
 ```
 
@@ -81,8 +76,6 @@ One JSON object (or field value) per line. Blank lines produce blank output line
 ```bash
 echo "https://example.com/path" | vrk urlinfo --json
 ```
-
-<!-- output: verify against binary -->
 
 With `--json`, a metadata trailer is appended after all records:
 

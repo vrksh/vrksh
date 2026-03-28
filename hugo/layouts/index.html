@@ -9,10 +9,10 @@
   <main>
     <!-- Hero -->
     <section class="dot-grid max-w-4xl mx-auto px-4 pt-20 pb-16 text-center">
-      <h1 class="text-4xl md:text-6xl font-bold mb-4" style="font-family: var(--font-sans); line-height: 1.1;">
+      <h1 class="text-4xl md:text-6xl font-bold mb-4" style="line-height: 1.1;">
         Your LLM call didn't fail.
       </h1>
-      <p class="text-xl md:text-2xl mb-6" style="font-family: var(--font-sans); font-weight: 500; color: var(--color-muted); line-height: 1.4;">
+      <p class="text-xl md:text-2xl mb-6" style="font-family: var(--font-serif); font-weight: 500; color: var(--color-muted); line-height: 1.4;">
         The API silently truncated your prompt at the context limit.
       </p>
 
@@ -33,12 +33,12 @@
         </button>
       </div>
 
-      <div class="flex items-center justify-center gap-4 text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">
+      <div class="flex items-center justify-center gap-4 text-sm" style="color: var(--color-muted);">
         <span class="px-2 py-0.5 rounded" style="background-color: var(--color-surface); border: 1px solid var(--color-border);">v{{ .Site.Params.version }}</span>
         <span>macOS &middot; Linux</span>
       </div>
 
-      <p class="mt-6" style="font-family: var(--font-sans); font-size: 0.875rem;">
+      <p class="mt-6" style="font-size: 0.875rem;">
         <a href="/docs/" style="color: var(--color-accent); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">&rarr; Read the docs</a>
       </p>
     </section>
@@ -61,7 +61,7 @@ echo "$CONTENT" | vrk tok --budget 8000 \
 
     <!-- Tool grid -->
     <section class="max-w-6xl mx-auto px-4 pb-16">
-      <h2 class="text-2xl font-semibold mb-6" style="font-family: var(--font-sans);">Tools</h2>
+      <h2 class="text-2xl font-semibold mb-6">Tools</h2>
       <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {{ range $name := (slice "tok" "prompt" "jwt" "kv" "grab") }}
           {{ $tool := index hugo.Data.tools $name }}
@@ -71,7 +71,7 @@ echo "$CONTENT" | vrk tok --budget 8000 \
               <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ $tool.name }}</code>
               <span class="text-xs px-1.5 py-0.5 rounded badge-{{ $tool.group }}">{{ $tool.group }}</span>
             </div>
-            <p class="text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">{{ $tool.tagline }}</p>
+            <p class="text-sm" style="color: var(--color-muted);">{{ $tool.tagline }}</p>
           </a>
           {{ end }}
         {{ end }}
@@ -80,10 +80,10 @@ echo "$CONTENT" | vrk tok --budget 8000 \
 
     <!-- Install section -->
     <section class="max-w-4xl mx-auto px-4 pb-16">
-      <h2 class="text-2xl font-semibold mb-6" style="font-family: var(--font-sans);">Install</h2>
+      <h2 class="text-2xl font-semibold mb-6">Install</h2>
 
       <!-- Tabs -->
-      <div class="flex gap-4 mb-4" style="font-family: var(--font-sans); font-size: 0.875rem; border-bottom: 1px solid var(--color-border);">
+      <div class="flex gap-4 mb-4" style="font-size: 0.875rem; border-bottom: 1px solid var(--color-border);">
         <button class="install-tab active pb-2 px-1" style="background: none; cursor: pointer; color: var(--color-muted);" data-tab="homebrew">Homebrew</button>
         <button class="install-tab pb-2 px-1" style="background: none; cursor: pointer; color: var(--color-muted);" data-tab="go">go install</button>
         <button class="install-tab pb-2 px-1" style="background: none; cursor: pointer; color: var(--color-muted);" data-tab="binary">Binary</button>
@@ -114,8 +114,8 @@ echo "$CONTENT" | vrk tok --budget 8000 \
 
     <!-- Agent section -->
     <section class="max-w-4xl mx-auto px-4 pb-20">
-      <h2 class="text-2xl font-semibold mb-3" style="font-family: var(--font-sans);">Works where agents work.</h2>
-      <p class="mb-6" style="color: var(--color-muted); font-family: var(--font-serif);">
+      <h2 class="text-2xl font-semibold mb-3">Works where agents work.</h2>
+      <p class="mb-6" style="color: var(--color-muted);">
         vrksh ships a discovery-only MCP server. Add it to Claude Code and every tool becomes visible to your agent. Tools run as shell commands - the MCP layer handles discovery, not execution.
       </p>
       <pre><code style="font-size: 0.8125rem;">{
@@ -126,7 +126,7 @@ echo "$CONTENT" | vrk tok --budget 8000 \
     }
   }
 }</code></pre>
-      <p class="mt-3 text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">
+      <p class="mt-3 text-sm" style="color: var(--color-muted);">
         Or use <code>vrk --manifest</code> for JSON tool discovery without MCP.
       </p>
     </section>

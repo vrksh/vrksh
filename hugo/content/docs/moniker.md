@@ -16,12 +16,7 @@ Your pipeline needs a name for a run. UUIDs are unique but nobody can say "run 3
 ## The fix
 
 ```bash
-vrk moniker
-```
-
-<!-- output: verify against binary -->
-
-```
+$ vrk moniker
 swift-falcon
 ```
 
@@ -82,12 +77,7 @@ Underscores make the name valid as a Python identifier or shell variable name. A
 ### JSON output
 
 ```bash
-vrk moniker --count 2 --json
-```
-
-<!-- output: verify against binary -->
-
-```json
+$ vrk moniker --count 2 --json
 {"name":"swift-falcon","words":["swift","falcon"]}
 {"name":"quiet-river","words":["quiet","river"]}
 ```
