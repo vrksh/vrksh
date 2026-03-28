@@ -69,6 +69,11 @@ body {
   animation-play-state: paused;
 }
 
+/* Prose sizing */
+.prose {
+  font-size: 1rem;
+}
+
 /* Prose spacing */
 .prose h2 {
   margin-bottom: 1.25rem;
