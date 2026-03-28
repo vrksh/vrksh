@@ -9,68 +9,54 @@ noindex: false
 
 ## The problem
 
-You need the content of a web page in your pipeline. `curl` gives you raw HTML
-full of navigation, ads, and script tags. You could pipe it through a series of
-tools to extract the article body, but that's fragile and different for every
-site. You need a fetcher that returns clean, readable content by default.
+You need to feed a web page to an LLM. Fetching HTML gives you 80% noise --
+nav, footer, scripts, cookie banners. Stripping HTML with sed is fragile
+and different for every site. There is no Unix tool that fetches a URL and
+returns just the content.
 
 ## The fix
 
 ```bash
-vrk grab https://example.com/article
+$ vrk grab https://example.com/blog-post
 ```
 
 <!-- output: verify against binary -->
 
-That fetches the page and returns clean markdown - article body extracted,
-navigation and boilerplate stripped. Ready to pipe into `tok`, `prompt`, or
-any other tool.
-
-## Walkthrough
-
-### Plain text output
-
-When you don't want markdown syntax at all:
-
-```bash
-vrk grab --text https://example.com/article
-```
-
-<!-- output: verify against binary -->
-
-The `--text` flag strips all markdown formatting, giving you pure prose.
-Useful for feeding into token counters or search indexes where syntax is noise.
-
-### What failure looks like
+The output is clean markdown -- article text only, no navigation, no
+scripts, no boilerplate. Ready to pipe into `tok`, `prompt`, or any
+tool that takes text.
 
 When the URL is unreachable or returns an error:
 
+```
+error: grab: HTTP 404
+```
+
+Exit 1. The pipeline stops.
+
+## Plain text for LLM input
+
 ```bash
-vrk grab https://example.com/nonexistent
-echo $?
-# 1
+$ vrk grab --text https://example.com/blog-post
 ```
 
 <!-- output: verify against binary -->
 
-Exit 1 with an error message to stderr. The pipeline stops.
+The `--text` flag strips markdown syntax too -- no headings, no link
+brackets, no emphasis markers. Pure prose. Use this when passing content
+to an LLM that shouldn't see formatting characters.
 
-### Raw HTML
-
-When you need the full HTML response without any processing:
-
-```bash
-vrk grab --raw https://example.com/page
-```
-
-## Pipeline example
-
-Fetch a page, check it fits the context window, then send to an LLM:
+## Full pipeline
 
 ```bash
-vrk grab https://example.com/article | vrk tok --budget 8000 && \
-vrk grab https://example.com/article | vrk prompt --system "Summarize this"
+CONTENT=$(vrk grab https://example.com/article)
+echo "$CONTENT" | vrk tok --budget 8000 \
+  && echo "$CONTENT" | vrk prompt --system "Summarize in 3 bullet points."
 ```
+
+Capture the content in a variable first to avoid fetching the URL twice.
+Fetching twice is wasteful and can return different content if the page
+changes between requests.
 
 Extract all links from a remote page:
 

@@ -9,94 +9,79 @@ noindex: false
 
 ## The problem
 
-You are logging pipeline output, writing debug traces to a file, or sending data to an LLM. Somewhere in that stream is a bearer token, an API key, a database password. It ended up in a log line because an HTTP library echoes request headers, or a shell one-liner captured both stdout and stderr, or a config dump included the full env. You need to redact secrets before the data leaves your machine - before it hits a remote log aggregator, before it appears in an LLM's context window, before it ends up in a ticket.
-
-`vrk mask` sits in the pipe and replaces secrets with `[REDACTED]`. It runs two passes: first pattern matching (bearer tokens, passwords, api_keys, secrets, tokens), then Shannon entropy scanning to catch anything the patterns missed.
+Your pipeline processes text that might contain secrets -- API keys,
+bearer tokens, passwords, high-entropy strings. Passing these to an LLM
+leaks them. Writing to a log file exposes them. There is no Unix tool that
+strips secrets from a stream before it goes downstream.
 
 ## The fix
 
 ```bash
-cat application.log | vrk mask
+$ echo "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.test.sig" | vrk mask
+Authorization: Bearer [REDACTED]
 ```
 
-`vrk mask` is stdin-only. It is a stream filter that operates line-by-line on an unbounded input. There is no positional argument form because the input is a potentially infinite stream.
+Secrets are replaced with `[REDACTED]`. The rest of the text passes
+through unchanged.
 
-## Walkthrough
+## What gets masked by default
 
-**Basic redaction - known patterns**
-
-The built-in patterns cover the most common credential shapes. Run any log or config dump through mask and the obvious secrets disappear.
+The built-in patterns cover common credential shapes. Each matches
+case-insensitively; the key prefix is preserved, only the value is replaced.
 
 ```bash
-cat server.log | vrk mask
+$ echo "password=mysecretpass123" | vrk mask
+password=[REDACTED]
+
+$ echo "My key is sk-proj-abc123def456ghi789jkl012mno345" | vrk mask
+My key is [REDACTED]
 ```
 
-The built-in patterns match: `Bearer <token>`, `password=<value>`, `secret=<value>`, `api_key=<value>`, `token=<value>`. Matching is case-insensitive. The key prefix is preserved; only the value is replaced.
+Built-in patterns: `Bearer <token>`, `password=<value>`, `secret=<value>`,
+`api_key=<value>`, `token=<value>`, and common key prefixes like `sk-`,
+`pk-`.
 
-**Entropy-based redaction**
+After pattern matching, a Shannon entropy pass catches anything the
+patterns missed -- random base64 strings, opaque session tokens, any
+whitespace-delimited token of 8+ characters with entropy above the
+threshold (default 4.0 bits/char).
 
-High-entropy strings that do not match any pattern - random UUIDs used as secrets, base64-encoded keys, opaque session tokens - are caught by the entropy scanner. Any whitespace-delimited token of 8 or more characters whose Shannon entropy meets the threshold is redacted.
-
-The default threshold is 4.0 bits per character. Lower it to catch more; raise it to be more conservative.
+## Custom patterns
 
 ```bash
-cat config.yaml | vrk mask --entropy 3.5
+$ echo "Ticket PROJ-1234 is open" | vrk mask --pattern 'PROJ-[0-9]+'
+Ticket [REDACTED] is open
 ```
 
-**Adding custom patterns**
-
-`--pattern` accepts a Go regular expression. The entire match is replaced with `[REDACTED]`. Repeat the flag for multiple patterns.
+`--pattern` takes a Go regex. The entire match is replaced. Repeat the
+flag for multiple patterns:
 
 ```bash
-cat output.txt | vrk mask --pattern 'sk-[a-zA-Z0-9]{32,}'
-cat output.txt | vrk mask --pattern 'ghp_[A-Za-z0-9]+' --pattern 'xoxb-[0-9]+-[0-9]+-[A-Za-z0-9]+'
+cat output.txt | vrk mask --pattern 'ghp_[A-Za-z0-9]+' --pattern 'xoxb-[0-9A-Za-z-]+'
 ```
 
-**Getting redaction statistics with `--json`**
-
-The `--json` flag appends a metadata record after all output lines:
+## In a pipeline (always before prompt)
 
 ```bash
-cat application.log | vrk mask --json
+cat document.txt | vrk mask | vrk prompt --system "Summarize this document."
 ```
 
-The final line looks like:
-
-```json
-{"_vrk":"mask","lines":842,"redacted":3,"patterns_matched":["bearer","entropy"]}
-```
-
-`patterns_matched` lists every pattern name that fired at least once across the entire run, in declaration order: builtins first, then `"entropy"`, then custom patterns in the order they were passed.
-
-**Chaining with emit for structured redacted logs**
-
-```bash
-cat application.log | vrk mask | vrk emit --parse-level --tag app
-```
-
-Redact first, then wrap each line as a structured JSONL log record. The `--parse-level` flag on `emit` picks up ERROR/WARN/INFO/DEBUG prefixes automatically.
-
-## Pipeline example
-
-```bash
-cat application.log | vrk mask | vrk emit --level info --tag pipeline
-```
-
-Redact secrets from a log file, then wrap each line as a structured log record tagged `pipeline`. The result is clean, structured, secret-free JSONL ready for a log aggregator or further pipeline stages.
+Mask before prompt, every time, no exceptions. Secrets that enter an
+LLM's context window cannot be unlearned.
 
 ## Flags
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--pattern` | | []string | none | Additional Go regex pattern to match and redact (repeatable) |
-| `--entropy` | | float64 | 4.0 | Shannon entropy threshold; lower catches more, higher is more conservative |
-| `--json` | `-j` | bool | false | Append a `{"_vrk":"mask","lines":N,"redacted":N,"patterns_matched":[...]}` record after all output |
-| `--quiet` | `-q` | bool | false | Suppress stderr output; exit codes are unaffected |
+| `--pattern` | | []string | none | Additional Go regex to match and redact (repeatable) |
+| `--entropy` | | float64 | `4.0` | Shannon entropy threshold; lower catches more |
+| `--json` | `-j` | bool | `false` | Append `{"_vrk":"mask","lines":N,"redacted":N,"patterns_matched":[...]}` after output |
+| `--quiet` | `-q` | bool | `false` | Suppress stderr output |
 
 ## Exit codes
 
 | Exit | Meaning |
 |------|---------|
-| 0 | Success - all lines processed and written to stdout |
+| 0 | All lines processed |
 | 1 | Runtime error - stdin scanner error or write failure |
-| 2 | Usage error - interactive TTY with no piped input, or invalid regex in `--pattern` |
+| 2 | Usage error - interactive TTY with no piped input, invalid regex |

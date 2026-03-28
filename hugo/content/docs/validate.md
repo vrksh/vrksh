@@ -9,99 +9,77 @@ noindex: false
 
 ## The problem
 
-Your pipeline produces JSONL. Maybe it comes from an LLM, maybe from a transformation step, maybe from an external API. Before you send those records downstream - to a database, to another tool, to a reporting system - you need to know every record has the right shape. A missing field or a wrong type silently corrupts everything that reads it. Without a gate in the pipeline, you find out at write time, or worse, at query time.
-
-`vrk validate` is that gate. Valid records pass through to stdout. Invalid records are warned to stderr. At the end, you know exactly how many passed and how many failed.
+Your LLM returned JSON. You think it matches your schema. You won't
+find out it doesn't until something downstream breaks -- usually in
+production, usually at 2am.
 
 ## The fix
 
 ```bash
-cat records.jsonl | vrk validate --schema '{"name":"string","age":"number"}'
+$ echo '{"name":"Alice","age":30}' | vrk validate --schema '{"name":"string","age":"number"}'
+{"name":"Alice","age":30}
 ```
 
-Schema is a JSON object mapping field names to types. The five allowed types are `string`, `number`, `boolean`, `array`, and `object`. Schema keys are required fields - extra keys in records are ignored.
+Valid records pass through to stdout. No output is added, no fields are
+modified. Silent success is the Unix convention -- if it printed nothing
+extra, it worked.
 
-## Walkthrough
-
-**Basic validation - pass-through with warnings**
-
-Valid records pass through to stdout. Invalid ones are warned to stderr and dropped. The pipeline continues.
+When a record fails:
 
 ```bash
-cat records.jsonl | vrk validate --schema '{"id":"string","score":"number"}'
+$ echo '{"name":"Alice","age":"thirty"}' | vrk validate --schema '{"name":"string","age":"number"}'
+warning: validation failed: age expected number, got string
 ```
 
-**Strict mode - stop on first failure**
+The invalid record is dropped from stdout and a warning goes to stderr.
+Exit 0, because in default mode the stream continues. Use `--strict`
+to make any failure exit 1 immediately.
 
-When you need all-or-nothing guarantees, `--strict` exits 1 the moment any record fails. Nothing invalid makes it downstream.
+## In a pipeline (after prompt)
 
 ```bash
-cat records.jsonl | vrk validate --schema '{"id":"string","score":"number"}' --strict
+echo "$CONTENT" | vrk prompt --system "Extract person data as JSON." \
+  | vrk validate --schema '{"name":"string","age":"number"}' --strict
 ```
 
-**Schema from a file**
+If validate exits 1, nothing downstream runs. The `--strict` flag is
+the difference between "warn and continue" and "stop the pipeline."
 
-For complex or reused schemas, write the schema to a JSON file and pass the path to `--schema`.
+When the output comes from `vrk prompt` directly, you can also use
+`--schema` on prompt itself -- it instructs the LLM to produce valid
+JSON and validates before emitting. Use `validate` separately when the
+JSON comes from somewhere else (an API, a file, another tool).
 
-```bash
-cat schema.json
-# {"user_id":"string","event":"string","ts":"number","payload":"object"}
-
-cat events.jsonl | vrk validate --schema schema.json
-```
-
-**Counting results with `--json`**
-
-The `--json` flag appends a metadata record after all data records:
-
-```bash
-cat records.jsonl | vrk validate --schema '{"name":"string"}' --json
-```
-
-The final line looks like:
+## What a schema file looks like
 
 ```json
-{"_vrk":"validate","total":100,"passed":98,"failed":2}
+{"name":"string","age":"number","active":"boolean"}
 ```
 
-**Auto-repair with `--fix`**
+A JSON object mapping field names to types. The five allowed types are
+`string`, `number`, `boolean`, `array`, and `object`. Every key in the
+schema is a required field. Extra keys in records are ignored.
 
-When `--fix` is active, invalid records are sent to `vrk prompt` with the schema and a repair instruction. If the model produces a valid record, it replaces the original. If not, the original is warned and dropped. This uses LLM credits - use it for small correction jobs, not bulk pipelines.
+For complex schemas, save to a file and pass the path:
 
 ```bash
-cat records.jsonl | vrk validate --schema '{"name":"string","score":"number"}' --fix
+cat records.jsonl | vrk validate --schema person.json
 ```
-
-**Combining `--fix` and `--strict`**
-
-With both flags, `--fix` attempts repair first. Only records that still fail after the repair attempt trigger a strict exit.
-
-```bash
-cat records.jsonl | vrk validate --schema '{"name":"string"}' --fix --strict
-```
-
-## Pipeline example
-
-```bash
-vrk grab https://api.example.com/data | vrk jsonl | vrk validate --schema '{"name":"string","age":"number"}' --strict
-```
-
-Fetch a JSON API response, convert it to JSONL (one record per line), then validate every record against the schema. `--strict` means the first malformed record stops the pipeline with exit 1, so nothing invalid reaches whatever comes next.
 
 ## Flags
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--schema` | `-s` | string | `""` | JSON schema inline or path to a `.json` file (required) |
-| `--strict` | | bool | false | Exit 1 on the first invalid record instead of continuing |
-| `--fix` | | bool | false | Send invalid records to `vrk prompt` for repair before failing |
-| `--json` | `-j` | bool | false | Append a `{"_vrk":"validate","total":N,"passed":N,"failed":N}` record after all output |
-| `--quiet` | `-q` | bool | false | Suppress stderr output; exit codes are unaffected |
+| `--strict` | | bool | `false` | Exit 1 on the first invalid record |
+| `--fix` | | bool | `false` | Send invalid records to `vrk prompt` for repair |
+| `--json` | `-j` | bool | `false` | Append `{"_vrk":"validate","total":N,"passed":N,"failed":N}` after all output |
+| `--quiet` | `-q` | bool | `false` | Suppress stderr output |
 
 ## Exit codes
 
 | Exit | Meaning |
 |------|---------|
-| 0 | All records passed (or all failures were repaired by `--fix`) |
-| 1 | A record failed validation in `--strict` mode, or a scanner error occurred |
-| 2 | Usage error - `--schema` is missing, schema JSON is invalid, or unknown flag |
+| 0 | All records passed (or all failures repaired by `--fix`) |
+| 1 | A record failed in `--strict` mode, or a scanner error occurred |
+| 2 | Usage error - `--schema` missing, schema JSON invalid, unknown flag |
