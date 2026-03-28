@@ -30,3 +30,9 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.10.1
+
+  validate-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make validate-manifest
