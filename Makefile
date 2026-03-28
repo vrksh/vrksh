@@ -1,6 +1,6 @@
 export CGO_ENABLED=0
 
-.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate validate-schemas
+.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate validate-schemas test-site
 
 # Build the binary. CGO_ENABLED=0 is mandatory - static binary promise depends on it.
 build:
@@ -70,6 +70,12 @@ generate:
 # Validate all schema YAMLs and check skills.md token budget.
 validate-schemas:
 	go run ./internal/schema/cmd/validate ./schema/
+
+# Hugo site smoke tests — syntax check install.sh, build site, token budget.
+test-site: build
+	bash -n hugo/static/install.sh
+	hugo --minify --source hugo
+	./vrk tok < hugo/static/skills.md | awk '{if($$1+0 > 4000) {print "skills.md over 4000 tokens"; exit 1}}'
 
 # Remove build artifacts
 clean:

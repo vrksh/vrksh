@@ -1,5 +1,5 @@
 name: prompt
-tagline: LLM prompt — Anthropic/OpenAI, --schema, --retry, --explain.
+tagline: LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
 description: |
   Send a prompt to an LLM and print the response. Supports Anthropic and
   OpenAI APIs with optional JSON schema validation, retry with temperature
@@ -49,7 +49,7 @@ exit_codes:
   - code: 1
     meaning: API failure, budget exceeded, or schema mismatch
   - code: 2
-    meaning: Usage error — no input, missing flags
+    meaning: Usage error - no input, missing flags
 og_image:
   headline: "Pipe text to any LLM. Validate the response."
   code: "vrk prompt -m claude-sonnet-4-6 --schema spec.json"

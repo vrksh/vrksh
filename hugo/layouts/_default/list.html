@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body style="background-color: var(--color-bg); color: var(--color-text);">
+  {{ partial "nav.html" . }}
+
+  <main class="max-w-6xl mx-auto px-4 py-12">
+    <h1 class="text-3xl font-bold mb-6" style="font-family: var(--font-sans);">{{ .Title }}</h1>
+
+    {{ if eq .Section "docs" }}
+    <!-- Search -->
+    <div class="mb-8">
+      {{ partial "search.html" . }}
+    </div>
+
+    <!-- Group filter -->
+    <div class="flex flex-wrap gap-2 mb-6">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="v1">v1</button>
+      <button class="filter-btn" data-filter="v2">v2</button>
+      <button class="filter-btn" data-filter="v3">v3</button>
+    </div>
+
+    <!-- Tool grid -->
+    <div id="tool-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {{ range .Pages }}
+      <a href="{{ .Permalink }}" class="tool-card block rounded-lg p-4 transition-colors" data-group="{{ .Params.group }}" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
+        <div class="flex items-center gap-2 mb-2">
+          <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ .Params.tool }}</code>
+          {{ with .Params.group }}<span class="text-xs px-1.5 py-0.5 rounded badge-{{ . }}">{{ . }}</span>{{ end }}
+          {{ if .Params.mcp_callable }}<span class="text-xs px-1.5 py-0.5 rounded" style="background: rgba(110, 231, 183, 0.1); color: var(--color-accent);">MCP</span>{{ end }}
+        </div>
+        <p class="text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">{{ .Description }}</p>
+      </a>
+      {{ end }}
+    </div>
+
+    <script>
+    document.querySelectorAll('.filter-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var filter = btn.dataset.filter;
+        document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        document.querySelectorAll('.tool-card').forEach(function(card) {
+          if (filter === 'all' || card.dataset.group === filter) {
+            card.style.display = '';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      });
+    });
+    </script>
+
+    {{ else }}
+    <!-- Generic list for non-docs sections (blog, etc.) -->
+    <div class="space-y-6">
+      {{ range .Pages }}
+      <article>
+        <h2 class="text-xl" style="font-family: var(--font-sans);">
+          <a href="{{ .Permalink }}">{{ .Title }}</a>
+        </h2>
+        {{ with .Date }}<time class="text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">{{ .Format "January 2, 2006" }}</time>{{ end }}
+        {{ with .Description }}<p class="mt-1" style="color: var(--color-muted); font-family: var(--font-serif);">{{ . }}</p>{{ end }}
+      </article>
+      {{ end }}
+    </div>
+    {{ end }}
+  </main>
+
+  {{ partial "footer.html" . }}
+  {{ partial "copy-button.html" . }}
+</body>
+</html>

@@ -1,0 +1,27 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ if .IsHome }}vrksh - Unix tools for AI pipelines{{ else }}{{ .Title }} - vrksh{{ end }}</title>
+<meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- Tailwind CSS -->
+<link rel="stylesheet" href="/css/main.css">
+
+<!-- OG tags -->
+<meta property="og:title" content="{{ if .IsHome }}vrksh - Unix tools for AI pipelines{{ else }}{{ .Title }}{{ end }}">
+<meta property="og:description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
+<meta property="og:type" content="{{ if .IsPage }}article{{ else }}website{{ end }}">
+<meta property="og:url" content="{{ .Permalink }}">
+{{ if .Params.tool -}}
+<meta property="og:image" content="{{ .Site.BaseURL }}og/{{ .Params.tool }}.png">
+{{- else -}}
+<meta property="og:image" content="{{ .Site.BaseURL }}og/default.png">
+{{- end }}
+<meta name="twitter:card" content="summary_large_image">
+
+<!-- Favicon -->
+<link rel="icon" href="/favicon.ico" sizes="any">

@@ -1,0 +1,71 @@
+- name: Budget-safe LLM call
+  description: Count tokens before sending to an LLM - abort if too large.
+  steps:
+    - cat prompt.txt | vrk tok --budget 4000
+    - cat prompt.txt | vrk prompt "Summarise this."
+  tags:
+    - tok
+    - prompt
+
+- name: Fetch and summarise a page
+  description: Grab a URL, check token count, then summarise with an LLM.
+  steps:
+    - vrk grab https://example.com | vrk tok --budget 8000
+    - vrk grab https://example.com | vrk prompt "Summarise this page."
+  tags:
+    - grab
+    - tok
+    - prompt
+
+- name: Cache LLM response
+  description: Send a prompt, get the request hash, and store the response in kv.
+  steps:
+    - RESULT=$(cat doc.txt | vrk prompt --json)
+    - HASH=$(echo "$RESULT" | jq -r '.request_hash')
+    - echo "$RESULT" | jq -r '.response' | vrk kv set "cache:$HASH"
+  tags:
+    - prompt
+    - kv
+
+- name: Chunked RAG pipeline
+  description: Split a document into chunks and store each for retrieval.
+  steps:
+    - DOC_ID=$(vrk uuid)
+    - cat doc.txt | vrk chunk --size 512 --overlap 64 | while read -r chunk; do idx=$(echo "$chunk" | jq -r '.index'); text=$(echo "$chunk" | jq -r '.text'); vrk kv set "doc:${DOC_ID}:chunk:${idx}" "$text"; done
+  tags:
+    - uuid
+    - chunk
+    - kv
+
+- name: Retry flaky API call
+  description: Wrap an LLM prompt in coax for exponential backoff retries.
+  steps:
+    - vrk coax --times 3 --backoff exp:1s --on 1 -- vrk prompt "Summarise this" < doc.txt
+  tags:
+    - coax
+    - prompt
+
+- name: SSE stream to text
+  description: Parse an SSE stream and extract text tokens.
+  steps:
+    - curl -sN $API | vrk sse --event content_block_delta --field data.delta.text | tr -d '\n'
+  tags:
+    - sse
+
+- name: JWT-based key lookup
+  description: Extract a claim from a JWT and use it as a kv key.
+  steps:
+    - SUB=$(vrk jwt --claim sub "$TOKEN")
+    - vrk kv get "user:$SUB"
+  tags:
+    - jwt
+    - kv
+
+- name: Scrub secrets from LLM output
+  description: Mask any accidentally leaked secrets before storing a result.
+  steps:
+    - vrk prompt "summarise this" < doc.txt | vrk mask | vrk kv set summary
+  tags:
+    - prompt
+    - mask
+    - kv

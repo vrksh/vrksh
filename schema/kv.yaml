@@ -1,5 +1,5 @@
 name: kv
-tagline: Key-value store — SQLite-backed, namespaces, TTL, atomic counters.
+tagline: Key-value store - SQLite-backed, namespaces, TTL, atomic counters.
 description: |
   Persistent key-value store backed by SQLite at ~/.vrk.db. Supports
   namespaces for isolation, TTL for expiry, and atomic increment/decrement
@@ -37,7 +37,7 @@ exit_codes:
   - code: 1
     meaning: Key not found, not a number, or database error
   - code: 2
-    meaning: Usage error — unknown subcommand, missing args
+    meaning: Usage error - unknown subcommand, missing args
 og_image:
   headline: "Key-value store for pipelines. SQLite-backed."
   code: "vrk kv set --ns cache api_result val --ttl 1h"

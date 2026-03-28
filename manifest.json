@@ -3,7 +3,7 @@
   "tools": [
     {
       "name": "jwt",
-      "description": "JWT inspector — decode, --claim, --expired, --valid."
+      "description": "JWT inspector - decode, --claim, --expired, --valid."
     },
     {
       "name": "epoch",
@@ -15,7 +15,7 @@
     },
     {
       "name": "tok",
-      "description": "Token counter — cl100k_base, --budget guard, --json."
+      "description": "Token counter - cl100k_base, --budget guard, --json."
     },
     {
       "name": "sse",
@@ -27,11 +27,11 @@
     },
     {
       "name": "prompt",
-      "description": "LLM prompt — Anthropic/OpenAI, --schema, --retry, --explain."
+      "description": "LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain."
     },
     {
       "name": "kv",
-      "description": "Key-value store — SQLite-backed, namespaces, TTL, atomic counters."
+      "description": "Key-value store - SQLite-backed, namespaces, TTL, atomic counters."
     },
     {
       "name": "chunk",
@@ -39,7 +39,7 @@
     },
     {
       "name": "grab",
-      "description": "URL fetcher — clean markdown, plain text, or raw HTML."
+      "description": "URL fetcher - clean markdown, plain text, or raw HTML."
     },
     {
       "name": "jsonl",

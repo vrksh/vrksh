@@ -1,5 +1,5 @@
 name: tok
-tagline: Token counter — cl100k_base, --budget guard, --json.
+tagline: Token counter - cl100k_base, --budget guard, --json.
 description: |
   Count tokens using cl100k_base. Exact for GPT-4, ~95% accurate for Claude.
   Exits 1 if input exceeds --budget. The guard that prevents surprise API bills.
@@ -28,7 +28,7 @@ exit_codes:
   - code: 1
     meaning: Over budget or I/O error
   - code: 2
-    meaning: Usage error — no input, unknown flag
+    meaning: Usage error - no input, unknown flag
 og_image:
   headline: "Count tokens. Guard LLM context windows."
   code: "vrk tok --budget 4000 < prompt.txt"

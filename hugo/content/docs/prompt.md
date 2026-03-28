@@ -1,19 +1,19 @@
 ---
 title: "vrk prompt"
-description: "LLM prompt — Anthropic/OpenAI, --schema, --retry, --explain."
+description: "LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain."
 tool: prompt
 group: v1
 mcp_callable: true
 noindex: false
 ---
 
-<!-- generated — do not edit below this line -->
+<!-- generated - do not edit below this line -->
 
 ## Contract
 
 `stdin → prompt → stdout`
 
-Exit 0 Success · Exit 1 API failure, budget exceeded, or schema mismatch · Exit 2 Usage error — no input, missing flags
+Exit 0 Success · Exit 1 API failure, budget exceeded, or schema mismatch · Exit 2 Usage error - no input, missing flags
 
 ## Flags
 

@@ -1,19 +1,19 @@
 ---
 title: "vrk kv"
-description: "Key-value store — SQLite-backed, namespaces, TTL, atomic counters."
+description: "Key-value store - SQLite-backed, namespaces, TTL, atomic counters."
 tool: kv
 group: v1
 mcp_callable: true
 noindex: false
 ---
 
-<!-- generated — do not edit below this line -->
+<!-- generated - do not edit below this line -->
 
 ## Contract
 
 `stdin → kv → stdout`
 
-Exit 0 Success · Exit 1 Key not found, not a number, or database error · Exit 2 Usage error — unknown subcommand, missing args
+Exit 0 Success · Exit 1 Key not found, not a number, or database error · Exit 2 Usage error - unknown subcommand, missing args
 
 ## Flags
 

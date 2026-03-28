@@ -1,12 +1,13 @@
 // Package oggen renders Open Graph images for vrksh tool pages.
 //
-// Design system (abhinav.co dark palette):
-//   - Background: #1A1F35 with subtle radial glow
-//   - Command: #41C7C7 (cyan), DM Mono 30px
-//   - Tool name: #60A5FA (blue), Urbanist Medium 42px
-//   - Subtitle: #C0C8D0 uppercase letterspaced, Urbanist Regular 18px
-//   - Comment: #6B7280 (dimmer than command), DM Mono 16px
-//   - Brand: #BEC8D4, DM Mono 24px, underlined
+// Design system (vrk.sh site palette):
+//   - Background: #0D0D0D (--color-bg)
+//   - Surface: #161616 (--color-surface, terminal block)
+//   - Border: #2A2A2A (--color-border)
+//   - Text: #E8E8E8 (--color-text)
+//   - Muted: #707070 (--color-muted)
+//   - Accent: #6EE7B7 (--color-accent, commands + highlights)
+//   - Fonts: Plus Jakarta Sans (headings), JetBrains Mono (code/brand)
 //   - Layout: left-aligned, vertically centered, terminal block
 package oggen
 
@@ -34,16 +35,14 @@ const (
 )
 
 var (
-	bg        = color.RGBA{0x1A, 0x1F, 0x35, 0xFF} // dark navy
-	bgSec     = color.RGBA{0x0F, 0x17, 0x2A, 0xFF} // terminal block bg
-	cyan      = color.RGBA{0x41, 0xC7, 0xC7, 0xFF} // command text
-	blue      = color.RGBA{0x60, 0xA5, 0xFA, 0xFF} // tool name
-	subtitle  = color.RGBA{0xC0, 0xC8, 0xD0, 0xFF} // subtitle text
-	brandCl   = color.RGBA{0xBE, 0xC8, 0xD4, 0xFF} // brand
-	commentCl = color.RGBA{0x6B, 0x72, 0x80, 0xFF} // comment — dimmer than command
-	borderCl  = color.RGBA{0x94, 0xA3, 0xB8, 0x50} // terminal border — more visible
-	pillBg   = color.RGBA{0x41, 0xC7, 0xC7, 0xFF} // pill bg — same cyan as highlight
-	pillText = color.RGBA{0x0F, 0x17, 0x2A, 0xFF} // pill text — dark on bright
+	bgCl      = color.RGBA{0x0D, 0x0D, 0x0D, 0xFF} // --color-bg
+	surfaceCl = color.RGBA{0x16, 0x16, 0x16, 0xFF} // --color-surface
+	accentCl  = color.RGBA{0x6E, 0xE7, 0xB7, 0xFF} // --color-accent
+	textCl    = color.RGBA{0xE8, 0xE8, 0xE8, 0xFF} // --color-text
+	mutedCl   = color.RGBA{0x70, 0x70, 0x70, 0xFF} // --color-muted
+	borderCl  = color.RGBA{0x2A, 0x2A, 0x2A, 0xFF} // --color-border
+	pillBgCl  = color.RGBA{0x1C, 0x2F, 0x28, 0xFF} // rgba(110,231,183,0.15) on #0D0D0D
+	pillTxCl  = color.RGBA{0x6E, 0xE7, 0xB7, 0xFF} // accent green text, matches .badge-v1
 )
 
 func setFont(dc *gg.Context, name string, size float64) error {
@@ -63,7 +62,7 @@ func setFont(dc *gg.Context, name string, size float64) error {
 
 // drawBg fills the canvas with the background color.
 func drawBg(dc *gg.Context) {
-	dc.SetColor(bg)
+	dc.SetColor(bgCl)
 	dc.Clear()
 }
 
@@ -80,7 +79,7 @@ func drawLetterspaced(dc *gg.Context, text string, x, y, spacing float64) {
 
 // drawTerminalBlock draws a rounded-rect terminal-style block.
 func drawTerminalBlock(dc *gg.Context, x, y, bw, bh, radius float64) {
-	dc.SetColor(bgSec)
+	dc.SetColor(surfaceCl)
 	dc.DrawRoundedRectangle(x, y, bw, bh, radius)
 	dc.Fill()
 
@@ -92,7 +91,7 @@ func drawTerminalBlock(dc *gg.Context, x, y, bw, bh, radius float64) {
 
 // drawPill draws a small rounded pill badge with uppercase letterspaced text.
 func drawPill(dc *gg.Context, label string, x, y float64) error {
-	if err := setFont(dc, "DMMono-Regular.ttf", 14); err != nil {
+	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 14); err != nil {
 		return err
 	}
 	upper := strings.ToUpper(label)
@@ -111,12 +110,12 @@ func drawPill(dc *gg.Context, label string, x, y float64) error {
 	px := x - pillW
 	py := y - pillH/2
 
-	dc.SetColor(pillBg)
+	dc.SetColor(pillBgCl)
 	dc.DrawRoundedRectangle(px, py, pillW, pillH, 4)
 	dc.Fill()
 
 	// Draw letterspaced text inside pill
-	dc.SetColor(pillText)
+	dc.SetColor(pillTxCl)
 	tx := px + 12
 	for _, ch := range upper {
 		s := string(ch)
@@ -132,33 +131,33 @@ func drawPill(dc *gg.Context, label string, x, y float64) error {
 func renderCommand(dc *gg.Context, toolName, tagline, command, headline string) error {
 	drawBg(dc)
 
-	// Brand — top-left, mono, underlined
-	if err := setFont(dc, "DMMono-Regular.ttf", 24); err != nil {
+	// Brand - top-left, mono, underlined
+	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 24); err != nil {
 		return err
 	}
-	dc.SetColor(brandCl)
+	dc.SetColor(mutedCl)
 	dc.DrawString("vrk.sh", pad, 75)
 	bw, _ := dc.MeasureString("vrk.sh")
 	dc.SetLineWidth(1.5)
 	dc.DrawLine(pad, 82, pad+bw, 82)
 	dc.Stroke()
 
-	// Tool name — blue, Urbanist (slightly smaller to reduce gap with subtitle)
-	if err := setFont(dc, "Urbanist-Medium.ttf", 42); err != nil {
+	// Tool name - accent, Plus Jakarta Sans SemiBold
+	if err := setFont(dc, "PlusJakartaSans-SemiBold.ttf", 42); err != nil {
 		return err
 	}
-	dc.SetColor(blue)
+	dc.SetColor(accentCl)
 	dc.DrawString("vrk "+toolName, pad, 160)
 
-	// Subtitle — uppercase, letterspaced (bumped from 16 to 18 to reduce ratio jump)
-	if err := setFont(dc, "Urbanist-Regular.ttf", 18); err != nil {
+	// Subtitle - Crimson Pro Italic, matching website hero subhead
+	if err := setFont(dc, "CrimsonPro-Italic.ttf", 22); err != nil {
 		return err
 	}
-	dc.SetColor(subtitle)
-	drawLetterspaced(dc, headline, pad, 200, 2.5)
+	dc.SetColor(mutedCl)
+	dc.DrawString(headline, pad, 205)
 
-	// Terminal block — pushed down to fill vertical space
-	blockPadLeft := pad + 4 // extra inner padding
+	// Terminal block
+	blockPadLeft := pad + 4
 	blockX := pad - 20
 	blockY := 280.0
 	blockW := float64(imgW) - 2*(pad-20)
@@ -166,20 +165,20 @@ func renderCommand(dc *gg.Context, toolName, tagline, command, headline string) 
 	drawTerminalBlock(dc, blockX, blockY, blockW, blockH, 8)
 
 	// $ command inside block
-	if err := setFont(dc, "DMMono-Regular.ttf", 30); err != nil {
+	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 30); err != nil {
 		return err
 	}
-	dc.SetColor(cyan)
+	dc.SetColor(accentCl)
 	dc.DrawString("$ "+command, blockPadLeft, 345)
 
-	// Comment — dimmer, reads as annotation not output
-	if err := setFont(dc, "DMMono-Regular.ttf", 16); err != nil {
+	// Tagline - Crimson Pro Regular, serif annotation
+	if err := setFont(dc, "CrimsonPro-Regular.ttf", 20); err != nil {
 		return err
 	}
-	dc.SetColor(commentCl)
-	dc.DrawString("# "+tagline, blockPadLeft, 400)
+	dc.SetColor(mutedCl)
+	dc.DrawString("# "+tagline, blockPadLeft, 403)
 
-	// Pill badge — top-right corner
+	// Pill badge - top-right corner
 	if err := drawPill(dc, "tool", float64(imgW)-pad, 75); err != nil {
 		return err
 	}
@@ -191,32 +190,32 @@ func renderCommand(dc *gg.Context, toolName, tagline, command, headline string) 
 func renderPipeline(dc *gg.Context, pipeline, tagline string) error {
 	drawBg(dc)
 
-	// Brand — no redundant H1. Just the nav label with "/ home"
-	if err := setFont(dc, "DMMono-Regular.ttf", 24); err != nil {
+	// Brand
+	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 24); err != nil {
 		return err
 	}
-	dc.SetColor(brandCl)
+	dc.SetColor(mutedCl)
 	dc.DrawString("vrk.sh", pad, 75)
 	bw, _ := dc.MeasureString("vrk.sh")
 	dc.SetLineWidth(1.5)
 	dc.DrawLine(pad, 82, pad+bw, 82)
 	dc.Stroke()
 
-	// Title — different from brand: full tagline in blue
-	if err := setFont(dc, "Urbanist-Medium.ttf", 42); err != nil {
+	// Title - Plus Jakarta Sans SemiBold
+	if err := setFont(dc, "PlusJakartaSans-SemiBold.ttf", 42); err != nil {
 		return err
 	}
-	dc.SetColor(blue)
+	dc.SetColor(textCl)
 	dc.DrawString("Unix tools for AI pipelines", pad, 160)
 
-	// Subtitle — uppercase
-	if err := setFont(dc, "Urbanist-Regular.ttf", 18); err != nil {
+	// Subtitle - Crimson Pro Italic
+	if err := setFont(dc, "CrimsonPro-Italic.ttf", 26); err != nil {
 		return err
 	}
-	dc.SetColor(subtitle)
-	drawLetterspaced(dc, "One binary. No dependencies. Composable", pad, 200, 2.5)
+	dc.SetColor(mutedCl)
+	dc.DrawString("One binary. No dependencies. Composable.", pad, 208)
 
-	// Terminal block — pushed down
+	// Terminal block
 	blockPadLeft := pad + 4
 	blockX := pad - 20
 	blockY := 280.0
@@ -224,18 +223,18 @@ func renderPipeline(dc *gg.Context, pipeline, tagline string) error {
 	blockH := 150.0
 	drawTerminalBlock(dc, blockX, blockY, blockW, blockH, 8)
 
-	if err := setFont(dc, "DMMono-Regular.ttf", 26); err != nil {
+	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 26); err != nil {
 		return err
 	}
-	dc.SetColor(cyan)
+	dc.SetColor(accentCl)
 	dc.DrawString("$ "+pipeline, blockPadLeft, 345)
 
-	// Comment
-	if err := setFont(dc, "DMMono-Regular.ttf", 16); err != nil {
+	// Comment - mono
+	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 20); err != nil {
 		return err
 	}
-	dc.SetColor(commentCl)
-	dc.DrawString("# fetch -> summarize -> store", blockPadLeft, 400)
+	dc.SetColor(mutedCl)
+	dc.DrawString("# fetch -> summarize -> store", blockPadLeft, 403)
 
 	return nil
 }
@@ -271,4 +270,3 @@ func RenderDefault(outDir string) error {
 	}
 	return dc.SavePNG(filepath.Join(outDir, "default.png"))
 }
-

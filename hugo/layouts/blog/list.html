@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body style="background-color: var(--color-bg); color: var(--color-text);">
+  {{ partial "nav.html" . }}
+
+  <main class="max-w-3xl mx-auto px-4 py-12">
+    <h1 class="text-3xl font-bold mb-8" style="font-family: var(--font-sans);">{{ .Title }}</h1>
+
+    {{ if .Pages }}
+    <div class="space-y-8">
+      {{ range .Pages.ByDate.Reverse }}
+      <article>
+        <h2 class="text-xl font-semibold" style="font-family: var(--font-sans);">
+          <a href="{{ .Permalink }}">{{ .Title }}</a>
+        </h2>
+        {{ with .Date }}
+        <time class="text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">{{ .Format "January 2, 2006" }}</time>
+        {{ end }}
+        {{ with .Description }}
+        <p class="mt-1" style="color: var(--color-muted); font-family: var(--font-serif);">{{ . }}</p>
+        {{ end }}
+      </article>
+      {{ end }}
+    </div>
+    {{ else }}
+    <p style="color: var(--color-muted); font-family: var(--font-serif);">No posts yet.</p>
+    {{ end }}
+  </main>
+
+  {{ partial "footer.html" . }}
+</body>
+</html>

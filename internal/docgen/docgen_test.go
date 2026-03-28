@@ -159,7 +159,7 @@ func TestGenerateToolDocWithoutNotes(t *testing.T) {
 		t.Fatalf("LoadDir: %v", err)
 	}
 
-	// No notes file — notesDir is schemaDir but no .notes.md exists
+	// No notes file - notesDir is schemaDir but no .notes.md exists
 	if err := GenerateToolDocs(tools, schemaDir, outDir); err != nil {
 		t.Fatalf("GenerateToolDocs: %v", err)
 	}

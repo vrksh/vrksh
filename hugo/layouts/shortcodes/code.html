@@ -1,0 +1,9 @@
+{{/* Usage: {{< code file="name" >}} ... {{< /code >}} */}}
+<div class="relative">
+  {{ with .Get "file" }}
+  <div class="text-xs px-3 py-1 rounded-t" style="background-color: var(--color-surface); border: 1px solid var(--color-border); border-bottom: none; font-family: var(--font-mono); color: var(--color-muted); display: inline-block;">
+    {{ . }}
+  </div>
+  {{ end }}
+  <pre{{ with .Get "file" }} style="border-top-left-radius: 0;"{{ end }}><code>{{ .Inner }}</code></pre>
+</div>

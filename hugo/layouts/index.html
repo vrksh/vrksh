@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body style="background-color: var(--color-bg); color: var(--color-text);">
+  {{ partial "nav.html" . }}
+
+  <main>
+    <!-- Hero -->
+    <section class="max-w-4xl mx-auto px-4 pt-20 pb-16 text-center">
+      <h1 class="text-4xl md:text-6xl font-bold mb-4" style="font-family: var(--font-sans); line-height: 1.1;">
+        Unix tools for AI pipelines.
+      </h1>
+      <p class="text-xl md:text-2xl mb-8" style="font-family: var(--font-serif); font-style: italic; color: var(--color-muted);">
+        One binary. No dependencies. Composable.
+      </p>
+
+      <!-- CTA -->
+      <div class="inline-block cta-glow rounded-lg px-6 py-3 mb-4" style="background-color: var(--color-surface);">
+        <code class="text-base md:text-lg" style="font-family: var(--font-mono); color: var(--color-accent);">
+          brew install vrk
+        </code>
+        <button class="ml-3 inline-flex items-center" style="color: var(--color-muted);" onclick="navigator.clipboard.writeText('brew install vrk').then(function(){this.innerHTML='copied';setTimeout(function(){}.bind(this),1500)}.bind(this))" aria-label="Copy install command">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+
+      <div class="flex items-center justify-center gap-4 text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">
+        <span class="px-2 py-0.5 rounded" style="background-color: var(--color-surface); border: 1px solid var(--color-border);">v{{ .Site.Params.version }}</span>
+        <span>macOS &middot; Linux</span>
+      </div>
+
+      <p class="mt-4" style="color: var(--color-muted); font-family: var(--font-sans); font-size: 0.875rem;">
+        <a href="/docs/" style="color: var(--color-muted);">&rarr; Read the docs</a>
+      </p>
+    </section>
+
+    <!-- Silent truncation moment -->
+    <section class="max-w-4xl mx-auto px-4 pb-16">
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="trunc-card relative rounded-lg p-4" style="background-color: var(--color-surface); border: 1px solid var(--color-border); opacity: 0.75;">
+          <p class="text-xs mb-3 uppercase tracking-wider" style="font-family: var(--font-sans); color: var(--color-muted);">before</p>
+          <pre style="background: transparent; border: none; padding: 0; margin: 0; font-size: 0.875rem;"><code style="color: var(--color-muted);">curl -sN $API | python3 -c "
+import sys, json
+for line in sys.stdin:
+    if line.startswith('data: '):
+        d = json.loads(line[6:])
+        print(d['delta']['text'], end='')
+"</code></pre>
+        </div>
+        <div class="trunc-card relative rounded-lg p-4" style="background-color: var(--color-surface); border: 1px solid var(--color-accent-dim);">
+          <p class="text-xs mb-3 uppercase tracking-wider" style="font-family: var(--font-sans); color: var(--color-accent);">after</p>
+          <pre style="background: transparent; border: none; padding: 0; margin: 0; font-size: 1rem;"><code style="color: var(--color-accent);">curl -sN $API | vrk sse --field data.delta.text</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tool grid -->
+    <section class="max-w-6xl mx-auto px-4 pb-16">
+      <h2 class="text-2xl font-semibold mb-6" style="font-family: var(--font-sans);">Tools</h2>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {{ range $name := (slice "tok" "prompt" "jwt" "kv" "grab") }}
+          {{ $tool := index hugo.Data.tools $name }}
+          {{ if $tool }}
+          <a href="/docs/{{ $name }}/" class="block rounded-lg p-4 transition-colors" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
+            <div class="flex items-center gap-2 mb-2">
+              <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ $tool.name }}</code>
+              <span class="text-xs px-1.5 py-0.5 rounded badge-{{ $tool.group }}">{{ $tool.group }}</span>
+            </div>
+            <p class="text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">{{ $tool.tagline }}</p>
+          </a>
+          {{ end }}
+        {{ end }}
+      </div>
+    </section>
+
+    <!-- Install section -->
+    <section class="max-w-4xl mx-auto px-4 pb-16">
+      <h2 class="text-2xl font-semibold mb-6" style="font-family: var(--font-sans);">Install</h2>
+
+      <!-- Tabs -->
+      <div class="flex gap-4 mb-4" style="font-family: var(--font-sans); font-size: 0.875rem; border-bottom: 1px solid var(--color-border);">
+        <button class="install-tab active pb-2 px-1" style="background: none; cursor: pointer; color: var(--color-muted);" data-tab="homebrew">Homebrew</button>
+        <button class="install-tab pb-2 px-1" style="background: none; cursor: pointer; color: var(--color-muted);" data-tab="go">go install</button>
+        <button class="install-tab pb-2 px-1" style="background: none; cursor: pointer; color: var(--color-muted);" data-tab="binary">Binary</button>
+      </div>
+
+      <!-- Tab panels -->
+      <div class="install-panel active" data-panel="homebrew">
+        <pre><code>brew install vrk</code></pre>
+      </div>
+      <div class="install-panel" data-panel="go">
+        <pre><code>go install github.com/vrksh/vrksh@latest</code></pre>
+      </div>
+      <div class="install-panel" data-panel="binary">
+        <pre><code>curl -sSL https://vrk.sh/install.sh | sh</code></pre>
+      </div>
+
+      <script>
+      document.querySelectorAll('.install-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          document.querySelectorAll('.install-tab').forEach(function(t) { t.classList.remove('active'); });
+          document.querySelectorAll('.install-panel').forEach(function(p) { p.classList.remove('active'); });
+          tab.classList.add('active');
+          document.querySelector('[data-panel="' + tab.dataset.tab + '"]').classList.add('active');
+        });
+      });
+      </script>
+    </section>
+
+    <!-- Agent section -->
+    <section class="max-w-4xl mx-auto px-4 pb-20">
+      <h2 class="text-2xl font-semibold mb-3" style="font-family: var(--font-sans);">Works where agents work.</h2>
+      <p class="mb-6" style="color: var(--color-muted); font-family: var(--font-serif);">
+        vrksh ships a discovery-only MCP server. Add it to Claude Code and every tool becomes visible to your agent. Tools run as shell commands - the MCP layer handles discovery, not execution.
+      </p>
+      <pre><code style="font-size: 0.8125rem;">{
+  "mcpServers": {
+    "vrksh": {
+      "command": "vrk",
+      "args": ["mcp"]
+    }
+  }
+}</code></pre>
+      <p class="mt-3 text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">
+        Or use <code>vrk --manifest</code> for JSON tool discovery without MCP.
+      </p>
+    </section>
+  </main>
+
+  {{ partial "footer.html" . }}
+  {{ partial "copy-button.html" . }}
+</body>
+</html>

@@ -4,11 +4,11 @@
 
 ## Tools
 
-- vrk grab — URL fetcher — clean markdown, plain text, or raw HTML.
-- vrk jwt — JWT inspector — decode, --claim, --expired, --valid.
-- vrk kv — Key-value store — SQLite-backed, namespaces, TTL, atomic counters.
-- vrk prompt — LLM prompt — Anthropic/OpenAI, --schema, --retry, --explain.
-- vrk tok — Token counter — cl100k_base, --budget guard, --json.
+- vrk grab - URL fetcher - clean markdown, plain text, or raw HTML.
+- vrk jwt - JWT inspector - decode, --claim, --expired, --valid.
+- vrk kv - Key-value store - SQLite-backed, namespaces, TTL, atomic counters.
+- vrk prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
+- vrk tok - Token counter - cl100k_base, --budget guard, --json.
 
 ## Full reference
 

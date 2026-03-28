@@ -2,7 +2,7 @@
 
 Machine-readable tool reference. One section per tool.
 
-## grab — URL fetcher — clean markdown, plain text, or raw HTML.
+## grab - URL fetcher - clean markdown, plain text, or raw HTML.
 
 Group: v1
 
@@ -15,13 +15,13 @@ Group: v1
 
 Exit 0: Success
 Exit 1: HTTP error, fetch timeout, or I/O error
-Exit 2: Usage error — invalid URL, no input, mutually exclusive flags
+Exit 2: Usage error - invalid URL, no input, mutually exclusive flags
 
 ```bash
 vrk grab --text https://example.com/article
 ```
 
-## jwt — JWT inspector — decode, --claim, --expired, --valid.
+## jwt - JWT inspector - decode, --claim, --expired, --valid.
 
 Group: v1
 
@@ -35,13 +35,13 @@ Group: v1
 
 Exit 0: Success or token is valid
 Exit 1: Token expired/invalid or runtime error
-Exit 2: Usage error — bad format, too many args
+Exit 2: Usage error - bad format, too many args
 
 ```bash
 vrk jwt --claim sub eyJhbGciOiJIUzI1NiJ9...
 ```
 
-## kv — Key-value store — SQLite-backed, namespaces, TTL, atomic counters.
+## kv - Key-value store - SQLite-backed, namespaces, TTL, atomic counters.
 
 Group: v1
 
@@ -56,13 +56,13 @@ Group: v1
 
 Exit 0: Success
 Exit 1: Key not found, not a number, or database error
-Exit 2: Usage error — unknown subcommand, missing args
+Exit 2: Usage error - unknown subcommand, missing args
 
 ```bash
 vrk kv set --ns cache mykey "myvalue" --ttl 1h
 ```
 
-## prompt — LLM prompt — Anthropic/OpenAI, --schema, --retry, --explain.
+## prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
 
 Group: v1
 
@@ -80,13 +80,13 @@ Group: v1
 
 Exit 0: Success
 Exit 1: API failure, budget exceeded, or schema mismatch
-Exit 2: Usage error — no input, missing flags
+Exit 2: Usage error - no input, missing flags
 
 ```bash
 echo "Summarize this" | vrk prompt --model claude-sonnet-4-6 --json
 ```
 
-## tok — Token counter — cl100k_base, --budget guard, --json.
+## tok - Token counter - cl100k_base, --budget guard, --json.
 
 Group: v1
 
@@ -99,7 +99,7 @@ Group: v1
 
 Exit 0: Success, within budget
 Exit 1: Over budget or I/O error
-Exit 2: Usage error — no input, unknown flag
+Exit 2: Usage error - no input, unknown flag
 
 ```bash
 cat prompt.txt | vrk tok --budget 4000

@@ -34,7 +34,7 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 		b.WriteString("---\n\n")
 
 		// Generated marker
-		b.WriteString("<!-- generated — do not edit below this line -->\n\n")
+		b.WriteString("<!-- generated - do not edit below this line -->\n\n")
 
 		// Contract section
 		b.WriteString("## Contract\n\n")
@@ -71,7 +71,7 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 			notesPath := filepath.Join(notesDir, t.Name+".notes.md")
 			notesData, err := os.ReadFile(notesPath)
 			if err == nil && len(notesData) > 0 {
-				b.WriteString("\n<!-- notes — edit in schema/")
+				b.WriteString("\n<!-- notes - edit in schema/")
 				b.WriteString(t.Name)
 				b.WriteString(".notes.md -->\n\n")
 				b.WriteString(strings.TrimRight(string(notesData), "\n"))
@@ -109,7 +109,7 @@ func GenerateSkillsMD(tools []schema.Tool, outDir string) error {
 	b.WriteString("Machine-readable tool reference. One section per tool.\n\n")
 
 	for _, t := range sorted {
-		fmt.Fprintf(&b, "## %s — %s\n\n", t.Name, t.Tagline)
+		fmt.Fprintf(&b, "## %s - %s\n\n", t.Name, t.Tagline)
 		fmt.Fprintf(&b, "Group: %s\n\n", t.Group)
 
 		// Flags table
@@ -173,7 +173,7 @@ func GenerateLLMsTxt(tools []schema.Tool, outDir string) error {
 	b.WriteString("> Unix tools for AI pipelines. One static Go binary.\n\n")
 	b.WriteString("## Tools\n\n")
 	for _, t := range tools {
-		fmt.Fprintf(&b, "- vrk %s — %s\n", t.Name, t.Tagline)
+		fmt.Fprintf(&b, "- vrk %s - %s\n", t.Name, t.Tagline)
 	}
 	b.WriteString("\n## Full reference\n\n")
 	b.WriteString("For complete flag documentation, exit codes, and compose patterns:\n")

@@ -1,19 +1,19 @@
 ---
 title: "vrk jwt"
-description: "JWT inspector — decode, --claim, --expired, --valid."
+description: "JWT inspector - decode, --claim, --expired, --valid."
 tool: jwt
 group: v1
 mcp_callable: true
 noindex: false
 ---
 
-<!-- generated — do not edit below this line -->
+<!-- generated - do not edit below this line -->
 
 ## Contract
 
 `stdin → jwt → stdout`
 
-Exit 0 Success or token is valid · Exit 1 Token expired/invalid or runtime error · Exit 2 Usage error — bad format, too many args
+Exit 0 Success or token is valid · Exit 1 Token expired/invalid or runtime error · Exit 2 Usage error - bad format, too many args
 
 ## Flags
 

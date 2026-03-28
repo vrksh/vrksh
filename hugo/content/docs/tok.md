@@ -1,19 +1,19 @@
 ---
 title: "vrk tok"
-description: "Token counter — cl100k_base, --budget guard, --json."
+description: "Token counter - cl100k_base, --budget guard, --json."
 tool: tok
 group: v1
 mcp_callable: true
 noindex: false
 ---
 
-<!-- generated — do not edit below this line -->
+<!-- generated - do not edit below this line -->
 
 ## Contract
 
 `stdin → tok → stdout`
 
-Exit 0 Success, within budget · Exit 1 Over budget or I/O error · Exit 2 Usage error — no input, unknown flag
+Exit 0 Success, within budget · Exit 1 Over budget or I/O error · Exit 2 Usage error - no input, unknown flag
 
 ## Flags
 

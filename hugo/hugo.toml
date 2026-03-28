@@ -1,0 +1,20 @@
+baseURL = "https://vrk.sh"
+languageCode = "en-us"
+title = "vrksh"
+
+# Clean URLs: /docs/tok/ not /docs/tok.html
+uglyURLs = false
+
+[params]
+  description = "Unix tools for AI pipelines. One binary. No dependencies."
+  tagline = "Unix tools for AI pipelines."
+  version = "0.1.0"
+  github = "https://github.com/vrksh/vrksh"
+
+[markup]
+  [markup.highlight]
+    noClasses = false
+    lineNos = false
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true

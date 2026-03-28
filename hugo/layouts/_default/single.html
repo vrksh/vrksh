@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body{{ if .Params.noindex }} data-pagefind-ignore{{ end }} style="background-color: var(--color-bg); color: var(--color-text);">
+  {{ partial "nav.html" . }}
+
+  <main class="max-w-6xl mx-auto px-4 py-12">
+    <div class="flex gap-12">
+      <!-- Content -->
+      <article id="doc-content" class="flex-1 min-w-0">
+        <!-- Title bar -->
+        <div class="mb-8">
+          <h1 class="text-3xl font-bold mb-2" style="font-family: var(--font-sans);">{{ .Title }}</h1>
+          <div class="flex items-center gap-3 text-sm" style="font-family: var(--font-sans); color: var(--color-muted);">
+            {{ with .Params.group }}<span class="px-1.5 py-0.5 rounded badge-{{ . }}">{{ . }}</span>{{ end }}
+            {{ if .Params.mcp_callable }}<span class="px-1.5 py-0.5 rounded" style="background: rgba(110, 231, 183, 0.1); color: var(--color-accent);">MCP</span>{{ end }}
+          </div>
+        </div>
+
+        <div class="prose" style="font-family: var(--font-serif);">
+          {{ .Content }}
+        </div>
+      </article>
+
+      <!-- Anchor bar (desktop) -->
+      {{ if not .Params.noindex }}
+      <aside class="hidden lg:block w-32 shrink-0">
+        <div class="sticky top-24">
+          <nav id="anchor-bar" class="flex flex-col gap-2 text-sm" style="font-family: var(--font-mono); color: var(--color-muted);" aria-label="On this page">
+          </nav>
+        </div>
+      </aside>
+      {{ end }}
+    </div>
+  </main>
+
+  {{ partial "footer.html" . }}
+  {{ partial "copy-button.html" . }}
+
+  <!-- Numbered sections + anchor bar + IntersectionObserver -->
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var content = document.getElementById('doc-content');
+    if (!content) return;
+
+    var headings = content.querySelectorAll('.prose h2');
+    var anchorBar = document.getElementById('anchor-bar');
+
+    headings.forEach(function(h2, i) {
+      var num = String(i + 1).padStart(2, '0');
+      var id = 'section-' + num;
+
+      // Wrap in a section
+      var section = document.createElement('div');
+      section.className = 'doc-section';
+      section.id = id;
+      h2.parentNode.insertBefore(section, h2);
+
+      // Move all elements until the next h2 into the section
+      var next = section.nextSibling;
+      while (next && !(next.nodeType === 1 && next.tagName === 'H2')) {
+        var toMove = next;
+        next = next.nextSibling;
+        section.appendChild(toMove);
+      }
+
+      // Add number prefix to heading
+      var numSpan = document.createElement('span');
+      numSpan.style.cssText = 'font-family: var(--font-mono); color: var(--color-accent); margin-right: 0.75rem; font-size: 0.875rem;';
+      numSpan.textContent = num;
+      h2.insertBefore(numSpan, h2.firstChild);
+      h2.style.marginTop = '2.5rem';
+
+      // Build anchor bar link
+      if (anchorBar) {
+        var a = document.createElement('a');
+        a.href = '#' + id;
+        a.className = 'anchor-link hover:text-[var(--color-text)] transition-colors';
+        a.dataset.section = id;
+        a.textContent = num;
+        anchorBar.appendChild(a);
+      }
+    });
+
+    // IntersectionObserver for scroll highlighting
+    var sections = document.querySelectorAll('.doc-section');
+    var links = document.querySelectorAll('.anchor-link');
+
+    if (sections.length === 0 || links.length === 0) return;
+
+    var observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          links.forEach(function(l) { l.classList.remove('active'); });
+          var active = document.querySelector('.anchor-link[data-section="' + entry.target.id + '"]');
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+
+    sections.forEach(function(s) { observer.observe(s); });
+
+    // Mark first example code block with data-primary-command
+    var firstPre = content.querySelector('.prose pre code');
+    if (firstPre) {
+      firstPre.closest('pre').setAttribute('data-primary-command', firstPre.textContent.trim().split('\n')[0]);
+    }
+  });
+  </script>
+</body>
+</html>

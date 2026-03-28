@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body style="background-color: var(--color-bg); color: var(--color-text);">
+  {{ partial "nav.html" . }}
+
+  <main class="max-w-3xl mx-auto px-4 py-12">
+    <article>
+      <header class="mb-8">
+        <h1 class="text-3xl font-bold mb-2" style="font-family: var(--font-sans);">{{ .Title }}</h1>
+        {{ with .Date }}
+        <time class="text-sm" style="color: var(--color-muted); font-family: var(--font-sans);">{{ .Format "January 2, 2006" }}</time>
+        {{ end }}
+      </header>
+
+      <div class="prose" style="font-family: var(--font-serif); line-height: 1.8; font-size: 1.0625rem;">
+        {{ .Content }}
+      </div>
+    </article>
+  </main>
+
+  {{ partial "footer.html" . }}
+  {{ partial "copy-button.html" . }}
+</body>
+</html>
