@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/vrksh/vrksh/cmd/assert"
@@ -83,6 +84,20 @@ func main() {
 				fmt.Print(skillsDoc)
 			}
 			os.Exit(0)
+		case "--bare":
+			names := make([]string, 0, len(tools))
+			for name := range tools {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			os.Exit(runBare(os.Args[2:], names))
+		case "--help", "-h":
+			fmt.Fprintf(os.Stderr, "usage: vrk <tool> [args]\n")
+			fmt.Fprintf(os.Stderr, "       vrk --bare [--force] [--remove] [--list] [--dry-run] [tools...]\n")
+			fmt.Fprintf(os.Stderr, "       vrk --manifest\n")
+			fmt.Fprintf(os.Stderr, "       vrk --skills [tool]\n")
+			fmt.Fprintf(os.Stderr, "\nrun 'vrk <tool> --help' for tool-specific help\n")
+			os.Exit(0)
 		}
 	}
 
@@ -94,6 +109,10 @@ func main() {
 
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "usage: vrk <tool> [args]\n")
+		fmt.Fprintf(os.Stderr, "       vrk --bare [--force] [--remove] [--list] [--dry-run] [tools...]\n")
+		fmt.Fprintf(os.Stderr, "       vrk --manifest\n")
+		fmt.Fprintf(os.Stderr, "       vrk --skills [tool]\n")
+		fmt.Fprintf(os.Stderr, "\nrun 'vrk <tool> --help' for tool-specific help\n")
 		os.Exit(2)
 	}
 
