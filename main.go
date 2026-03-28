@@ -1,13 +1,12 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/cmd/assert"
@@ -43,6 +42,9 @@ import (
 
 //go:embed integrations/skills/SKILLS.md
 var skillsDoc string
+
+//go:embed hugo/static/skills
+var skillsFS embed.FS
 
 //go:embed manifest.json
 var manifestJSON string
@@ -84,9 +86,14 @@ func main() {
 			os.Exit(0)
 		case "--skills":
 			if len(os.Args) > 2 {
-				fmt.Print(skillsSection(os.Args[2]))
-			} else {
+				os.Exit(printSkillFiles(os.Args[2:]))
+			}
+			overview, err := skillsFS.ReadFile("hugo/static/skills/overview.md")
+			if err != nil {
+				// Fall back to the monolithic SKILLS.md
 				fmt.Print(skillsDoc)
+			} else {
+				fmt.Print(string(overview))
 			}
 			os.Exit(0)
 		case "mcp":
@@ -138,30 +145,23 @@ func main() {
 	os.Exit(fn())
 }
 
-// skillsSection returns the SKILLS.md section for a single tool.
-// Sections start with "## <tool>" and end before the next "## " heading.
-// Falls back to the full document if the tool is not found.
-func skillsSection(tool string) string {
-	prefix := "## " + tool
-	lines := strings.Split(skillsDoc, "\n")
-	start := -1
-	for i, line := range lines {
-		if strings.HasPrefix(line, prefix) {
-			start = i
-			break
+// printSkillFiles reads per-tool skill files from the embedded skillsFS and
+// writes them to stdout. Returns 0 on full success, 1 if any file is missing.
+func printSkillFiles(names []string) int {
+	code := 0
+	for i, name := range names {
+		data, err := skillsFS.ReadFile("hugo/static/skills/" + name + ".md")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "vrk: no skill file for %q\n", name)
+			code = 1
+			continue
 		}
-	}
-	if start == -1 {
-		return skillsDoc
-	}
-	end := len(lines)
-	for i := start + 1; i < len(lines); i++ {
-		if strings.HasPrefix(lines[i], "## ") {
-			end = i
-			break
+		if i > 0 {
+			fmt.Println()
 		}
+		fmt.Print(string(data))
 	}
-	return strings.Join(lines[start:end], "\n") + "\n"
+	return code
 }
 
 // mcpMaps builds the descriptions, flagsFn, and stdinRequired maps for mcp.

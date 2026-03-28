@@ -559,16 +559,16 @@ for tool in jwt epoch uuid tok sse coax prompt kv chunk grab links validate; do
     || { echo "FAIL: --skills missing section for '$tool'"; FAIL=$((FAIL+1)); }
 done
 
-# vrk --skills <tool>: filtered output contains only that tool's section
+# vrk --skills <tool>: per-tool skill file starts with "# <tool> "
 for tool in jwt tok kv links; do
   section=$($VRK --skills "$tool")
-  echo "$section" | grep -q "## $tool" \
+  echo "$section" | grep -q "^# $tool " \
     && { echo "PASS: --skills $tool section header present"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --skills $tool missing section header"; FAIL=$((FAIL+1)); }
-  # must not contain another tool's section header
+  # must not contain another tool's content
   other="epoch"
   [ "$tool" = "epoch" ] && other="jwt"
-  echo "$section" | grep -q "## $other" \
+  echo "$section" | grep -q "^# $other " \
     && { echo "FAIL: --skills $tool leaked section for $other"; FAIL=$((FAIL+1)); } \
     || { echo "PASS: --skills $tool does not bleed into $other"; PASS=$((PASS+1)); }
 done

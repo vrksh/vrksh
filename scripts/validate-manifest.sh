@@ -41,6 +41,12 @@ for tool in $tools; do
     echo "MISSING  hugo/static/llms.txt   entry for '${tool}'"
     missing=$((missing + 1))
   fi
+
+  # 5. Per-tool skill file in hugo/static/skills/<tool>.md
+  if [ ! -f "$ROOT/hugo/static/skills/${tool}.md" ]; then
+    echo "MISSING  hugo/static/skills/${tool}.md"
+    missing=$((missing + 1))
+  fi
 done
 
 if [ "$missing" -gt 0 ]; then
