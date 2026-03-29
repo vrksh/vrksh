@@ -297,7 +297,7 @@ func renderCommand(dc *gg.Context, toolName, tagline, command, headline, categor
 }
 
 // renderPipeline draws Variant 2: Pipeline (default/install page).
-func renderPipeline(dc *gg.Context, command, subtitle string) error {
+func renderPipeline(dc *gg.Context, command, subtitle, comment string) error {
 	drawBg(dc)
 	drawDotGrid(dc)
 
@@ -355,7 +355,7 @@ func renderPipeline(dc *gg.Context, command, subtitle string) error {
 		return err
 	}
 	dc.SetColor(mutedCl)
-	dc.DrawString("# fetch -> summarize -> store", blockPadLeft, 403)
+	dc.DrawString("# "+comment, blockPadLeft, 403)
 
 	// Bottom-right: "vrk.sh" URL
 	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 16); err != nil {
@@ -394,6 +394,7 @@ func RenderDefault(outDir string) error {
 	if err := renderPipeline(dc,
 		"vrk grab URL | vrk prompt | vrk kv set summary",
 		"One binary. No dependencies. Composable.",
+		"fetch -> summarize -> store",
 	); err != nil {
 		return err
 	}
@@ -409,6 +410,7 @@ func RenderInstall(outDir string) error {
 	if err := renderPipeline(dc,
 		"curl -fsSL vrk.sh/install.sh | sh",
 		"Install vrksh in one command",
+		"one binary, zero dependencies",
 	); err != nil {
 		return err
 	}
