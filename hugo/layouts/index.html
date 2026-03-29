@@ -10,18 +10,17 @@
     <!-- Hero -->
     <section class="dot-grid max-w-4xl mx-auto px-4 pt-20 pb-16 text-center">
       <h1 class="text-4xl md:text-6xl font-bold mb-4" style="line-height: 1.1;">
-        Your LLM call didn't fail.
+        Stop writing Python glue<br>for LLM workflows.
       </h1>
-      <p class="text-xl md:text-2xl mb-6" style="font-family: var(--font-serif); font-weight: 500; color: var(--color-muted); line-height: 1.4;">
-        The API silently truncated your prompt at the context limit.
-      </p>
-
       <p class="text-lg md:text-xl mb-8" style="font-family: var(--font-mono); color: var(--color-accent);">
-        vrk — Unix tools for AI pipelines.
+        Compose token checks, prompts, validation, and more in your shell.
       </p>
 
-      <pre class="text-left max-w-xl mx-auto mb-8"><code style="font-size: 0.9375rem;">cat prompt.txt | vrk tok --budget 4000 \
-  && cat prompt.txt | vrk prompt</code></pre>
+      <pre class="text-left max-w-2xl mx-auto mb-8"><code style="font-size: 0.9375rem;">vrk grab https://api.example.com/docs \
+  | vrk tok --budget 8000 --fail \
+  | vrk prompt --system "extract the breaking changes" \
+  | vrk validate --schema changes.json \
+  | vrk kv set changelog</code></pre>
 
       <!-- CTA -->
       <div class="inline-block cta-glow rounded-lg px-6 py-3 mb-4" style="background-color: var(--color-surface);">
