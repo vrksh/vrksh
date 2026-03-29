@@ -1,110 +1,333 @@
 <!-- Announcement stripe -->
-<div class="announcement-stripe overflow-hidden" style="background: var(--color-surface); border-bottom: 1px solid var(--color-border);" aria-label="Latest updates">
-  <div class="stripe-inner py-1.5 text-xs" style="font-family: var(--font-mono); color: var(--color-text); opacity: 0.6;">
-    <span>26 Unix tools. One binary. Zero dependencies.</span>
-    <span>&middot;</span>
-    <span>the missing coreutils for AI pipelines</span>
-    <span>&middot;</span>
-    <span>vrk mcp - expose all 26 tools to any AI agent</span>
-    <span>&middot;</span>
-    <span>brew install vrk - ready in 5 seconds</span>
-    <span>&middot;</span>
-    <span>26 Unix tools. One binary. Zero dependencies.</span>
-    <span>&middot;</span>
-    <span>the missing coreutils for AI pipelines</span>
-    <span>&middot;</span>
-    <span>vrk mcp - expose all 26 tools to any AI agent</span>
-    <span>&middot;</span>
-    <span>brew install vrk - ready in 5 seconds</span>
-  </div>
+<div
+    class="announcement-stripe overflow-hidden"
+    style="
+        background: var(--color-surface);
+        border-bottom: 1px solid var(--color-border);
+    "
+    aria-label="Latest updates"
+>
+    <div
+        class="stripe-inner py-1.5 text-xs"
+        style="
+            font-family: var(--font-mono);
+            color: var(--color-text);
+            opacity: 0.6;
+        "
+    >
+        <span>26 Unix tools. One binary. Zero dependencies.</span>
+        <span>&middot;</span>
+        <span>the missing coreutils for AI pipelines</span>
+        <span>&middot;</span>
+        <span>vrk mcp - expose all 26 tools to any AI agent</span>
+        <span>&middot;</span>
+        <span>brew install vrk - ready in 5 seconds</span>
+        <span>&middot;</span>
+        <span>26 Unix tools. One binary. Zero dependencies.</span>
+        <span>&middot;</span>
+        <span>the missing coreutils for AI pipelines</span>
+        <span>&middot;</span>
+        <span>vrk mcp - expose all 26 tools to any AI agent</span>
+        <span>&middot;</span>
+        <span>brew install vrk - ready in 5 seconds</span>
+    </div>
 </div>
 
 <!-- Nav -->
 <nav class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-  <a href="/" class="text-lg font-semibold flex items-center gap-2" style="font-family: var(--font-mono); color: var(--color-text); text-decoration: none;">
-    <svg class="vrk-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="24" height="24"><path d="M128,177.94a63.72,63.72,0,0,0,41.66,14c33.93-.86,62.43-30.22,62.34-64.16a64,64,0,0,0-40.13-59.2,68,68,0,0,0-127.74,0A64,64,0,0,0,24,127.82c-.09,33.94,28.42,63.3,62.35,64.16A63.71,63.71,0,0,0,128,177.94Z" fill="currentColor" opacity="0.2"/><line x1="128" y1="232" x2="128" y2="88" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="128" y1="152" x2="80" y2="128" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="128" y1="128" x2="176" y2="104" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M128,177.94a63.72,63.72,0,0,0,41.66,14c33.93-.86,62.43-30.22,62.34-64.16a64,64,0,0,0-40.13-59.2,68,68,0,0,0-127.74,0A64,64,0,0,0,24,127.82c-.09,33.94,28.42,63.3,62.35,64.16A63.71,63.71,0,0,0,128,177.94Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>
-    vrk.sh
-  </a>
-
-  <!-- Desktop links -->
-  <div class="hidden md:flex items-center gap-6 text-sm" style="color: var(--color-muted);">
-    <a href="/docs/" class="hover:text-[var(--color-text)] transition-colors">docs</a>
-    <a href="/about/" class="hover:text-[var(--color-text)] transition-colors">about</a>
-    <a href="/agents/" class="hover:text-[var(--color-text)] transition-colors">agents</a>
-    <a href="/install/" class="hover:text-[var(--color-text)] transition-colors">install</a>
-    <a href="{{ .Site.Params.github }}" class="hover:text-[var(--color-text)] transition-colors" target="_blank" rel="noopener">github</a>
-    <a href="/docs/#search" class="hover:text-[var(--color-text)] transition-colors" aria-label="Search">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <a
+        href="/"
+        class="text-lg font-semibold flex items-center gap-2"
+        style="
+            font-family: var(--font-mono);
+            color: var(--color-text);
+            text-decoration: none;
+        "
+    >
+        <svg
+            class="vrk-logo"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 256 256"
+            width="24"
+            height="24"
+        >
+            <path
+                d="M128,177.94a63.72,63.72,0,0,0,41.66,14c33.93-.86,62.43-30.22,62.34-64.16a64,64,0,0,0-40.13-59.2,68,68,0,0,0-127.74,0A64,64,0,0,0,24,127.82c-.09,33.94,28.42,63.3,62.35,64.16A63.71,63.71,0,0,0,128,177.94Z"
+                fill="currentColor"
+                opacity="0.2"
+            />
+            <line
+                x1="128"
+                y1="232"
+                x2="128"
+                y2="88"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="16"
+            />
+            <line
+                x1="128"
+                y1="152"
+                x2="80"
+                y2="128"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="16"
+            />
+            <line
+                x1="128"
+                y1="128"
+                x2="176"
+                y2="104"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="16"
+            />
+            <path
+                d="M128,177.94a63.72,63.72,0,0,0,41.66,14c33.93-.86,62.43-30.22,62.34-64.16a64,64,0,0,0-40.13-59.2,68,68,0,0,0-127.74,0A64,64,0,0,0,24,127.82c-.09,33.94,28.42,63.3,62.35,64.16A63.71,63.71,0,0,0,128,177.94Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="16"
+            />
+        </svg>
+        vrk.sh
+        <span
+            class="hidden md:inline text-xs"
+            style="color: var(--color-muted); font-weight: 400"
+            >pronounced "vruk", rhymes with truck</span
+        >
     </a>
-    <button id="theme-toggle" class="cursor-pointer hover:text-[var(--color-text)] transition-colors" aria-label="Toggle theme">
-      <svg id="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-      <svg id="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-    </button>
-  </div>
 
-  <!-- Mobile: theme toggle + hamburger, always visible -->
-  <div class="flex md:hidden items-center gap-2">
-    <button id="mobile-theme-toggle" class="theme-toggle cursor-pointer flex items-center justify-center" style="color: var(--color-muted);" aria-label="Toggle theme">
-      <svg class="mobile-theme-icon-sun hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-      <svg class="mobile-theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-    </button>
-    <button id="nav-toggle" class="theme-toggle flex items-center justify-center" style="color: var(--color-muted);" aria-label="Toggle menu">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-    </button>
-  </div>
+    <!-- Desktop links -->
+    <div
+        class="hidden md:flex items-center gap-6 text-sm"
+        style="color: var(--color-muted)"
+    >
+        <a
+            href="/docs/"
+            class="hover:text-[var(--color-text)] transition-colors"
+            >docs</a
+        >
+        <a
+            href="/about/"
+            class="hover:text-[var(--color-text)] transition-colors"
+            >about</a
+        >
+        <a
+            href="/agents/"
+            class="hover:text-[var(--color-text)] transition-colors"
+            >agents</a
+        >
+        <a
+            href="/install/"
+            class="hover:text-[var(--color-text)] transition-colors"
+            >install</a
+        >
+        <a
+            href="{{ .Site.Params.github }}"
+            class="hover:text-[var(--color-text)] transition-colors"
+            target="_blank"
+            rel="noopener"
+            >github</a
+        >
+        <a
+            href="/docs/#search"
+            class="hover:text-[var(--color-text)] transition-colors"
+            aria-label="Search"
+        >
+            <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+            </svg>
+        </a>
+        <button
+            id="theme-toggle"
+            class="cursor-pointer hover:text-[var(--color-text)] transition-colors"
+            aria-label="Toggle theme"
+        >
+            <svg
+                id="theme-icon-sun"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="hidden"
+            >
+                <circle cx="12" cy="12" r="5" />
+                <path
+                    d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+                />
+            </svg>
+            <svg
+                id="theme-icon-moon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            >
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- Mobile: theme toggle + hamburger, always visible -->
+    <div class="flex md:hidden items-center gap-2">
+        <button
+            id="mobile-theme-toggle"
+            class="theme-toggle cursor-pointer flex items-center justify-center"
+            style="color: var(--color-muted)"
+            aria-label="Toggle theme"
+        >
+            <svg
+                class="mobile-theme-icon-sun hidden"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            >
+                <circle cx="12" cy="12" r="5" />
+                <path
+                    d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+                />
+            </svg>
+            <svg
+                class="mobile-theme-icon-moon"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            >
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+        </button>
+        <button
+            id="nav-toggle"
+            class="theme-toggle flex items-center justify-center"
+            style="color: var(--color-muted)"
+            aria-label="Toggle menu"
+        >
+            <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+            >
+                <path d="M3 12h18M3 6h18M3 18h18" />
+            </svg>
+        </button>
+    </div>
 </nav>
 
 <!-- Mobile menu -->
 <div id="nav-menu" class="hidden md:hidden px-4 pb-4">
-  <div class="flex flex-col gap-3 text-sm" style="color: var(--color-muted);">
-    <a href="/docs/" class="hover:text-[var(--color-text)]">docs</a>
-    <a href="/about/" class="hover:text-[var(--color-text)]">about</a>
-    <a href="/agents/" class="hover:text-[var(--color-text)]">agents</a>
-    <a href="/install/" class="hover:text-[var(--color-text)]">install</a>
-    <a href="{{ .Site.Params.github }}" class="hover:text-[var(--color-text)]" target="_blank" rel="noopener">github</a>
-    <a href="/docs/#search" class="hover:text-[var(--color-text)]">search</a>
-  </div>
+    <div class="flex flex-col gap-3 text-sm" style="color: var(--color-muted)">
+        <a href="/docs/" class="hover:text-[var(--color-text)]">docs</a>
+        <a href="/about/" class="hover:text-[var(--color-text)]">about</a>
+        <a href="/agents/" class="hover:text-[var(--color-text)]">agents</a>
+        <a href="/install/" class="hover:text-[var(--color-text)]">install</a>
+        <a
+            href="{{ .Site.Params.github }}"
+            class="hover:text-[var(--color-text)]"
+            target="_blank"
+            rel="noopener"
+            >github</a
+        >
+        <a href="/docs/#search" class="hover:text-[var(--color-text)]"
+            >search</a
+        >
+    </div>
 </div>
 
 <script>
-document.getElementById('nav-toggle').addEventListener('click', function() {
-  document.getElementById('nav-menu').classList.toggle('hidden');
-});
+    document
+        .getElementById("nav-toggle")
+        .addEventListener("click", function () {
+            document.getElementById("nav-menu").classList.toggle("hidden");
+        });
 
-function updateThemeIcons() {
-  var isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  document.getElementById('theme-icon-sun').classList.toggle('hidden', !isLight);
-  document.getElementById('theme-icon-moon').classList.toggle('hidden', isLight);
-  document.querySelectorAll('.mobile-theme-icon-sun').forEach(function(el) {
-    el.classList.toggle('hidden', !isLight);
-  });
-  document.querySelectorAll('.mobile-theme-icon-moon').forEach(function(el) {
-    el.classList.toggle('hidden', isLight);
-  });
-}
+    function updateThemeIcons() {
+        var isLight =
+            document.documentElement.getAttribute("data-theme") === "light";
+        document
+            .getElementById("theme-icon-sun")
+            .classList.toggle("hidden", !isLight);
+        document
+            .getElementById("theme-icon-moon")
+            .classList.toggle("hidden", isLight);
+        document
+            .querySelectorAll(".mobile-theme-icon-sun")
+            .forEach(function (el) {
+                el.classList.toggle("hidden", !isLight);
+            });
+        document
+            .querySelectorAll(".mobile-theme-icon-moon")
+            .forEach(function (el) {
+                el.classList.toggle("hidden", isLight);
+            });
+    }
 
-function toggleTheme() {
-  var html = document.documentElement;
-  var isLight = html.getAttribute('data-theme') === 'light';
-  if (isLight) {
-    html.removeAttribute('data-theme');
-    localStorage.setItem('theme', 'dark');
-  } else {
-    html.setAttribute('data-theme', 'light');
-    localStorage.setItem('theme', 'light');
-  }
-  updateThemeIcons();
-}
+    function toggleTheme() {
+        var html = document.documentElement;
+        var isLight = html.getAttribute("data-theme") === "light";
+        if (isLight) {
+            html.removeAttribute("data-theme");
+            localStorage.setItem("theme", "dark");
+        } else {
+            html.setAttribute("data-theme", "light");
+            localStorage.setItem("theme", "light");
+        }
+        updateThemeIcons();
+    }
 
-document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
-document.getElementById('mobile-theme-toggle').addEventListener('click', toggleTheme);
+    document
+        .getElementById("theme-toggle")
+        .addEventListener("click", toggleTheme);
+    document
+        .getElementById("mobile-theme-toggle")
+        .addEventListener("click", toggleTheme);
 
-// Restore saved theme on load
-(function() {
-  var saved = localStorage.getItem('theme');
-  if (saved === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  }
-  updateThemeIcons();
-})();
+    // Restore saved theme on load
+    (function () {
+        var saved = localStorage.getItem("theme");
+        if (saved === "light") {
+            document.documentElement.setAttribute("data-theme", "light");
+        }
+        updateThemeIcons();
+    })();
 </script>

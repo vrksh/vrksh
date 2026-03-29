@@ -10,10 +10,10 @@
     <!-- Hero -->
     <section class="dot-grid max-w-4xl mx-auto px-4 pt-20 pb-16 text-center">
       <h1 class="text-4xl md:text-6xl font-bold mb-4" style="line-height: 1.1;">
-        Stop writing Python glue<br>for LLM workflows.
+        The missing coreutils<br>for AI pipelines.
       </h1>
-      <p class="text-lg md:text-xl mb-8" style="font-family: var(--font-mono); color: var(--color-accent);">
-        Compose token checks, prompts, validation, and more in your shell.
+      <p class="text-lg md:text-xl mb-8" style="font-family: var(--font-sans); color: var(--color-accent);">
+        One binary &ensp;●&ensp; Small composable tools &ensp;●&ensp; Zero silent failures
       </p>
 
       <pre class="text-left max-w-2xl mx-auto mb-8"><code style="font-size: 0.9375rem;">vrk grab https://api.example.com/docs \
@@ -32,9 +32,14 @@
         </button>
       </div>
 
-      <div class="flex items-center justify-center gap-6 mt-6 text-sm">
-        <span style="color: var(--color-muted);">v{{ .Site.Params.version }} &middot; macOS &middot; Linux</span>
-        <a href="/docs/" class="inline-block rounded-full px-4 py-1.5 transition-colors" style="color: var(--color-muted); text-decoration: none; border: 1px solid var(--color-border);" onmouseover="this.style.borderColor='var(--color-accent)';this.style.color='var(--color-accent)'" onmouseout="this.style.borderColor='var(--color-border)';this.style.color='var(--color-muted)'">Read the docs &rarr;</a>
+      <!-- Try it now -->
+      <div class="mt-8 max-w-2xl mx-auto text-left">
+        <p class="text-xs mb-2" style="font-family: var(--font-mono); color: var(--color-muted);">
+          try it now - no API key needed
+        </p>
+        <pre class="text-sm" style="margin: 0;"><code>$ curl -fsSL vrk.sh/install.sh | sh
+$ echo "The quick brown fox jumps over the lazy dog" | vrk tok
+9</code></pre>
       </div>
     </section>
 
