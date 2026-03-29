@@ -1,5 +1,5 @@
 name: mask
-tagline: Secret redactor - entropy + pattern-based, streaming
+tagline: secret redactor - entropy + pattern-based, streaming
 description: |
   Redact secrets from text streams. Built-in patterns cover Bearer tokens,
   password= values, and common key prefixes. Shannon entropy pass catches

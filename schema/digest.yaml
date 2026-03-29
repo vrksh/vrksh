@@ -1,5 +1,5 @@
 name: digest
-tagline: Universal hasher - sha256/md5/sha512, --hmac, --compare
+tagline: universal hasher - sha256/md5/sha512, --hmac, --compare
 description: |
   Hash strings, stdin, or files with SHA-256, MD5, or SHA-512. Compute HMACs
   for webhook signatures with constant-time verification. Compare file hashes

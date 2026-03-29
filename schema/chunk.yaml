@@ -1,5 +1,5 @@
 name: chunk
-tagline: Token-aware text splitter - JSONL chunks within a token budget
+tagline: token-aware text splitter - JSONL chunks within a token budget
 description: |
   Split text into token-bounded chunks for processing within LLM context
   windows. Each chunk is a JSONL record with index, text, and exact token

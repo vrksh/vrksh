@@ -1,5 +1,5 @@
 name: base
-tagline: Encoding converter - base64, base64url, hex, base32
+tagline: encoding converter - base64, base64url, hex, base32
 description: |
   Encode and decode between base64, base64url, hex, and base32. Same flags
   on every platform. Strips exactly one trailing newline from stdin before

@@ -1,5 +1,5 @@
 name: epoch
-tagline: Timestamp converter - unix/ISO, relative time
+tagline: timestamp converter - unix/ISO, relative time
 description: |
   Convert between Unix timestamps and ISO 8601 dates. Supports relative
   offsets (+3d, -1h), timezone conversion, and JSON output with all

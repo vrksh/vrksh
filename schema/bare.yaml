@@ -1,5 +1,5 @@
 name: bare
-tagline: Symlink creator - use vrksh tools without the vrk prefix
+tagline: symlink creator - use vrksh tools without the vrk prefix
 description: |
   Create symlinks so every tool can be called directly by name without
   the vrk prefix. Preview with --dry-run, remove with --remove. Only

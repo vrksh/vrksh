@@ -1,5 +1,5 @@
 name: sip
-tagline: Stream sampler - --first, --count, --every, --sample
+tagline: stream sampler - --first, --count, --every, --sample
 description: |
   Sample lines from a stream without reading it all into memory. Reservoir
   sampling (--count) gives uniform random samples. --every for deterministic

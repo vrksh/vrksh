@@ -1,5 +1,5 @@
 name: assert
-tagline: Pipeline condition check - jq conditions, --contains, --matches
+tagline: pipeline condition check - jq conditions, --contains, --matches
 description: |
   Gate a pipeline on a condition. Reads input, checks the condition, passes
   data through on success, exits non-zero on failure. jq expressions for

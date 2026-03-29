@@ -1,5 +1,5 @@
 name: pct
-tagline: Percent encoder/decoder - RFC 3986, --encode, --decode, --form
+tagline: percent encoder/decoder - RFC 3986, --encode, --decode, --form
 description: |
   Percent-encode or decode strings per RFC 3986. Form mode uses
   application/x-www-form-urlencoded rules where spaces become +.

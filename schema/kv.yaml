@@ -1,5 +1,5 @@
 name: kv
-tagline: Key-value store - SQLite-backed, namespaces, TTL, atomic counters.
+tagline: key-value store - SQLite-backed, namespaces, TTL, atomic counters.
 description: |
   Persistent key-value store backed by SQLite at ~/.vrk.db. Supports
   namespaces for isolation, TTL for expiry, and atomic increment/decrement

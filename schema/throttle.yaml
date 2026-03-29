@@ -1,5 +1,5 @@
 name: throttle
-tagline: Rate limiter for pipes - --rate N/s or N/m
+tagline: rate limiter for pipes - --rate N/s or N/m
 description: |
   Limit throughput in a pipeline to stay within API rate limits. Sits
   between source and consumer, re-emitting lines at a controlled rate.

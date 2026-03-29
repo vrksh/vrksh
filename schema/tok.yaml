@@ -1,5 +1,5 @@
 name: tok
-tagline: Token counter - cl100k_base, --budget guard, --json.
+tagline: token counter - cl100k_base, --budget guard, --json.
 description: |
   Count tokens using cl100k_base. Exact for GPT-4, ~95% accurate for Claude.
   Exits 1 if input exceeds --budget. The guard that prevents surprise API bills.

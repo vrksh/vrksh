@@ -1,5 +1,5 @@
 name: links
-tagline: Hyperlink extractor - markdown, HTML, bare URLs to JSONL
+tagline: hyperlink extractor - markdown, HTML, bare URLs to JSONL
 description: |
   Extract all links from markdown, HTML, or plain text. Each link becomes
   a JSONL record with text, URL, and source line number. Handles inline

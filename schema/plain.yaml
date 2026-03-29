@@ -1,5 +1,5 @@
 name: plain
-tagline: Markdown stripper - removes syntax, keeps prose
+tagline: markdown stripper - removes syntax, keeps prose
 description: |
   Strip markdown syntax and return plain text. Link text preserved, URLs
   dropped. Code content kept, fences stripped. Heading text becomes plain

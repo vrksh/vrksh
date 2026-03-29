@@ -1,5 +1,5 @@
 name: recase
-tagline: Naming convention converter - snake, camel, kebab, pascal, title
+tagline: naming convention converter - snake, camel, kebab, pascal, title
 description: |
   Convert between naming conventions. Auto-detects input format. Handles
   acronyms correctly - HTMLParser becomes html_parser, not h_t_m_l_parser.

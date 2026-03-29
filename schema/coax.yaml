@@ -1,5 +1,5 @@
 name: coax
-tagline: Retry wrapper - --times, --backoff, --on, --until
+tagline: retry wrapper - --times, --backoff, --on, --until
 description: |
   Retry a command with configurable backoff. Stdin is buffered and re-supplied
   on each attempt. Supports fixed and exponential backoff, exit code filtering,

@@ -1,5 +1,5 @@
 name: moniker
-tagline: Memorable name generator - run IDs, job labels, temp dirs
+tagline: memorable name generator - run IDs, job labels, temp dirs
 description: |
   Generate adjective-noun names from a curated word list. Deterministic
   with --seed. Within-run uniqueness via Fisher-Yates shuffle. Add words

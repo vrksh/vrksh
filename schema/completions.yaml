@@ -1,5 +1,5 @@
 name: completions
-tagline: Shell completion script generator - bash, zsh, fish
+tagline: shell completion script generator - bash, zsh, fish
 description: |
   Generate shell completion scripts for Bash, Zsh, and Fish. Tab-completes
   tool names and their flags. Generated from the tool registry inside the
