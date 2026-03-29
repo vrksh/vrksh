@@ -47,6 +47,12 @@ for tool in $tools; do
     echo "MISSING  hugo/static/skills/${tool}.md"
     missing=$((missing + 1))
   fi
+
+  # 6. OG image in hugo/static/og/<tool>.png
+  if [ ! -f "$ROOT/hugo/static/og/${tool}.png" ]; then
+    echo "MISSING  hugo/static/og/${tool}.png"
+    missing=$((missing + 1))
+  fi
 done
 
 if [ "$missing" -gt 0 ]; then

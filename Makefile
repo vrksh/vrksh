@@ -1,6 +1,6 @@
 export CGO_ENABLED=0
 
-.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate validate-schemas validate-manifest test-site
+.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate generate-og validate-schemas validate-manifest test-site
 
 # Build the binary. CGO_ENABLED=0 is mandatory - static binary promise depends on it.
 build:
@@ -63,8 +63,12 @@ smoke: build
 	VRK=$(CURDIR)/vrk go test -tags smoke ./cmd/grab/... -v -timeout 60s
 
 # Generate Hugo content, static files, data JSON, OG images, and update manifest.
-generate:
+generate: generate-og
 	go run ./internal/docgen/cmd
+	go run ./internal/oggen/cmd
+
+# Generate OG images only. Runs before hugo in test-site.
+generate-og:
 	go run ./internal/oggen/cmd
 
 # Validate all schema YAMLs and check skills.md token budget.
@@ -77,7 +81,7 @@ validate-manifest:
 	bash scripts/validate-manifest.sh
 
 # Hugo site smoke tests — syntax check install.sh, validate manifest, build site, token budget.
-test-site: build validate-manifest
+test-site: build generate-og validate-manifest
 	bash -n hugo/static/install.sh
 	hugo --minify --source hugo
 	./vrk tok < hugo/static/skills.md | awk '{if($$1+0 > 4000) {print "skills.md over 4000 tokens"; exit 1}}'

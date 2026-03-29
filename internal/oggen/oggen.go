@@ -270,3 +270,18 @@ func RenderDefault(outDir string) error {
 	}
 	return dc.SavePNG(filepath.Join(outDir, "default.png"))
 }
+
+// RenderInstall generates the install page OG image (Variant 2).
+func RenderInstall(outDir string) error {
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return err
+	}
+	dc := gg.NewContext(imgW, imgH)
+	if err := renderPipeline(dc,
+		"curl -fsSL vrk.sh/install.sh | sh",
+		"Install vrksh in one command",
+	); err != nil {
+		return err
+	}
+	return dc.SavePNG(filepath.Join(outDir, "install.png"))
+}

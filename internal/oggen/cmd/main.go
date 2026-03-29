@@ -31,5 +31,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("rendered %d OG images + default.png\n", len(tools))
+	if err := oggen.RenderInstall(*outDir); err != nil {
+		fmt.Fprintf(os.Stderr, "error: rendering install PNG: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("rendered %d OG images + default.png + install.png\n", len(tools))
 }

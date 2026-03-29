@@ -104,6 +104,33 @@ func TestRenderDefaultPNG(t *testing.T) {
 	}
 }
 
+func TestRenderInstallPNG(t *testing.T) {
+	outDir := t.TempDir()
+
+	if err := RenderInstall(outDir); err != nil {
+		t.Fatalf("RenderInstall: %v", err)
+	}
+
+	path := filepath.Join(outDir, "install.png")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading install.png: %v", err)
+	}
+
+	if !bytes.HasPrefix(data, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}) {
+		t.Error("install.png does not have valid PNG magic bytes")
+	}
+
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("decoding install.png: %v", err)
+	}
+	bounds := img.Bounds()
+	if bounds.Dx() != 1200 || bounds.Dy() != 630 {
+		t.Errorf("expected 1200x630, got %dx%d", bounds.Dx(), bounds.Dy())
+	}
+}
+
 func TestRenderedPNGNotSolidColor(t *testing.T) {
 	schemaDir := t.TempDir()
 	outDir := t.TempDir()

@@ -18,6 +18,8 @@
 <meta property="og:url" content="{{ .Permalink }}">
 {{ if .Params.tool -}}
 <meta property="og:image" content="{{ .Site.BaseURL }}og/{{ .Params.tool }}.png">
+{{- else if and .File (eq .File.ContentBaseName "install") -}}
+<meta property="og:image" content="{{ .Site.BaseURL }}og/install.png">
 {{- else -}}
 <meta property="og:image" content="{{ .Site.BaseURL }}og/default.png">
 {{- end }}
