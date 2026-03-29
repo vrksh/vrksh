@@ -1,9 +1,16 @@
 name: mask
 tagline: secret redactor - entropy + pattern-based, streaming
 description: |
-  Redact secrets from text streams. Built-in patterns cover Bearer tokens,
-  password= values, and common key prefixes. Shannon entropy pass catches
-  high-entropy strings the patterns miss. Streaming - safe for large inputs.
+  Redacts secrets from text before it reaches an LLM or a log file. Catches Bearer tokens, passwords, API keys, and other credentials using built-in patterns. Also flags high-entropy strings that look like secrets but don't match a known pattern. Streams input, so it handles large files safely.
+problem: >
+  You pipe log output to an LLM for analysis and accidentally send API keys, Bearer
+  tokens, and passwords in the prompt. The LLM provider now has your production
+  credentials in their training pipeline.
+before: |
+  cat output.log | sed 's/Bearer [^ ]*/Bearer ***/g' | \
+    sed 's/password=[^ ]*/password=***/g'
+  # misses API keys, high-entropy secrets, custom patterns
+after: "cat output.log | vrk mask"
 group: v1
 category: pipeline
 example: cat output.txt | vrk mask

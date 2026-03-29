@@ -374,7 +374,7 @@ Exit 1: API failure, budget exceeded, or schema mismatch
 Exit 2: Usage error - no input, missing flags
 
 ```bash
-echo "Summarize this" | vrk prompt --model claude-sonnet-4-6 --json
+cat article.md | vrk prompt --system 'Summarize this' --model claude-sonnet-4-6 --json
 ```
 
 ## recase - naming convention converter - snake, camel, kebab, pascal, title

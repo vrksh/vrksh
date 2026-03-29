@@ -1,9 +1,18 @@
 name: urlinfo
 tagline: URL parser - scheme, host, port, path, query, --field
 description: |
-  Decompose URLs into structured JSON. Extract individual components
-  with --field, including nested query parameters via dot-path syntax.
-  Pure string parser - no network calls, no DNS lookups.
+  Breaks URLs into their components - scheme, host, port, path, query parameters - as structured JSON. You can extract a single piece with --field, including nested query parameters using dot-path syntax. Pure parsing, no network calls.
+problem: >
+  You have a URL from an API response and need to extract a query parameter to pass
+  to the next pipeline step. Splitting on ? and & in bash is fragile - encoded characters,
+  missing parameters, and multiple values for the same key all break your parsing.
+before: |
+  URL="https://api.example.com/callback?code=abc123&state=xyz"
+  echo "$URL" | grep -oP 'code=\K[^&]+'
+  # breaks if code= is missing (grep exits 1, pipeline fails)
+  # breaks on percent-encoded values like code=abc%3D123
+  # not portable: -P (Perl regex) is GNU grep only
+after: "echo \"$URL\" | vrk urlinfo --field query.code"
 group: v1
 category: utilities
 example: echo 'https://api.example.com:8443/v2/users?page=2' | vrk urlinfo

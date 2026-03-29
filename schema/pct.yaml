@@ -1,9 +1,20 @@
 name: pct
 tagline: percent encoder/decoder - RFC 3986, --encode, --decode, --form
 description: |
-  Percent-encode or decode strings per RFC 3986. Form mode uses
-  application/x-www-form-urlencoded rules where spaces become +.
-  Handles multi-byte UTF-8 correctly. One result per line for batch use.
+  Percent-encodes and decodes strings following RFC 3986. Handles the difference between path encoding (spaces become %20) and form encoding (spaces become +) so you don't have to remember which is which. Processes one result per line for batch use.
+problem: >
+  You build a URL with a query parameter that contains spaces and special characters.
+  You use printf with manual %20 substitution, miss an ampersand, and the API returns
+  a 400. The rules for path encoding vs form encoding differ and you always pick the
+  wrong one.
+before: |
+  QUERY=$(python3 -c "import urllib.parse; print(urllib.parse.quote_plus('$USER_INPUT'))")
+  curl "https://api.example.com/search?q=$QUERY"
+  # quote() for paths, quote_plus() for forms - easy to mix up
+  # breaks if $USER_INPUT contains single quotes
+after: |
+  QUERY=$(echo "$USER_INPUT" | vrk pct --encode --form)
+  curl "https://api.example.com/search?q=$QUERY"
 group: v1
 category: utilities
 example: echo 'hello world' | vrk pct --encode

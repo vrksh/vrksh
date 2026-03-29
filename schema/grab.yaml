@@ -1,9 +1,19 @@
 name: grab
 tagline: URL fetcher - clean markdown, plain text, or raw HTML.
 description: |
-  Fetch a URL and return clean markdown (default), plain text (--text),
-  or raw HTML (--raw). Applies readability-style content extraction.
-  Static HTML only - no JavaScript execution.
+  Fetches a web page and extracts the readable content as clean markdown. Strips navigation, ads, scripts, and boilerplate - you get the article text, not the page chrome. Also supports plain text and raw HTML output modes.
+problem: >
+  You need the content of a web page for an LLM pipeline. curl gives you raw HTML
+  full of nav bars, ads, and scripts. You write a Python script with BeautifulSoup
+  to extract the article text, and it breaks on the next site.
+before: |
+  curl -s https://example.com/article | \
+    python3 -c "
+  from bs4 import BeautifulSoup
+  import sys
+  soup = BeautifulSoup(sys.stdin.read(), 'html.parser')
+  print(soup.get_text())"
+after: "vrk grab https://example.com/article"
 group: v1
 category: pipeline
 example: vrk grab --text https://example.com/article

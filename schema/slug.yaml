@@ -1,9 +1,15 @@
 name: slug
 tagline: URL/filename slug generator - --separator, --max, --json
 description: |
-  Generate URL-safe slugs from arbitrary text. Unicode NFD normalization,
-  lowercase, keeps only [a-z0-9]. Truncates at word boundary with --max.
-  Configurable separator. Batch processing one line at a time.
+  Turns arbitrary text into URL-safe slugs. Normalizes Unicode, lowercases everything, and keeps only letters and numbers. Truncates at word boundaries so you don't get cut-off words. Processes one line at a time for batch use.
+problem: >
+  You need a URL-safe slug from a blog title. You lowercase and replace spaces with
+  hyphens, but forget about Unicode, punctuation, and consecutive separators. The
+  slug "my--great--post-!" breaks your router.
+before: |
+  echo 'My Great Post!' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-'
+  # consecutive hyphens, no Unicode normalization, no truncation
+after: "echo 'My Great Post!' | vrk slug"
 group: v1
 category: utilities
 example: echo 'My Article Title' | vrk slug

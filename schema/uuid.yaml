@@ -1,9 +1,17 @@
 name: uuid
 tagline: UUID generator - v4/v7, --count, --json
 description: |
-  Generate v4 (random) or v7 (time-ordered) UUIDs. v7 UUIDs sort
-  lexicographically by creation time for database primary keys.
-  Batch generation with --count, structured output with --json.
+  Generates UUIDs - v4 (random) or v7 (time-ordered). v7 UUIDs sort by creation time, which makes them useful as database primary keys that stay roughly ordered. Consistent output format across macOS and Linux.
+problem: >
+  You need a UUID and uuidgen is not installed, or it only generates v4 and you need
+  v7 for time-ordered database keys. Python's uuid module does not support v7.
+  The uuidgen output format varies across platforms.
+before: |
+  uuidgen
+  # macOS: uppercase, Linux: lowercase
+  # no v7 support on either platform
+  # python3 -c "import uuid; print(uuid.uuid4())" for portable v4
+after: "vrk uuid --v7"
 group: v1
 category: utilities
 example: vrk uuid --v7

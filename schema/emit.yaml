@@ -1,10 +1,17 @@
 name: emit
 tagline: structured logger - wraps stdin lines as JSONL log records
 description: |
-  Turn unstructured text into timestamped JSONL log records. Each line
-  becomes a JSON object with ts, level, and msg fields. Supports tagging
-  by source, auto-detecting log level from line prefixes, and merging
-  extra JSON fields.
+  Wraps any command's output into structured JSONL log records. Each line gets a timestamp, a level, and a msg field. Pipe a script through emit and you get logs you can actually filter and search, instead of grepping through plain text.
+problem: >
+  Your script writes plain text to stdout. When something breaks at 3am, you grep
+  through unstructured logs trying to find the error. No timestamps, no levels,
+  no structured fields to filter on.
+before: |
+  ./deploy.sh >> pipeline.log 2>&1
+  # later: grep "ERROR" pipeline.log
+  # no timestamps, no structured fields, no level filtering
+  # good luck finding what failed at 3am
+after: "./deploy.sh | vrk emit --tag deploy --parse-level"
 group: v1
 category: utilities
 example: some-script.sh | vrk emit --level info --tag my-script

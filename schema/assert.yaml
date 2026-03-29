@@ -1,9 +1,14 @@
 name: assert
 tagline: pipeline condition check - jq conditions, --contains, --matches
 description: |
-  Gate a pipeline on a condition. Reads input, checks the condition, passes
-  data through on success, exits non-zero on failure. jq expressions for
-  JSON, --contains/--matches for plain text.
+  Checks a condition on your pipeline data and either passes it through or stops the pipeline. You can match JSON with jq expressions or plain text with substring and regex checks. If the condition fails, nothing reaches the next step.
+problem: >
+  You pipe JSON through a pipeline and assume the shape is correct. Three steps later,
+  a malformed record silently corrupts your output. You only notice when a customer
+  reports wrong data.
+before: |
+  curl -s https://api.example.com/health | jq -e '.status == "ok"' > /dev/null
+after: "vrk grab https://api.example.com/health | vrk assert --contains '\"status\":\"ok\"'"
 group: v1
 category: utilities
 example: vrk grab https://api.example.com/health | vrk assert --contains '"status":"ok"'

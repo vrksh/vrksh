@@ -1,9 +1,15 @@
 name: recase
 tagline: naming convention converter - snake, camel, kebab, pascal, title
 description: |
-  Convert between naming conventions. Auto-detects input format. Handles
-  acronyms correctly - HTMLParser becomes html_parser, not h_t_m_l_parser.
-  Processes one name per line for batch conversion.
+  Converts between naming conventions - snake_case, camelCase, kebab-case, PascalCase, and Title Case. Auto-detects the input format so you just specify what you want. Handles acronyms correctly: HTMLParser becomes html_parser, not h_t_m_l_parser.
+problem: >
+  You need to convert getUserName to get_user_name for a database column. You write
+  a regex but it breaks on acronyms - HTMLParser becomes h_t_m_l_parser instead of
+  html_parser. Every naming convention edge case is its own bug.
+before: |
+  echo 'getUserName' | sed 's/\([A-Z]\)/_\L\1/g' | sed 's/^_//'
+  # breaks on acronyms: HTMLParser -> h_t_m_l_parser
+after: "echo 'getUserName' | vrk recase --to snake"
 group: v1
 category: utilities
 example: echo 'getUserName' | vrk recase --to snake

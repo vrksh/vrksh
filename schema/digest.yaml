@@ -1,9 +1,16 @@
 name: digest
 tagline: universal hasher - sha256/md5/sha512, --hmac, --compare
 description: |
-  Hash strings, stdin, or files with SHA-256, MD5, or SHA-512. Compute HMACs
-  for webhook signatures with constant-time verification. Compare file hashes
-  with --compare. Streaming - safe for arbitrarily large inputs.
+  Hashes strings, stdin, or files with SHA-256, MD5, or SHA-512. Also computes HMACs for verifying webhook signatures with constant-time comparison, so timing attacks are not a concern. Streams input, so it handles files of any size without loading them into memory.
+problem: >
+  You need to verify a webhook signature or compare file hashes and the openssl
+  command is different for HMAC vs plain hash. You forget the -binary flag, get
+  hex-encoded input to the HMAC, and the signature never matches.
+before: |
+  echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" -binary | xxd -p
+  # -binary is easy to forget; without it you HMAC the hex string, not the bytes
+  # output format differs between openssl versions
+after: "echo -n \"$PAYLOAD\" | vrk digest --hmac --key \"$WEBHOOK_SECRET\" --bare"
 group: v1
 category: utilities
 example: vrk digest 'hello'

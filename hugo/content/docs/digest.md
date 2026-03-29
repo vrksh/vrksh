@@ -9,11 +9,43 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## Contract
+## About
 
-`stdin → digest → stdout`
+Hashes strings, stdin, or files with SHA-256, MD5, or SHA-512. Also computes HMACs for verifying webhook signatures with constant-time comparison, so timing attacks are not a concern. Streams input, so it handles files of any size without loading them into memory.
 
-Exit 0 Success, hash written, or --verify matched · Exit 1 File not found, read error, or --verify mismatch · Exit 2 Unknown algorithm, --hmac without --key, --verify without --hmac
+## The problem
+
+You need to verify a webhook signature or compare file hashes and the openssl command is different for HMAC vs plain hash. You forget the -binary flag, get hex-encoded input to the HMAC, and the signature never matches.
+
+## Before and after
+
+**Before**
+
+```bash
+echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" -binary | xxd -p
+# -binary is easy to forget; without it you HMAC the hex string, not the bytes
+# output format differs between openssl versions
+```
+
+**After**
+
+```bash
+echo -n "$PAYLOAD" | vrk digest --hmac --key "$WEBHOOK_SECRET" --bare
+```
+
+## Example
+
+```bash
+vrk digest 'hello'
+```
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success, hash written, or --verify matched |
+| 1 | File not found, read error, or --verify mismatch |
+| 2 | Unknown algorithm, --hmac without --key, --verify without --hmac |
 
 ## Flags
 
@@ -29,8 +61,3 @@ Exit 0 Success, hash written, or --verify matched · Exit 1 File not found, read
 | `--json` | -j | bool | Emit JSON object instead of algo:hash line |
 | `--quiet` | -q | bool | Suppress stderr output |
 
-## Example
-
-```bash
-vrk digest 'hello'
-```

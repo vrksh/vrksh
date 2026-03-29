@@ -16,6 +16,11 @@ func writeTool(t *testing.T, dir, name, group string) {
 tagline: The ` + name + ` tool tagline.
 description: |
   The ` + name + ` tool description.
+problem: >
+  You need to ` + name + ` things but the existing tools are unreliable.
+before: |
+  python -c "print('old way')"
+after: "cat input.txt | vrk ` + name + `"
 group: ` + group + `
 example: cat input.txt | vrk ` + name + ` --json
 flags:
@@ -85,12 +90,28 @@ func TestGenerateToolDoc(t *testing.T) {
 		t.Error("missing <!-- generated --> marker")
 	}
 
-	// Check contract section
-	if !strings.Contains(s, "## Contract") {
-		t.Error("missing Contract section")
+	// Check problem statement
+	if !strings.Contains(s, "## The problem") {
+		t.Error("missing problem section")
 	}
-	if !strings.Contains(s, "Exit 0") {
-		t.Error("missing exit code 0 in contract")
+	if !strings.Contains(s, "You need to tok things") {
+		t.Error("missing problem content")
+	}
+
+	// Contract section should NOT be present (removed)
+	if strings.Contains(s, "## Contract") {
+		t.Error("Contract section should not be present")
+	}
+
+	// Check exit codes table
+	if !strings.Contains(s, "## Exit codes") {
+		t.Error("missing Exit codes section")
+	}
+	if !strings.Contains(s, "| Code | Meaning |") {
+		t.Error("missing exit codes table header")
+	}
+	if !strings.Contains(s, "| 0 | Success |") {
+		t.Error("missing exit code 0 in table")
 	}
 
 	// Check flags table
@@ -110,6 +131,48 @@ func TestGenerateToolDoc(t *testing.T) {
 	}
 	if !strings.Contains(s, "vrk tok --json") {
 		t.Error("missing example command")
+	}
+
+	// Check before/after section
+	if !strings.Contains(s, "## Before and after") {
+		t.Error("missing before/after section")
+	}
+	if !strings.Contains(s, "**Before**") {
+		t.Error("missing Before label")
+	}
+	if !strings.Contains(s, "**After**") {
+		t.Error("missing After label")
+	}
+
+	// Check about section
+	if !strings.Contains(s, "## About") {
+		t.Error("missing About section")
+	}
+	if !strings.Contains(s, "The tok tool description.") {
+		t.Error("missing description in About section")
+	}
+
+	// Check section order: about → problem → before/after → example → exit codes → flags
+	posAbout := strings.Index(s, "## About")
+	posProblem := strings.Index(s, "## The problem")
+	posBeforeAfter := strings.Index(s, "## Before and after")
+	posExample := strings.Index(s, "## Example")
+	posExit := strings.Index(s, "## Exit codes")
+	posFlags := strings.Index(s, "## Flags")
+	if posAbout >= posProblem {
+		t.Error("about must come before problem")
+	}
+	if posProblem >= posBeforeAfter {
+		t.Error("problem must come before before/after")
+	}
+	if posBeforeAfter >= posExample {
+		t.Error("before/after must come before example")
+	}
+	if posExample >= posExit {
+		t.Error("example must come before exit codes")
+	}
+	if posExit >= posFlags {
+		t.Error("exit codes must come before flags")
 	}
 }
 

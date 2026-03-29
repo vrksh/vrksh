@@ -1,8 +1,17 @@
 name: tok
 tagline: token counter - cl100k_base, --budget guard, --json.
 description: |
-  Count tokens using cl100k_base. Exact for GPT-4, ~95% accurate for Claude.
-  Exits 1 if input exceeds --budget. The guard that prevents surprise API bills.
+  Counts tokens in your text using the cl100k_base tokenizer. Exact for GPT-4 and roughly 95% accurate for Claude. Use it as a guard before sending prompts to an LLM - if the input exceeds your token budget, tok exits 1 and your pipeline stops before the API call.
+problem: >
+  LLM APIs silently truncate prompts that exceed the context window. You get a degraded
+  response with no error. There is no built-in way to check token count before you send.
+before: |
+  python3 -c "
+  import tiktoken
+  enc = tiktoken.get_encoding('cl100k_base')
+  print(len(enc.encode(open('prompt.txt').read())))
+  "
+after: "cat prompt.txt | vrk tok --budget 4000"
 group: v1
 category: core
 example: cat prompt.txt | vrk tok --budget 4000

@@ -1,9 +1,19 @@
 name: throttle
 tagline: rate limiter for pipes - --rate N/s or N/m
 description: |
-  Limit throughput in a pipeline to stay within API rate limits. Sits
-  between source and consumer, re-emitting lines at a controlled rate.
-  Supports initial burst windows and token-based rate limiting for LLM APIs.
+  Controls how fast lines flow through a pipeline. You set a rate like 10/s or 100/m and throttle re-emits lines at that pace. Sits between a source and a consumer to keep you under API rate limits without writing sleep loops.
+problem: >
+  You pipe 10,000 URLs into an API client and get rate-limited after the first 100.
+  You add a sleep between calls but it is either too slow (wasting time) or too fast
+  (still hitting limits). Burst handling requires a token bucket you do not want to implement.
+before: |
+  cat urls.txt | while read url; do
+    curl -s "$url"
+    sleep 0.1
+  done
+  # too slow for APIs that allow bursts
+  # too fast when the API is strict
+after: "cat urls.txt | vrk throttle --rate 10/s | xargs -I{} curl -s {}"
 group: v1
 category: utilities
 example: cat urls.txt | vrk throttle --rate 10/s | xargs -I{} vrk grab {}

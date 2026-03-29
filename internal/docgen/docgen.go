@@ -23,7 +23,7 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 	for _, t := range tools {
 		var b strings.Builder
 
-		// Frontmatter
+		// Frontmatter (group/mcp_callable kept for site filtering, not rendered as badges)
 		b.WriteString("---\n")
 		fmt.Fprintf(&b, "title: \"vrk %s\"\n", t.Name)
 		fmt.Fprintf(&b, "description: \"%s\"\n", t.Tagline)
@@ -36,16 +36,57 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 		// Generated marker
 		b.WriteString("<!-- generated - do not edit below this line -->\n\n")
 
-		// Contract section
-		b.WriteString("## Contract\n\n")
-		fmt.Fprintf(&b, "`stdin → %s → stdout`\n\n", t.Name)
-		for i, ec := range t.ExitCodes {
-			if i > 0 {
-				b.WriteString(" · ")
-			}
-			fmt.Fprintf(&b, "Exit %d %s", ec.Code, ec.Meaning)
+		// About section (first - what this tool does)
+		if t.Description != "" {
+			b.WriteString("## About\n\n")
+			b.WriteString(strings.TrimRight(t.Description, "\n"))
+			b.WriteString("\n\n")
 		}
-		b.WriteString("\n\n")
+
+		// Problem statement
+		if t.Problem != "" {
+			b.WriteString("## The problem\n\n")
+			b.WriteString(strings.TrimRight(t.Problem, "\n"))
+			b.WriteString("\n\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: %s: missing problem field\n", t.Name)
+		}
+
+		// Before / After section
+		if t.Before != "" && t.After != "" {
+			b.WriteString("## Before and after\n\n")
+			b.WriteString("**Before**\n\n")
+			b.WriteString("```bash\n")
+			b.WriteString(strings.TrimRight(t.Before, "\n"))
+			b.WriteString("\n```\n\n")
+			b.WriteString("**After**\n\n")
+			b.WriteString("```bash\n")
+			b.WriteString(strings.TrimRight(t.After, "\n"))
+			b.WriteString("\n```\n\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: %s: missing before/after fields\n", t.Name)
+		}
+
+		// Example section
+		b.WriteString("## Example\n\n")
+		b.WriteString("```bash\n")
+		b.WriteString(t.Example)
+		b.WriteString("\n```\n\n")
+
+		// Exit codes as table
+		b.WriteString("## Exit codes\n\n")
+		b.WriteString("| Code | Meaning |\n")
+		b.WriteString("|------|---------|\n")
+		// Sort exit codes numerically
+		sortedCodes := make([]schema.ExitCode, len(t.ExitCodes))
+		copy(sortedCodes, t.ExitCodes)
+		sort.Slice(sortedCodes, func(i, j int) bool {
+			return sortedCodes[i].Code < sortedCodes[j].Code
+		})
+		for _, ec := range sortedCodes {
+			fmt.Fprintf(&b, "| %d | %s |\n", ec.Code, ec.Meaning)
+		}
+		b.WriteString("\n")
 
 		// Flags section
 		b.WriteString("## Flags\n\n")
@@ -59,12 +100,6 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 			fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", f.Flag, short, f.Type, f.Description)
 		}
 		b.WriteString("\n")
-
-		// Example section
-		b.WriteString("## Example\n\n")
-		b.WriteString("```bash\n")
-		b.WriteString(t.Example)
-		b.WriteString("\n```\n")
 
 		// Notes (if present)
 		if notesDir != "" {

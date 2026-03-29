@@ -1,9 +1,20 @@
 name: moniker
 tagline: memorable name generator - run IDs, job labels, temp dirs
 description: |
-  Generate adjective-noun names from a curated word list. Deterministic
-  with --seed. Within-run uniqueness via Fisher-Yates shuffle. Add words
-  with --words for lower collision probability.
+  Generates memorable adjective-noun names like "bold-falcon" or "calm-otter" from a curated word list. Useful for pipeline runs, temp directories, and job labels where humans need to reference things by name. Deterministic with a seed, and no duplicates within a batch.
+problem: >
+  During an incident you have six parallel pipeline runs. Someone on the call says
+  "the failing one is 7f3a... no wait, 7f3b..." and everyone is looking at the wrong
+  logs. UUIDs work as identifiers but fail as labels humans reference under pressure.
+before: |
+  RUN_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+  echo "starting run $RUN_ID"
+  # incident call: "which run?" "7f3a9c2e... no, 7f3b..."
+  # six runs open, all starting with 7f3
+after: |
+  RUN_ID=$(vrk moniker --seed "$BUILD_NUMBER")
+  echo "starting run $RUN_ID"
+  # incident call: "which run?" "bold-falcon"
 group: v1
 category: utilities
 example: vrk moniker --seed 42

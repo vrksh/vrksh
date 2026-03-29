@@ -1,9 +1,17 @@
 name: coax
 tagline: retry wrapper - --times, --backoff, --on, --until
 description: |
-  Retry a command with configurable backoff. Stdin is buffered and re-supplied
-  on each attempt. Supports fixed and exponential backoff, exit code filtering,
-  and shell condition checks.
+  Wraps any command with automatic retries and backoff. If the command fails, coax re-runs it - buffering stdin so each attempt gets the same input. You control how many times to retry, how long to wait between attempts, and which exit codes count as retriable.
+problem: >
+  You call an external API in a script and it fails once out of fifty times. You add
+  a retry loop with sleep, but you hardcode the delay, forget to cap retries, and
+  the stdin is consumed on the first attempt so retries send empty input.
+before: |
+  for i in 1 2 3 4 5; do
+    curl -sf https://api.example.com && break
+    sleep $((i * 2))
+  done
+after: "vrk coax --times 5 --backoff exp:200ms -- curl -sf https://api.example.com"
 group: v1
 category: pipeline
 example: vrk coax --times 5 --backoff exp:200ms -- curl -sf https://api.example.com

@@ -9,11 +9,42 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## Contract
+## About
 
-`stdin → slug → stdout`
+Turns arbitrary text into URL-safe slugs. Normalizes Unicode, lowercases everything, and keeps only letters and numbers. Truncates at word boundaries so you don't get cut-off words. Processes one line at a time for batch use.
 
-Exit 0 Success · Exit 1 Runtime error (I/O failure) · Exit 2 Interactive TTY with no stdin
+## The problem
+
+You need a URL-safe slug from a blog title. You lowercase and replace spaces with hyphens, but forget about Unicode, punctuation, and consecutive separators. The slug "my--great--post-!" breaks your router.
+
+## Before and after
+
+**Before**
+
+```bash
+echo 'My Great Post!' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-'
+# consecutive hyphens, no Unicode normalization, no truncation
+```
+
+**After**
+
+```bash
+echo 'My Great Post!' | vrk slug
+```
+
+## Example
+
+```bash
+echo 'My Article Title' | vrk slug
+```
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Runtime error (I/O failure) |
+| 2 | Interactive TTY with no stdin |
 
 ## Flags
 
@@ -24,8 +55,3 @@ Exit 0 Success · Exit 1 Runtime error (I/O failure) · Exit 2 Interactive TTY w
 | `--json` | -j | bool | Emit JSON per line: {input, output} |
 | `--quiet` | -q | bool | Suppress stderr output |
 
-## Example
-
-```bash
-echo 'My Article Title' | vrk slug
-```

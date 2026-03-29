@@ -1,9 +1,17 @@
 name: bare
 tagline: symlink creator - use vrksh tools without the vrk prefix
 description: |
-  Create symlinks so every tool can be called directly by name without
-  the vrk prefix. Preview with --dry-run, remove with --remove. Only
-  overwrites existing files with --force.
+  Lets you call any vrksh tool by name without the vrk prefix. Instead of vrk tok, vrk jwt, vrk epoch, you just type tok, jwt, epoch. It creates symlinks in the same directory as the binary - nothing is copied, nothing is installed elsewhere.
+problem: >
+  Every vrksh command requires the vrk prefix. In interactive sessions you type
+  vrk tok, vrk jwt, vrk epoch dozens of times a day. The prefix adds friction
+  without adding clarity.
+before: |
+  alias tok='vrk tok'
+  alias jwt='vrk jwt'
+  alias epoch='vrk epoch'
+  # repeat for 28 tools...
+after: "vrk bare"
 group: v1
 category: meta
 example: vrk --bare --dry-run

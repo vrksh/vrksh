@@ -1,12 +1,20 @@
 name: prompt
 tagline: LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
 description: |
-  Send a prompt to an LLM and print the response. Supports Anthropic and
-  OpenAI APIs with optional JSON schema validation, retry with temperature
-  escalation, and budget guards. Temperature defaults to 0 for determinism.
+  Sends a prompt to an LLM and prints the response to stdout. Works with Anthropic and OpenAI APIs. You pipe content in, optionally set a system prompt, and get the response back - no curl commands, no JSON escaping, no response parsing. Temperature defaults to 0 for deterministic output.
+problem: >
+  You need to call an LLM from a shell script. You write a curl command with JSON
+  escaping, header management, and response parsing. The prompt changes and you
+  break the JSON. The API returns an error and you parse it wrong.
+before: |
+  curl -s https://api.anthropic.com/v1/messages \
+    -H "x-api-key: $ANTHROPIC_API_KEY" \
+    -H "content-type: application/json" \
+    -d '{"model":"claude-sonnet-4-6","max_tokens":1024,"messages":[{"role":"user","content":"Summarize this"}]}'
+after: "cat article.md | vrk prompt --system 'Summarize this' --model claude-sonnet-4-6"
 group: v1
 category: core
-example: echo "Summarize this" | vrk prompt --model claude-sonnet-4-6 --json
+example: cat article.md | vrk prompt --system 'Summarize this' --model claude-sonnet-4-6 --json
 flags:
   - flag: --model
     short: "-m"

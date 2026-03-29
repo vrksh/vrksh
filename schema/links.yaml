@@ -1,9 +1,17 @@
 name: links
 tagline: hyperlink extractor - markdown, HTML, bare URLs to JSONL
 description: |
-  Extract all links from markdown, HTML, or plain text. Each link becomes
-  a JSONL record with text, URL, and source line number. Handles inline
-  markdown, reference-style, HTML anchors, and bare URLs in a single pass.
+  Extracts every link from markdown, HTML, or plain text in one pass. Each link comes out as a JSONL record with the link text, URL, and source line number. Handles inline markdown links, reference-style links, HTML anchors, and bare URLs.
+problem: >
+  You need to extract all links from a markdown file. grep finds bare URLs but misses
+  markdown links. A Python script with regex handles inline links but misses reference-style
+  links. You end up with partial results and no line numbers.
+before: |
+  grep -oE 'https?://[^ ]+' README.md
+  # misses [text](url) markdown links
+  # misses [text][ref] reference links
+  # no line numbers, no link text
+after: "cat README.md | vrk links"
 group: v1
 category: utilities
 example: cat README.md | vrk links

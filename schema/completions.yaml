@@ -1,9 +1,17 @@
 name: completions
 tagline: shell completion script generator - bash, zsh, fish
 description: |
-  Generate shell completion scripts for Bash, Zsh, and Fish. Tab-completes
-  tool names and their flags. Generated from the tool registry inside the
-  binary, so it always matches the exact version you are running.
+  Generates tab-completion scripts for your shell. After installing, vrk <tab> completes tool names and vrk tok --<tab> completes flags. The completions are generated from the binary itself, so they always match the version you have installed.
+problem: >
+  You install vrksh but tab-completion does not work. You cannot remember all 28
+  tool names or their flags. You type vrk and hit tab and nothing happens.
+before: |
+  # write a bash completion script by hand
+  _vrk_complete() {
+    COMPREPLY=($(compgen -W "tok jwt epoch ..." -- "${COMP_WORDS[1]}"))
+  }
+  complete -F _vrk_complete vrk
+after: "vrk completions bash > ~/.bash_completion.d/vrk"
 group: v1
 category: meta
 example: vrk completions bash > ~/.bash_completion.d/vrk

@@ -10,13 +10,28 @@ Agents need deterministic tools. The standard Unix toolkit was designed for huma
 
 ## What it is
 
-vrksh (वृक्ष) is the Sanskrit word for tree.
-
-The command is `vrk`. The project is `vrksh`. The domain is `vrk.sh`.
+vrksh (वृक्ष) is the Sanskrit word for tree. The command is `vrk`. The project is `vrksh`. The domain is `vrk.sh`.
 
 vrk is pronounced "vruk" - rhymes with truck, not with "work" or "V-R-K."
 
-A single static binary with 28 Unix-style tools for AI pipelines. Every tool reads stdin, writes stdout, exits 0/1/2. Nothing else.
+A single static binary with 26 Unix-style tools for AI pipelines. Every tool reads stdin, writes stdout, exits 0/1/2. Nothing else.
+
+## The contract
+
+Every vrk tool follows these rules:
+
+```
+stdin   ->  data in
+stdout  ->  data out
+stderr  ->  errors only
+exit 0  ->  success
+exit 1  ->  failure (bad input, API error, condition not met)
+exit 2  ->  usage error (bad flags, missing input)
+--json  ->  errors go to stdout as {"error":"...","code":N}
+--help  ->  always works, always explains the tool
+```
+
+This contract is what makes vrk tools composable with each other and callable by agents without special handling. An agent does not need to parse stderr to know if a tool failed - it checks the exit code. It does not need to guess the output format - stdout is always the data.
 
 ## How the binary works
 
@@ -25,7 +40,7 @@ vrk uses multicall dispatch - the same binary handles every tool. The first argu
 ```bash
 vrk tok              # runs the tok tool
 vrk prompt           # runs the prompt tool
-vrk --manifest       # shows all 28 tools as JSON
+vrk --manifest       # shows all tools as JSON
 vrk --skills tok     # shows tok's agent skill reference
 vrk --help           # top-level usage
 ```
@@ -79,20 +94,3 @@ vrk completions fish > ~/.config/fish/completions/vrk.fish
 ```
 
 After sourcing the script, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags.
-
-## The contract
-
-Every vrk tool follows these rules:
-
-```
-stdin   ->  data in
-stdout  ->  data out
-stderr  ->  errors only
-exit 0  ->  success
-exit 1  ->  failure (bad input, API error, condition not met)
-exit 2  ->  usage error (bad flags, missing input)
---json  ->  errors go to stdout as {"error":"...","code":N}
---help  ->  always works, always explains the tool
-```
-
-This contract is what makes vrk tools composable with each other and callable by agents without special handling. An agent does not need to parse stderr to know if a tool failed - it checks the exit code. It does not need to guess the output format - stdout is always the data.

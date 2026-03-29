@@ -16,6 +16,9 @@ type Tool struct {
 	Name        string     `yaml:"name"`
 	Tagline     string     `yaml:"tagline"`
 	Description string     `yaml:"description"`
+	Problem     string     `yaml:"problem"`
+	Before      string     `yaml:"before"`
+	After       string     `yaml:"after"`
 	Group       string     `yaml:"group"`
 	Category    string     `yaml:"category"`
 	Example     string     `yaml:"example"`

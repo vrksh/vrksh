@@ -1,9 +1,17 @@
 name: sse
 tagline: SSE stream parser - text/event-stream to JSONL
 description: |
-  Parse Server-Sent Event streams into JSONL records. Handles data: prefixes,
-  blank-line delimiters, multi-line data fields, and [DONE] sentinels.
-  Extract nested fields with --field dot-path syntax.
+  Parses Server-Sent Event streams into clean JSONL records. Handles the data: prefixes, blank-line delimiters, multi-line data fields, and [DONE] sentinels that make raw SSE awkward to work with. You can extract nested fields from the JSON data using dot-path syntax.
+problem: >
+  You curl an LLM streaming endpoint and get raw SSE frames - data: prefixes, blank
+  lines, [DONE] sentinels. You need clean JSONL records. You write an awk script
+  that breaks on multi-line data fields.
+before: |
+  curl -sN https://api.example.com/stream | \
+    grep '^data: ' | sed 's/^data: //' | grep -v '^\[DONE\]$'
+  # breaks on multi-line data fields
+  # loses event types and IDs
+after: "curl -sN https://api.example.com/stream | vrk sse"
 group: v1
 category: pipeline
 example: curl -sN https://api.example.com/stream | vrk sse

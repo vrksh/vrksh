@@ -1,9 +1,18 @@
 name: epoch
 tagline: timestamp converter - unix/ISO, relative time
 description: |
-  Convert between Unix timestamps and ISO 8601 dates. Supports relative
-  offsets (+3d, -1h), timezone conversion, and JSON output with all
-  representations. Temperature defaults to 0 for determinism.
+  Converts between Unix timestamps and human-readable dates. You can pass a timestamp, an ISO date, or a relative offset like +3d or -1h. Works the same on macOS and Linux, unlike the date command which differs between platforms.
+problem: >
+  You have a Unix timestamp from an API response and need to know what date it is.
+  The date command syntax differs between macOS and Linux. date -d works on Linux,
+  date -r works on macOS, and neither handles relative offsets like "+3d" natively.
+before: |
+  # Linux
+  date -d @1740009600
+  # macOS
+  date -r 1740009600
+  # relative? write Python
+after: "vrk epoch 1740009600 --iso"
 group: v1
 category: utilities
 example: vrk epoch 1740009600 --iso

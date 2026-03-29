@@ -1,9 +1,18 @@
 name: base
 tagline: encoding converter - base64, base64url, hex, base32
 description: |
-  Encode and decode between base64, base64url, hex, and base32. Same flags
-  on every platform. Strips exactly one trailing newline from stdin before
-  encoding. Two subcommands: encode --to and decode --from.
+  Encodes and decodes between base64, base64url, hex, and base32. Works identically on macOS and Linux - no more remembering whether it is base64 -D or base64 -d. Two subcommands: encode and decode.
+problem: >
+  You write a deploy script that base64-decodes a secret on macOS. It works. CI runs
+  on Linux and fails because macOS uses base64 -D while Linux uses base64 -d. You add
+  an OS check and now your three-line decode is twelve lines.
+before: |
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "$ENCODED" | base64 -D
+  else
+    echo "$ENCODED" | base64 -d
+  fi
+after: "echo \"$ENCODED\" | vrk base decode --from base64"
 group: v1
 category: utilities
 example: echo 'hello' | vrk base encode --to base64

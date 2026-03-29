@@ -13,10 +13,6 @@
         <!-- Title bar -->
         <div class="mb-8">
           <h1 class="text-3xl font-bold mb-2">{{ .Title }}</h1>
-          <div class="flex items-center gap-3 text-sm" style="color: var(--color-muted);">
-            {{ with .Params.group }}<span class="px-1.5 py-0.5 rounded badge-{{ . }}">{{ . }}</span>{{ end }}
-            {{ if .Params.mcp_callable }}<span class="px-1.5 py-0.5 rounded badge-mcp">MCP</span>{{ end }}
-          </div>
         </div>
 
         <div class="prose">

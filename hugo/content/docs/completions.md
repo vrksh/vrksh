@@ -9,11 +9,45 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## Contract
+## About
 
-`stdin → completions → stdout`
+Generates tab-completion scripts for your shell. After installing, vrk <tab> completes tool names and vrk tok --<tab> completes flags. The completions are generated from the binary itself, so they always match the version you have installed.
 
-Exit 0 Script emitted to stdout · Exit 1 Unknown shell argument · Exit 2 No shell argument provided
+## The problem
+
+You install vrksh but tab-completion does not work. You cannot remember all 28 tool names or their flags. You type vrk and hit tab and nothing happens.
+
+## Before and after
+
+**Before**
+
+```bash
+# write a bash completion script by hand
+_vrk_complete() {
+  COMPREPLY=($(compgen -W "tok jwt epoch ..." -- "${COMP_WORDS[1]}"))
+}
+complete -F _vrk_complete vrk
+```
+
+**After**
+
+```bash
+vrk completions bash > ~/.bash_completion.d/vrk
+```
+
+## Example
+
+```bash
+vrk completions bash > ~/.bash_completion.d/vrk
+```
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Script emitted to stdout |
+| 1 | Unknown shell argument |
+| 2 | No shell argument provided |
 
 ## Flags
 
@@ -21,8 +55,3 @@ Exit 0 Script emitted to stdout · Exit 1 Unknown shell argument · Exit 2 No sh
 |------|-------|------|-------------|
 | `--json` | -j | bool | Emit errors as JSON |
 
-## Example
-
-```bash
-vrk completions bash > ~/.bash_completion.d/vrk
-```

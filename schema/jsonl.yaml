@@ -1,9 +1,20 @@
 name: jsonl
 tagline: JSON array to JSONL converter - --collect, --json
 description: |
-  Split JSON arrays into one record per line (default), or collect JSONL
-  lines back into a JSON array (--collect). Streaming decoder handles
-  arrays larger than memory. Preserves large integers with UseNumber().
+  Converts between JSON arrays and JSONL (one record per line). Splits arrays for pipeline processing, or collects JSONL lines back into an array when an API expects one. Uses a streaming decoder, so it handles arrays larger than available memory.
+problem: >
+  You have a 3GB JSON array from a data export and need to process records one per
+  line. jq -c '.[]' loads the entire array into memory and gets OOM-killed. Going the
+  other direction - collecting JSONL back into an array for an API that expects one -
+  requires careful bracket and comma handling that breaks on empty input.
+before: |
+  # split: jq loads entire array into memory, OOM on large files
+  cat data.json | jq -c '.[]'
+  # collect: manual bracket/comma handling
+  echo '['; cat records.jsonl | sed 's/$/,/' | sed '$ s/,$//' ; echo ']'
+after: |
+  cat data.json | vrk jsonl
+  cat records.jsonl | vrk jsonl --collect
 group: v1
 category: utilities
 example: cat data.json | vrk jsonl

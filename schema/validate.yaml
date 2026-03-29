@@ -1,9 +1,18 @@
 name: validate
 tagline: JSONL schema validator - --schema, --strict, --fix, --json
 description: |
-  Validate JSON records against a type-map schema. Valid records pass through
-  to stdout. Invalid records are dropped with a warning. Use --strict to stop
-  on the first failure. Use --fix to auto-repair with vrk prompt.
+  Checks every JSON record in a stream against a schema you provide. Valid records pass through to stdout. Invalid ones are dropped with a warning so downstream tools only see clean data. Use --strict to halt on the first bad record instead of skipping it.
+problem: >
+  You have a JSONL stream and need to ensure every record matches a schema before it
+  enters your database. jq can check types but the expressions get unreadable fast.
+  A bad record slips through and corrupts downstream aggregations.
+before: |
+  cat records.jsonl | while read line; do
+    echo "$line" | jq -e '.name | type == "string"' > /dev/null && \
+    echo "$line" | jq -e '.age | type == "number"' > /dev/null && \
+    echo "$line"
+  done
+after: "cat records.jsonl | vrk validate --schema '{\"name\":\"string\",\"age\":\"number\"}'"
 group: v1
 category: pipeline
 example: cat records.jsonl | vrk validate --schema '{"name":"string","age":"number"}' --strict
