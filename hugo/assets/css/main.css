@@ -261,6 +261,24 @@ pre:hover .copy-btn,
 .pagefind-ui__search-input {
   background-color: var(--color-surface) !important;
   color: var(--color-text) !important;
+  font-family: var(--font-sans) !important;
+  font-weight: 400 !important;
+}
+
+.pagefind-ui__search-input::placeholder {
+  font-weight: 400 !important;
+}
+
+.pagefind-ui__search-clear {
+  font-family: var(--font-mono) !important;
+  font-size: 0.7rem !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0.25rem 0.75rem !important;
 }
 
 .pagefind-ui__result {

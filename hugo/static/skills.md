@@ -2,44 +2,9 @@
 
 Machine-readable tool reference. One section per tool.
 
-## grab - URL fetcher - clean markdown, plain text, or raw HTML.
-
-Group: input
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--text` | -t | Plain prose output, no markdown syntax |
-| `--raw` |   | Raw HTML, no processing |
-| `--json` | -j | Emit JSON envelope with metadata |
-
-Exit 0: Success
-Exit 1: HTTP error, fetch timeout, or I/O error
-Exit 2: Usage error - invalid URL, no input, mutually exclusive flags
-
-```bash
-vrk grab --text https://example.com/article
-```
-
-## links - Hyperlink extractor - markdown, HTML, bare URLs to JSONL.
-
-Group: input
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--bare` | -b | Output URLs only, one per line |
-| `--json` | -j | Append `{"_vrk":"links","count":N}` after all records |
-
-Exit 0: Success (including no links found)
-Exit 1: I/O error reading stdin
-Exit 2: Usage error - interactive terminal with no stdin, unknown flag
-
-```bash
-cat README.md | vrk links --bare
-```
-
 ## tok - Token counter - cl100k_base, --budget guard, --json.
 
-Group: transform
+Group: core
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -56,193 +21,9 @@ Exit 2: Usage error - no input, unknown flag
 cat prompt.txt | vrk tok --budget 4000
 ```
 
-## chunk - Token-aware text splitter - JSONL chunks within a token budget.
-
-Group: transform
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--size` |   | Max tokens per chunk (required) |
-| `--overlap` |   | Token overlap between adjacent chunks (default 0) |
-| `--by` |   | Chunking strategy: `paragraph` or token-level (default) |
-
-Exit 0: Success (including empty input)
-Exit 1: I/O error, tokenizer failure
-Exit 2: --size missing or < 1, --overlap >= --size, unknown --by mode
-
-```bash
-cat doc.txt | vrk chunk --size 1000 --overlap 100
-```
-
-## plain - Markdown stripper - removes syntax, keeps prose.
-
-Group: transform
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--json` | -j | JSON envelope: `{"text":"...","input_bytes":N,"output_bytes":M}` |
-
-Exit 0: Success (including empty input)
-Exit 1: I/O error reading stdin
-Exit 2: Interactive terminal with no input, unknown flag
-
-```bash
-vrk grab https://example.com | vrk plain
-```
-
-## recase - Naming convention converter - snake, camel, kebab, pascal, title.
-
-Group: transform
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--to` |   | Target convention (required): camel, pascal, snake, kebab, screaming, title, lower, upper |
-| `--json` | -j | Emit JSON object per line |
-| `--quiet` | -q | Suppress stderr |
-
-Exit 0: Success (including empty stdin)
-Exit 1: I/O error reading stdin
-Exit 2: --to missing or unknown, unknown flag, interactive terminal
-
-```bash
-echo 'hello_world' | vrk recase --to camel
-```
-
-## slug - URL/filename slug generator - --separator, --max, --json.
-
-Group: transform
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--separator` |   | Word separator (default: `-`) |
-| `--max` |   | Max output length; truncates at word boundary |
-| `--json` | -j | Emit `{"input":"...","output":"..."}` per line |
-| `--quiet` | -q | Suppress stderr |
-
-Exit 0: Success (including empty output)
-Exit 1: I/O error reading stdin
-Exit 2: Interactive terminal with no stdin, unknown flag
-
-```bash
-echo 'Hello, World!' | vrk slug
-```
-
-## pct - Percent encoder/decoder - RFC 3986, --encode, --decode, --form.
-
-Group: transform
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--encode` |   | Percent-encode input |
-| `--decode` |   | Percent-decode input |
-| `--form` |   | Form mode: spaces as `+` instead of `%20` |
-| `--json` | -j | Emit JSON object per line |
-| `--quiet` | -q | Suppress stderr |
-
-Exit 0: Success (including empty input)
-Exit 1: Invalid percent-encoded sequence during decode
-Exit 2: Neither or both mode flags, unknown flag, interactive terminal
-
-```bash
-echo 'hello world' | vrk pct --encode
-```
-
-## base - Encoding converter - base64, base64url, hex, base32.
-
-Group: transform
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--to` |   | Target encoding for encode subcommand |
-| `--from` |   | Source encoding for decode subcommand |
-| `--quiet` | -q | Suppress stderr |
-
-Exit 0: Success (including empty input)
-Exit 1: Invalid input data for the chosen decoding
-Exit 2: No subcommand, missing --to/--from, unsupported encoding, unknown flag
-
-```bash
-echo 'hello' | vrk base encode --to base64
-```
-
-## jsonl - JSON array to JSONL converter - --collect, --json.
-
-Group: transform
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--collect` | -c | JSONL to JSON array mode |
-| `--json` | -j | Append `{"_vrk":"jsonl","count":N}` (split mode only) |
-
-Exit 0: Success (including empty input)
-Exit 1: Invalid JSON input, non-array in split mode
-Exit 2: Interactive TTY with no stdin, unknown flag
-
-```bash
-echo '[{"a":1},{"a":2}]' | vrk jsonl
-```
-
-## assert - Pipeline condition check - jq conditions, --contains, --matches.
-
-Group: guard
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `<condition>` |   | jq-compatible condition (positional, repeatable) |
-| `--contains` |   | Assert stdin contains substring |
-| `--matches` |   | Assert stdin matches Go regex |
-| `--message` | -m | Custom failure message |
-| `--json` | -j | Emit `{"passed":bool,...}` to stdout |
-| `--quiet` | -q | Suppress stderr on failure |
-
-Exit 0: Assertion passed, stdin passed through
-Exit 1: Assertion failed, JSON parse error, I/O error
-Exit 2: No condition, no stdin, mode conflict, invalid regex
-
-```bash
-echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set result
-```
-
-## validate - JSONL schema validator - --schema, --strict, --fix, --json.
-
-Group: guard
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--schema` | -s | Inline JSON schema or file path (required) |
-| `--strict` |   | Exit 1 on first invalid line |
-| `--fix` |   | Attempt LLM repair of invalid lines |
-| `--json` | -j | Append metadata record at end |
-
-Exit 0: All valid, or invalid found but --strict not set
-Exit 1: --strict and invalid line found; I/O error
-Exit 2: --schema missing or invalid, unknown schema type, unknown flag
-
-```bash
-cat records.jsonl | vrk validate --schema '{"name":"string","age":"number"}' --strict
-```
-
-## mask - Secret redactor - entropy + pattern-based, streaming.
-
-Group: guard
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--pattern` |   | Additional regex (repeatable) |
-| `--entropy` |   | Shannon entropy threshold (default 4.0) |
-| `--json` | -j | Append metadata record after output |
-
-Exit 0: Success (redacted or not)
-Exit 1: I/O error
-Exit 2: Interactive terminal, unknown flag, invalid --pattern regex
-
-```bash
-vrk prompt --system "summarise" < doc.txt | vrk mask | vrk kv set summary
-```
-
 ## prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
 
-Group: execute
+Group: core
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -264,9 +45,81 @@ Exit 2: Usage error - no input, missing flags
 echo "Summarize this" | vrk prompt --model claude-sonnet-4-6 --json
 ```
 
+## chunk - Token-aware text splitter - JSONL chunks within a token budget.
+
+Group: core
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--size` |   | Max tokens per chunk (required) |
+| `--overlap` |   | Token overlap between adjacent chunks (default 0) |
+| `--by` |   | Chunking strategy: `paragraph` or token-level (default) |
+
+Exit 0: Success (including empty input)
+Exit 1: I/O error, tokenizer failure
+Exit 2: --size missing or < 1, --overlap >= --size, unknown --by mode
+
+```bash
+cat doc.txt | vrk chunk --size 1000 --overlap 100
+```
+
+## grab - URL fetcher - clean markdown, plain text, or raw HTML.
+
+Group: pipeline
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--text` | -t | Plain prose output, no markdown syntax |
+| `--raw` |   | Raw HTML, no processing |
+| `--json` | -j | Emit JSON envelope with metadata |
+
+Exit 0: Success
+Exit 1: HTTP error, fetch timeout, or I/O error
+Exit 2: Usage error - invalid URL, no input, mutually exclusive flags
+
+```bash
+vrk grab --text https://example.com/article
+```
+
+## sse - SSE stream parser - text/event-stream to JSONL.
+
+Group: pipeline
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--event` | -e | Only emit events of this type |
+| `--field` | -F | Extract a dot-path field as plain text |
+
+Exit 0: Success (stream parsed, [DONE] or EOF)
+Exit 1: I/O error reading stdin
+Exit 2: Interactive terminal with no stdin, unknown flag
+
+```bash
+curl -sN $API | vrk sse --event content_block_delta --field data.delta.text
+```
+
+## validate - JSONL schema validator - --schema, --strict, --fix, --json.
+
+Group: pipeline
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--schema` | -s | Inline JSON schema or file path (required) |
+| `--strict` |   | Exit 1 on first invalid line |
+| `--fix` |   | Attempt LLM repair of invalid lines |
+| `--json` | -j | Append metadata record at end |
+
+Exit 0: All valid, or invalid found but --strict not set
+Exit 1: --strict and invalid line found; I/O error
+Exit 2: --schema missing or invalid, unknown schema type, unknown flag
+
+```bash
+cat records.jsonl | vrk validate --schema '{"name":"string","age":"number"}' --strict
+```
+
 ## coax - Retry wrapper - --times, --backoff, --on, --until.
 
-Group: execute
+Group: pipeline
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -287,7 +140,7 @@ vrk coax --times 3 --backoff exp:1s --on 1 -- vrk prompt --system "summarise" < 
 
 ## kv - Key-value store - SQLite-backed, namespaces, TTL, atomic counters.
 
-Group: store
+Group: pipeline
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -306,23 +159,22 @@ Exit 2: Usage error - unknown subcommand, missing args
 vrk kv set --ns cache mykey "myvalue" --ttl 1h
 ```
 
-## emit - Structured logger - wraps stdin lines as JSONL log records.
+## mask - Secret redactor - entropy + pattern-based, streaming.
 
-Group: store
+Group: pipeline
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--level` | -l | Log level: debug, info (default), warn, error |
-| `--tag` |   | Add "tag" field to every record |
-| `--msg` |   | Override message; stdin as JSON to merge extra fields |
-| `--parse-level` |   | Auto-detect level from line prefix |
+| `--pattern` |   | Additional regex (repeatable) |
+| `--entropy` |   | Shannon entropy threshold (default 4.0) |
+| `--json` | -j | Append metadata record after output |
 
-Exit 0: Success
+Exit 0: Success (redacted or not)
 Exit 1: I/O error
-Exit 2: Interactive stdin, unknown flag, invalid --level
+Exit 2: Interactive terminal, unknown flag, invalid --pattern regex
 
 ```bash
-./deploy.sh 2>&1 | vrk emit --tag deploy --parse-level
+vrk prompt --system "summarise" < doc.txt | vrk mask | vrk kv set summary
 ```
 
 ## jwt - JWT inspector - decode, --claim, --expired, --valid.
@@ -383,25 +235,22 @@ Exit 2: --count < 1, unknown flag
 vrk uuid --v7
 ```
 
-## moniker - Memorable name generator - run IDs, job labels, temp dirs.
+## base - Encoding converter - base64, base64url, hex, base32.
 
 Group: utility
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--count` | -n | Number of names (default 1) |
-| `--separator` |   | Word separator (default `-`) |
-| `--words` |   | Words per name, minimum 2 (default 2) |
-| `--seed` |   | Fix random seed for deterministic output |
-| `--json` | -j | Emit `{"name":"...","words":[...]}` per name |
+| `--to` |   | Target encoding for encode subcommand |
+| `--from` |   | Source encoding for decode subcommand |
 | `--quiet` | -q | Suppress stderr |
 
-Exit 0: Success
-Exit 1: Count exceeds available unique combinations
-Exit 2: --count 0, --words < 2, unknown flag
+Exit 0: Success (including empty input)
+Exit 1: Invalid input data for the chosen decoding
+Exit 2: No subcommand, missing --to/--from, unsupported encoding, unknown flag
 
 ```bash
-vrk moniker --seed 42
+echo 'hello' | vrk base encode --to base64
 ```
 
 ## digest - Universal hasher - sha256/md5/sha512, --hmac, --compare.
@@ -427,21 +276,132 @@ Exit 2: Unknown flag/algo, --hmac without --key, --bare + --json
 echo 'hello' | vrk digest --bare
 ```
 
-## sse - SSE stream parser - text/event-stream to JSONL.
+## plain - Markdown stripper - removes syntax, keeps prose.
 
 Group: utility
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--event` | -e | Only emit events of this type |
-| `--field` | -F | Extract a dot-path field as plain text |
+| `--json` | -j | JSON envelope: `{"text":"...","input_bytes":N,"output_bytes":M}` |
 
-Exit 0: Success (stream parsed, [DONE] or EOF)
+Exit 0: Success (including empty input)
+Exit 1: I/O error reading stdin
+Exit 2: Interactive terminal with no input, unknown flag
+
+```bash
+vrk grab https://example.com | vrk plain
+```
+
+## links - Hyperlink extractor - markdown, HTML, bare URLs to JSONL.
+
+Group: utility
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--bare` | -b | Output URLs only, one per line |
+| `--json` | -j | Append `{"_vrk":"links","count":N}` after all records |
+
+Exit 0: Success (including no links found)
+Exit 1: I/O error reading stdin
+Exit 2: Usage error - interactive terminal with no stdin, unknown flag
+
+```bash
+cat README.md | vrk links --bare
+```
+
+## recase - Naming convention converter - snake, camel, kebab, pascal, title.
+
+Group: utility
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--to` |   | Target convention (required): camel, pascal, snake, kebab, screaming, title, lower, upper |
+| `--json` | -j | Emit JSON object per line |
+| `--quiet` | -q | Suppress stderr |
+
+Exit 0: Success (including empty stdin)
+Exit 1: I/O error reading stdin
+Exit 2: --to missing or unknown, unknown flag, interactive terminal
+
+```bash
+echo 'hello_world' | vrk recase --to camel
+```
+
+## slug - URL/filename slug generator - --separator, --max, --json.
+
+Group: utility
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--separator` |   | Word separator (default: `-`) |
+| `--max` |   | Max output length; truncates at word boundary |
+| `--json` | -j | Emit `{"input":"...","output":"..."}` per line |
+| `--quiet` | -q | Suppress stderr |
+
+Exit 0: Success (including empty output)
 Exit 1: I/O error reading stdin
 Exit 2: Interactive terminal with no stdin, unknown flag
 
 ```bash
-curl -sN $API | vrk sse --event content_block_delta --field data.delta.text
+echo 'Hello, World!' | vrk slug
+```
+
+## moniker - Memorable name generator - run IDs, job labels, temp dirs.
+
+Group: utility
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--count` | -n | Number of names (default 1) |
+| `--separator` |   | Word separator (default `-`) |
+| `--words` |   | Words per name, minimum 2 (default 2) |
+| `--seed` |   | Fix random seed for deterministic output |
+| `--json` | -j | Emit `{"name":"...","words":[...]}` per name |
+| `--quiet` | -q | Suppress stderr |
+
+Exit 0: Success
+Exit 1: Count exceeds available unique combinations
+Exit 2: --count 0, --words < 2, unknown flag
+
+```bash
+vrk moniker --seed 42
+```
+
+## pct - Percent encoder/decoder - RFC 3986, --encode, --decode, --form.
+
+Group: utility
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--encode` |   | Percent-encode input |
+| `--decode` |   | Percent-decode input |
+| `--form` |   | Form mode: spaces as `+` instead of `%20` |
+| `--json` | -j | Emit JSON object per line |
+| `--quiet` | -q | Suppress stderr |
+
+Exit 0: Success (including empty input)
+Exit 1: Invalid percent-encoded sequence during decode
+Exit 2: Neither or both mode flags, unknown flag, interactive terminal
+
+```bash
+echo 'hello world' | vrk pct --encode
+```
+
+## jsonl - JSON array to JSONL converter - --collect, --json.
+
+Group: utility
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--collect` | -c | JSONL to JSON array mode |
+| `--json` | -j | Append `{"_vrk":"jsonl","count":N}` (split mode only) |
+
+Exit 0: Success (including empty input)
+Exit 1: Invalid JSON input, non-array in split mode
+Exit 2: Interactive TTY with no stdin, unknown flag
+
+```bash
+echo '[{"a":1},{"a":2}]' | vrk jsonl
 ```
 
 ## sip - Stream sampler - --first, --count, --every, --sample.
@@ -501,4 +461,44 @@ Exit 2: Interactive terminal with no input, unknown flag
 
 ```bash
 vrk urlinfo --field host 'https://api.example.com/path'
+```
+
+## emit - Structured logger - wraps stdin lines as JSONL log records.
+
+Group: utility
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--level` | -l | Log level: debug, info (default), warn, error |
+| `--tag` |   | Add "tag" field to every record |
+| `--msg` |   | Override message; stdin as JSON to merge extra fields |
+| `--parse-level` |   | Auto-detect level from line prefix |
+
+Exit 0: Success
+Exit 1: I/O error
+Exit 2: Interactive stdin, unknown flag, invalid --level
+
+```bash
+./deploy.sh 2>&1 | vrk emit --tag deploy --parse-level
+```
+
+## assert - Pipeline condition check - jq conditions, --contains, --matches.
+
+Group: utility
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `<condition>` |   | jq-compatible condition (positional, repeatable) |
+| `--contains` |   | Assert stdin contains substring |
+| `--matches` |   | Assert stdin matches Go regex |
+| `--message` | -m | Custom failure message |
+| `--json` | -j | Emit `{"passed":bool,...}` to stdout |
+| `--quiet` | -q | Suppress stderr on failure |
+
+Exit 0: Assertion passed, stdin passed through
+Exit 1: Assertion failed, JSON parse error, I/O error
+Exit 2: No condition, no stdin, mode conflict, invalid regex
+
+```bash
+echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set result
 ```

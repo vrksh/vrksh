@@ -15,44 +15,74 @@
       {{ partial "search.html" . }}
     </div>
 
-    <!-- Group filter -->
-    <div class="flex flex-wrap gap-2 mb-6">
-      <button class="filter-btn active" data-filter="all">All</button>
-      <button class="filter-btn" data-filter="core">Core</button>
-      <button class="filter-btn" data-filter="pipeline">Pipeline</button>
-      <button class="filter-btn" data-filter="utilities">Utilities</button>
-    </div>
+    {{/* Define tool order by tier, then pipeline position */}}
+    {{ $coreOrder := slice "tok" "prompt" "chunk" }}
+    {{ $pipelineOrder := slice "grab" "sse" "validate" "coax" "kv" "mask" }}
+    {{ $utilityOrder := slice "jwt" "epoch" "uuid" "base" "digest" "plain" "links" "recase" "slug" "moniker" "pct" "jsonl" "sip" "throttle" "urlinfo" "emit" "assert" }}
+    {{ $metaOrder := slice "completions" "bare" }}
 
-    <!-- Tool grid -->
-    <div id="tool-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {{ range .Pages }}
-      <a href="{{ .RelPermalink }}" class="tool-card block rounded-lg p-4 transition-colors" data-group="{{ .Params.group }}" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
-        <div class="flex items-center gap-2 mb-2">
-          <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ .Params.tool }}</code>
-          {{ with .Params.group }}<span class="text-xs px-1.5 py-0.5 rounded badge-{{ . }}">{{ . }}</span>{{ end }}
-          {{ if .Params.mcp_callable }}<span class="text-xs px-1.5 py-0.5 rounded badge-mcp">MCP</span>{{ end }}
-        </div>
-        <p class="text-sm" style="color: var(--color-muted);">{{ .Description }}</p>
-      </a>
+    <!-- Core -->
+    <h2 class="text-2xl font-bold mt-12 mb-5" style="color: var(--color-text);">Core</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
+      {{ range $tool := $coreOrder }}
+        {{ with ($.Page.GetPage (printf "/docs/%s" $tool)) }}
+        <a href="{{ .RelPermalink }}" class="tool-card tool-card-core block rounded-lg p-5 transition-colors" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
+          <div class="flex items-center gap-2 mb-2">
+            <code class="text-base font-semibold" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ .Params.tool }}</code>
+            <span class="text-xs px-1.5 py-0.5 rounded badge-core">core</span>
+          </div>
+          <p class="text-sm" style="color: var(--color-muted);">{{ .Description }}</p>
+        </a>
+        {{ end }}
       {{ end }}
     </div>
 
-    <script>
-    document.querySelectorAll('.filter-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var filter = btn.dataset.filter;
-        document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        document.querySelectorAll('.tool-card').forEach(function(card) {
-          if (filter === 'all' || card.dataset.group === filter) {
-            card.style.display = '';
-          } else {
-            card.style.display = 'none';
-          }
-        });
-      });
-    });
-    </script>
+    <!-- Pipeline -->
+    <h2 class="text-2xl font-bold mt-14 mb-5" style="color: var(--color-text);">Pipeline</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
+      {{ range $tool := $pipelineOrder }}
+        {{ with ($.Page.GetPage (printf "/docs/%s" $tool)) }}
+        <a href="{{ .RelPermalink }}" class="tool-card block rounded-lg p-4 transition-colors" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
+          <div class="flex items-center gap-2 mb-2">
+            <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ .Params.tool }}</code>
+            <span class="text-xs px-1.5 py-0.5 rounded badge-pipeline">pipeline</span>
+          </div>
+          <p class="text-sm" style="color: var(--color-muted);">{{ .Description }}</p>
+        </a>
+        {{ end }}
+      {{ end }}
+    </div>
+
+    <!-- Utilities -->
+    <h2 class="text-2xl font-bold mt-14 mb-5" style="color: var(--color-text);">Utilities</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
+      {{ range $tool := $utilityOrder }}
+        {{ with ($.Page.GetPage (printf "/docs/%s" $tool)) }}
+        <a href="{{ .RelPermalink }}" class="tool-card tool-card-compact block rounded-lg p-4 transition-colors" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
+          <div class="flex items-center gap-2 mb-1">
+            <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ .Params.tool }}</code>
+          </div>
+          <p class="text-sm" style="color: var(--color-muted);">{{ .Description }}</p>
+        </a>
+        {{ end }}
+      {{ end }}
+    </div>
+
+    <!-- Meta -->
+    <h2 class="text-2xl font-bold mt-14 mb-5" style="color: var(--color-text);">Meta</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
+      {{ range $tool := $metaOrder }}
+        {{ with ($.Page.GetPage (printf "/docs/%s" $tool)) }}
+        <a href="{{ .RelPermalink }}" class="tool-card block rounded-lg p-4 transition-colors" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
+          <div class="flex items-center gap-2 mb-1">
+            <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ .Params.tool }}</code>
+            <span class="text-xs px-1.5 py-0.5 rounded badge-meta">meta</span>
+          </div>
+          <p class="text-sm" style="color: var(--color-muted);">{{ .Description }}</p>
+        </a>
+        {{ end }}
+      {{ end }}
+    </div>
 
     {{ else }}
     <!-- Generic list for non-docs sections (blog, etc.) -->
