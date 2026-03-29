@@ -33,14 +33,10 @@
         </button>
       </div>
 
-      <div class="flex items-center justify-center gap-4 text-sm" style="color: var(--color-muted);">
-        <span class="px-2 py-0.5 rounded" style="background-color: var(--color-surface); border: 1px solid var(--color-border);">v{{ .Site.Params.version }}</span>
-        <span>macOS &middot; Linux</span>
+      <div class="flex items-center justify-center gap-6 mt-6 text-sm">
+        <span style="color: var(--color-muted);">v{{ .Site.Params.version }} &middot; macOS &middot; Linux</span>
+        <a href="/docs/" class="inline-block rounded-full px-4 py-1.5 transition-colors" style="color: var(--color-muted); text-decoration: none; border: 1px solid var(--color-border);" onmouseover="this.style.borderColor='var(--color-accent)';this.style.color='var(--color-accent)'" onmouseout="this.style.borderColor='var(--color-border)';this.style.color='var(--color-muted)'">Read the docs &rarr;</a>
       </div>
-
-      <p class="mt-6" style="font-size: 0.875rem;">
-        <a href="/docs/" style="color: var(--color-accent); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">&rarr; Read the docs</a>
-      </p>
     </section>
 
     <!-- Canonical pipeline -->
