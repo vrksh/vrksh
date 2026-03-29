@@ -340,3 +340,10 @@ pre:hover .copy-btn,
   background-color: var(--color-accent);
   color: var(--color-bg);
 }
+
+.footer-author {
+  color: var(--color-muted);
+}
+.footer-author:hover {
+  color: var(--color-accent);
+}
