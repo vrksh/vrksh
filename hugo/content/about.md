@@ -10,9 +10,11 @@ Agents need deterministic tools. The standard Unix toolkit was designed for huma
 
 ## What it is
 
-vrksh (वृक्ष) is the Sanskrit word for tree. Pronounced "vruk" - rhymes with truck, not with "work" or "V-R-K."
+vrksh (वृक्ष) is the Sanskrit word for tree.
 
-The binary is `vrk`. The project is `vrksh`. The domain is `vrk.sh`.
+The command is `vrk`. The project is `vrksh`. The domain is `vrk.sh`.
+
+vrk is pronounced "vruk" - rhymes with truck, not with "work" or "V-R-K."
 
 A single static binary with 28 Unix-style tools for AI pipelines. Every tool reads stdin, writes stdout, exits 0/1/2. Nothing else.
 
@@ -38,7 +40,7 @@ This prints the embedded JSON tool manifest - the same manifest that agents use 
 
 ## Bare mode
 
-By default, every tool is accessed through the `vrk` prefix: `vrk tok`, `vrk jwt`, `vrk epoch`. Bare mode creates symlinks so you can call tools directly by name - `tok`, `jwt`, `epoch` - without the prefix.
+By default, every tool is accessed through the `vrk` prefix: `vrk tok`, `vrk jwt`, `vrk epoch`. [Bare mode](/docs/bare/) creates symlinks so you can call tools directly by name - `tok`, `jwt`, `epoch` - without the prefix.
 
 The symlinks are created in the same directory as the vrk binary. Nothing is copied. Each symlink points back to `vrk`, which detects the name it was called as and dispatches accordingly.
 
@@ -65,6 +67,18 @@ If the binary directory requires elevated permissions:
 ```bash
 sudo vrk --bare
 ```
+
+## Shell completions
+
+vrk ships with tab completion for bash, zsh, and fish. The [completions](/docs/completions/) tool generates the appropriate script for your shell:
+
+```bash
+vrk completions bash > ~/.bash_completion.d/vrk
+vrk completions zsh > ~/.zsh/completions/_vrk
+vrk completions fish > ~/.config/fish/completions/vrk.fish
+```
+
+After sourcing the script, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags.
 
 ## The contract
 

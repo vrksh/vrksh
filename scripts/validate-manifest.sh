@@ -17,6 +17,9 @@ fi
 
 missing=0
 
+# Meta tools that don't have per-tool skill files.
+meta_tools="bare completions"
+
 for tool in $tools; do
   # 1. hugo/content/docs/<tool>.md
   if [ ! -f "$ROOT/hugo/content/docs/${tool}.md" ]; then
@@ -42,10 +45,12 @@ for tool in $tools; do
     missing=$((missing + 1))
   fi
 
-  # 5. Per-tool skill file in hugo/static/skills/<tool>.md
-  if [ ! -f "$ROOT/hugo/static/skills/${tool}.md" ]; then
-    echo "MISSING  hugo/static/skills/${tool}.md"
-    missing=$((missing + 1))
+  # 5. Per-tool skill file in hugo/static/skills/<tool>.md (skip meta tools)
+  if ! echo "$meta_tools" | grep -qw "$tool"; then
+    if [ ! -f "$ROOT/hugo/static/skills/${tool}.md" ]; then
+      echo "MISSING  hugo/static/skills/${tool}.md"
+      missing=$((missing + 1))
+    fi
   fi
 
   # 6. OG image in hugo/static/og/<tool>.png
