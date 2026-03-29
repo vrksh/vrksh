@@ -2,7 +2,7 @@
 
 @theme {
   --font-sans: 'Urbanist', sans-serif;
-  --font-serif: 'Crimson Pro', serif;
+
   --font-mono: 'IBM Plex Mono', monospace;
   --color-bg: #0D0D0D;
   --color-surface: #161616;
@@ -355,9 +355,9 @@ pre:hover .copy-btn,
   color: var(--color-bg);
 }
 
-.footer-author {
+.muted-link {
   color: var(--color-muted);
 }
-.footer-author:hover {
+.muted-link:hover {
   color: var(--color-accent);
 }
