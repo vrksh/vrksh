@@ -11,6 +11,22 @@ uglyURLs = false
   version = "0.1.0"
   github = "https://github.com/vrksh/vrksh"
 
+[[module.mounts]]
+  source = "content"
+  target = "content"
+[[module.mounts]]
+  source = "static"
+  target = "static"
+[[module.mounts]]
+  source = "layouts"
+  target = "layouts"
+[[module.mounts]]
+  source = "data"
+  target = "data"
+[[module.mounts]]
+  source = "../schema"
+  target = "data/schema"
+
 [markup]
   [markup.highlight]
     noClasses = false

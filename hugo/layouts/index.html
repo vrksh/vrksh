@@ -28,7 +28,7 @@
         <code class="text-base md:text-lg" style="font-family: var(--font-mono); color: var(--color-accent);">
           brew install vrk
         </code>
-        <button class="ml-3 inline-flex items-center" style="color: var(--color-muted);" onclick="var btn=this;var orig=btn.innerHTML;navigator.clipboard.writeText('brew install vrk').then(function(){btn.innerHTML='copied';setTimeout(function(){btn.innerHTML=orig;},1500);})" aria-label="Copy install command">
+        <button class="ml-3 inline-flex items-center brew-copy-btn" style="color: var(--color-muted);" aria-label="Copy install command">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
@@ -59,27 +59,48 @@ echo "$CONTENT" | vrk tok --budget 8000 \
      | vrk kv set "summary:latest"</code></pre>
     </section>
 
-    <!-- Tool grid -->
-    <section class="max-w-6xl mx-auto px-4 pb-16">
-      <h2 class="text-2xl font-semibold mb-6">Tools</h2>
+    <!-- Core tools -->
+    <section class="max-w-6xl mx-auto px-4 pb-12">
+      <h2 class="text-2xl font-semibold mb-6">Core</h2>
       <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {{ range $name := (slice "tok" "prompt" "jwt" "kv" "grab") }}
-          {{ $tool := index hugo.Data.tools $name }}
-          {{ if $tool }}
-          <a href="/docs/{{ $name }}/" class="block rounded-lg p-4 transition-colors" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
-            <div class="flex items-center gap-2 mb-2">
-              <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ $tool.name }}</code>
-              <span class="text-xs px-1.5 py-0.5 rounded badge-{{ $tool.group }}">{{ $tool.group }}</span>
-            </div>
-            <p class="text-sm" style="color: var(--color-muted);">{{ $tool.tagline }}</p>
-          </a>
+        {{ range $name, $tool := hugo.Data.schema }}
+          {{ if eq $tool.category "core" }}
+          <div class="rounded-lg p-5" style="background-color: var(--color-surface); border: 1px solid var(--color-border);">
+            <a href="/docs/{{ $tool.name }}/" style="text-decoration: none;">
+              <div class="flex items-center gap-2 mb-2">
+                <code class="text-base font-semibold" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ $tool.name }}</code>
+              </div>
+              <p class="text-sm mb-3" style="color: var(--color-muted);">{{ $tool.tagline | strings.FirstUpper }}</p>
+            </a>
+            <pre class="text-xs" style="margin: 0; padding: 0.5rem 0.75rem; background-color: var(--color-bg); border-radius: 0.375rem; white-space: pre-wrap; word-break: break-all;"><code>{{ $tool.example }}</code></pre>
+          </div>
           {{ end }}
         {{ end }}
       </div>
     </section>
 
+    <!-- Pipeline tools -->
+    <section class="max-w-6xl mx-auto px-4 pb-12">
+      <h2 class="text-2xl font-semibold mb-6">Pipeline</h2>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {{ range $name, $tool := hugo.Data.schema }}
+          {{ if eq $tool.category "pipeline" }}
+          <a href="/docs/{{ $tool.name }}/" class="block rounded-lg p-4 transition-colors" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
+            <div class="flex items-center gap-2 mb-2">
+              <code class="text-sm font-medium" style="color: var(--color-text); font-family: var(--font-mono);">vrk {{ $tool.name }}</code>
+            </div>
+            <p class="text-sm" style="color: var(--color-muted);">{{ $tool.tagline | strings.FirstUpper }}</p>
+          </a>
+          {{ end }}
+        {{ end }}
+      </div>
+      <p class="mt-6 text-sm">
+        <a href="/docs/" class="inline-block rounded-full px-4 py-1.5 transition-colors" style="color: var(--color-muted); text-decoration: none; border: 1px solid var(--color-border);" onmouseover="this.style.borderColor='var(--color-accent)';this.style.color='var(--color-accent)'" onmouseout="this.style.borderColor='var(--color-border)';this.style.color='var(--color-muted)'">+ 17 utilities: jwt, epoch, uuid, and more &rarr;</a>
+      </p>
+    </section>
+
     <!-- Install section -->
-    <section class="max-w-4xl mx-auto px-4 pb-16">
+    <section class="max-w-6xl mx-auto px-4 pb-16">
       <h2 class="text-2xl font-semibold mb-6">Install</h2>
 
       <!-- Tabs -->
@@ -101,6 +122,21 @@ echo "$CONTENT" | vrk tok --budget 8000 \
       </div>
 
       <script>
+      // Brew copy button — same icons as copy-button.html partial
+      (function() {
+        var copyIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+        var checkIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        var btn = document.querySelector('.brew-copy-btn');
+        if (btn) {
+          btn.addEventListener('click', function() {
+            navigator.clipboard.writeText('brew install vrk').then(function() {
+              btn.innerHTML = checkIcon;
+              setTimeout(function() { btn.innerHTML = copyIcon; }, 1500);
+            });
+          });
+        }
+      })();
+
       document.querySelectorAll('.install-tab').forEach(function(tab) {
         tab.addEventListener('click', function() {
           document.querySelectorAll('.install-tab').forEach(function(t) { t.classList.remove('active'); });
@@ -113,7 +149,7 @@ echo "$CONTENT" | vrk tok --budget 8000 \
     </section>
 
     <!-- Agent section -->
-    <section class="max-w-4xl mx-auto px-4 pb-20">
+    <section class="max-w-6xl mx-auto px-4 pb-20">
       <h2 class="text-2xl font-semibold mb-3">Works where agents work.</h2>
       <p class="mb-6" style="color: var(--color-muted);">
         vrksh ships a discovery-only MCP server. Add it to Claude Code and every tool becomes visible to your agent. Tools run as shell commands - the MCP layer handles discovery, not execution.
