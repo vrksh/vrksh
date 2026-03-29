@@ -1,61 +1,40 @@
 name: validate
-tagline: JSONL schema validator — --schema, --strict, --fix, --json
-tier: pipeline
-when_to_use: When you need to verify JSON records match an expected shape before downstream processing
-hero_command: "echo '{\"name\":\"Alice\",\"age\":30}' | vrk validate --schema '{\"name\":\"string\",\"age\":\"number\"}'"
-primary_output: '{"name":"Alice","age":30}'
-primary_context: reads from stdin
-avoid: Do not use for JSON Schema (draft-07) validation — validate uses a simplified type-map format
-contract:
-  input: stdin
-  output: stdout
-  output_format: jsonl
-failure:
-  exit_code: 2
-  stderr_contains: "validate: --schema is required"
-  example_command: echo '{}' | vrk validate
-mcp:
-  callable: true
+tagline: JSONL schema validator - --schema, --strict, --fix, --json
+description: |
+  Validate JSON records against a type-map schema. Valid records pass through
+  to stdout. Invalid records are dropped with a warning. Use --strict to stop
+  on the first failure. Use --fix to auto-repair with vrk prompt.
+group: v1
+example: cat records.jsonl | vrk validate --schema '{"name":"string","age":"number"}' --strict
 flags:
-  - name: schema
-    default: ""
+  - flag: --schema
+    short: "-s"
+    type: string
     description: JSON schema inline or path to .json file (required)
-  - name: strict
-    default: "false"
+  - flag: --strict
+    short: ""
+    type: bool
     description: Exit 1 on first invalid record
-  - name: fix
-    default: "false"
+  - flag: --fix
+    short: ""
+    type: bool
     description: Send invalid records to vrk prompt for repair
-  - name: json
-    default: "false"
+  - flag: --json
+    short: "-j"
+    type: bool
     description: Append metadata trailer after all output
-  - name: quiet
-    default: "false"
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress stderr output
-examples:
-  - title: Validate a JSON record
-    command: "echo '{\"name\":\"Alice\",\"age\":30}' | vrk validate --schema '{\"name\":\"string\",\"age\":\"number\"}'"
-    output: '{"name":"Alice","age":30}'
-    test: true
-  - title: failure case
-    command: echo '{}' | vrk validate
-    output: "usage error: validate: --schema is required"
-    is_failure: true
-before: |
-  schema = {"name": str, "age": int}
-  for line in sys.stdin:
-      record = json.loads(line)
-      for k, t in schema.items():
-          assert isinstance(record.get(k), t)
-after: "cat records.jsonl | vrk validate --schema '{\"name\":\"string\",\"age\":\"number\"}' --strict"
 exit_codes:
-  0: All records passed
-  1: Record failed in --strict mode or scanner error
-  2: --schema missing, schema JSON invalid, unknown flag
-related:
-  - prompt
-  - assert
-  - jsonl
-composable_with:
-  - jq
-  - prompt
+  - code: 0
+    meaning: All records passed
+  - code: 1
+    meaning: Record failed in --strict mode, or scanner error
+  - code: 2
+    meaning: --schema missing, schema JSON invalid, unknown flag
+og_image:
+  headline: "Validate JSON. Stop bad data early."
+  code: "vrk validate --schema spec.json --strict < records.jsonl"
+mcp_callable: true

@@ -1,59 +1,40 @@
 name: pct
-tagline: "Percent encoder/decoder - RFC 3986, --encode, --decode, --form"
-tier: utility
-when_to_use: When you need to percent-encode query parameters or decode URL-encoded strings
-hero_command: echo 'hello world' | vrk pct --encode
-primary_output: hello%20world
-primary_context: reads from stdin
-avoid: Do not use for full URL construction - pct encodes values, not complete URLs
-contract:
-  input: stdin
-  output: stdout
-  output_format: text
-failure:
-  exit_code: 2
-  stderr_contains: "pct: either --encode or --decode is required"
-  example_command: echo 'test' | vrk pct
-mcp:
-  callable: true
+tagline: Percent encoder/decoder - RFC 3986, --encode, --decode, --form
+description: |
+  Percent-encode or decode strings per RFC 3986. Form mode uses
+  application/x-www-form-urlencoded rules where spaces become +.
+  Handles multi-byte UTF-8 correctly. One result per line for batch use.
+group: v1
+example: echo 'hello world' | vrk pct --encode
 flags:
-  - name: encode
-    default: "false"
+  - flag: --encode
+    short: ""
+    type: bool
     description: Percent-encode input (RFC 3986 unless --form)
-  - name: decode
-    default: "false"
+  - flag: --decode
+    short: ""
+    type: bool
     description: Percent-decode input
-  - name: form
-    default: "false"
-    description: "Use application/x-www-form-urlencoded rules (spaces <-> +)"
-  - name: json
-    default: "false"
+  - flag: --form
+    short: ""
+    type: bool
+    description: "Use application/x-www-form-urlencoded rules (spaces / +)"
+  - flag: --json
+    short: "-j"
+    type: bool
     description: "Emit JSON per line: {input, output, op, mode}"
-  - name: quiet
-    default: "false"
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress stderr output
-examples:
-  - title: Percent-encode a string
-    command: echo 'hello world' | vrk pct --encode
-    output: hello%20world
-    test: true
-  - title: failure case
-    command: echo 'test' | vrk pct
-    output: "usage error: pct: either --encode or --decode is required"
-    is_failure: true
-before: |
-  from urllib.parse import quote
-  print(quote("hello world"))
-after: echo 'hello world' | vrk pct --encode
 exit_codes:
-  0: Success
-  1: "Invalid percent sequence during decode, I/O error"
-  2: "Neither --encode nor --decode specified, both specified together, interactive TTY"
-related:
-  - urlinfo
-  - base
-  - slug
-composable_with:
-  - urlinfo
-  - curl
-  - xargs
+  - code: 0
+    meaning: Success
+  - code: 1
+    meaning: Invalid percent sequence during decode, I/O error
+  - code: 2
+    meaning: Neither --encode nor --decode specified, both specified, interactive TTY
+og_image:
+  headline: "Percent-encode URLs. RFC 3986 correct."
+  code: "echo 'hello world' | vrk pct --encode"
+mcp_callable: true

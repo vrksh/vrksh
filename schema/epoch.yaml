@@ -1,61 +1,44 @@
 name: epoch
-tagline: Timestamp converter — unix<>ISO, relative time
-tier: utility
-when_to_use: When you need to convert between Unix timestamps and human-readable dates
-hero_command: vrk epoch 1740009600 --iso
-primary_output: 2025-02-20T00:00:00Z
-primary_context: reads positional arg or stdin
-avoid: Do not use for date arithmetic beyond simple offsets — epoch handles +3d, not "next Tuesday"
-contract:
-  input: arg
-  output: stdout
-  output_format: text
-failure:
-  exit_code: 2
-  stderr_contains: "epoch: unsupported format"
-  example_command: vrk epoch 'not-a-time'
-mcp:
-  callable: true
+tagline: Timestamp converter - unix/ISO, relative time
+description: |
+  Convert between Unix timestamps and ISO 8601 dates. Supports relative
+  offsets (+3d, -1h), timezone conversion, and JSON output with all
+  representations. Temperature defaults to 0 for determinism.
+group: v1
+example: vrk epoch 1740009600 --iso
 flags:
-  - name: iso
-    default: "false"
+  - flag: --iso
+    short: ""
+    type: bool
     description: Output as ISO 8601 string instead of Unix integer
-  - name: json
-    default: "false"
+  - flag: --json
+    short: "-j"
+    type: bool
     description: Emit JSON with all representations
-  - name: tz
-    default: ""
+  - flag: --tz
+    short: ""
+    type: string
     description: Timezone for --iso or --json output (IANA name or offset)
-  - name: now
-    default: "false"
+  - flag: --now
+    short: ""
+    type: bool
     description: Print current Unix timestamp without reading stdin
-  - name: at
-    default: ""
+  - flag: --at
+    short: ""
+    type: string
     description: Reference timestamp for relative input (makes scripts deterministic)
-  - name: quiet
-    default: "false"
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress stderr output
-examples:
-  - title: Convert Unix timestamp to ISO
-    command: vrk epoch 1740009600 --iso
-    output: 2025-02-20T00:00:00Z
-    test: true
-  - title: failure case
-    command: vrk epoch 'not-a-time'
-    output: 'usage error: epoch: unsupported format "not-a-time": natural language not supported; accepted forms: unix integer, +3d/-3d, YYYY-MM-DD, YYYY-MM-DDTHH:MM:SSZ'
-    is_failure: true
-before: |
-  from datetime import datetime, timezone
-  dt = datetime.fromtimestamp(1740009600, tz=timezone.utc)
-  print(dt.isoformat())
-after: vrk epoch 1740009600 --iso
 exit_codes:
-  0: Success
-  1: Runtime error (I/O failure)
-  2: Unsupported format, ambiguous timezone, --tz without --iso/--json
-related:
-  - jwt
-  - kv
-composable_with:
-  - kv
-  - jq
+  - code: 0
+    meaning: Success
+  - code: 1
+    meaning: Runtime error (I/O failure)
+  - code: 2
+    meaning: Unsupported format, ambiguous timezone, --tz without --iso/--json
+og_image:
+  headline: "Convert timestamps. Unix, ISO, relative."
+  code: "vrk epoch 1740009600 --iso"
+mcp_callable: true

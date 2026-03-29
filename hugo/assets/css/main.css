@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-sans: 'Urbanist', sans-serif;
   --font-serif: 'Crimson Pro', serif;
   --font-mono: 'JetBrains Mono', monospace;
   --color-bg: #0D0D0D;

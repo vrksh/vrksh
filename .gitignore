@@ -16,3 +16,4 @@ vrksh
 # Hugo build output
 hugo/public/
 hugo/resources/
+node_modules/

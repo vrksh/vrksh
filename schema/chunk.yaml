@@ -1,57 +1,36 @@
 name: chunk
-tagline: Token-aware text splitter — JSONL chunks within a token budget
-tier: core
-when_to_use: When a document exceeds an LLM context window and needs splitting into token-bounded segments
-hero_command: echo "Hello world this is a test" | vrk chunk --size 100
-primary_output: '{"index":0,"text":"Hello world this is a test","tokens":6}'
-primary_context: reads from stdin
-avoid: Do not use for splitting by lines or bytes — chunk splits by tokens
-contract:
-  input: stdin
-  output: stdout
-  output_format: jsonl
-failure:
-  exit_code: 2
-  stderr_contains: "chunk: --size is required"
-  example_command: echo "test" | vrk chunk
-mcp:
-  callable: true
+tagline: Token-aware text splitter - JSONL chunks within a token budget
+description: |
+  Split text into token-bounded chunks for processing within LLM context
+  windows. Each chunk is a JSONL record with index, text, and exact token
+  count. Supports paragraph-aware splitting and overlap for context continuity.
+group: v1
+example: cat long-doc.md | vrk chunk --size 4000
 flags:
-  - name: size
-    default: ""
+  - flag: --size
+    short: ""
+    type: int
     description: Max tokens per chunk (required)
-  - name: overlap
-    default: "0"
+  - flag: --overlap
+    short: ""
+    type: int
     description: Token overlap between adjacent chunks
-  - name: by
-    default: ""
+  - flag: --by
+    short: ""
+    type: string
     description: "Chunking strategy: paragraph"
-  - name: quiet
-    default: "false"
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress stderr output
-examples:
-  - title: Split text into chunks
-    command: echo "Hello world this is a test" | vrk chunk --size 100
-    output: '{"index":0,"text":"Hello world this is a test","tokens":6}'
-    test: true
-  - title: failure case
-    command: echo "test" | vrk chunk
-    output: "usage error: chunk: --size is required"
-    is_failure: true
-before: |
-  import tiktoken
-  enc = tiktoken.get_encoding("cl100k_base")
-  tokens = enc.encode(text)
-  chunks = [tokens[i:i+4000] for i in range(0, len(tokens), 4000)]
-after: cat doc.txt | vrk chunk --size 4000
 exit_codes:
-  0: Success, including empty input
-  1: I/O error
-  2: No input, --size missing or < 1, --overlap >= --size, unknown flag
-related:
-  - tok
-  - prompt
-  - plain
-composable_with:
-  - jq
-  - prompt
+  - code: 0
+    meaning: Success, including empty input
+  - code: 1
+    meaning: I/O error
+  - code: 2
+    meaning: No input, --size missing or < 1, --overlap >= --size, unknown flag
+og_image:
+  headline: "Split documents. Stay within token budgets."
+  code: "cat long-doc.md | vrk chunk --size 4000"
+mcp_callable: true

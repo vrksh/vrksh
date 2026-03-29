@@ -1,61 +1,40 @@
 name: throttle
-tagline: "Rate limiter for pipes — --rate N/s or N/m"
-tier: utility
-when_to_use: When you need to limit throughput in a pipeline to stay within API rate limits
-hero_command: cat urls.txt | vrk throttle --rate 10/s | xargs -I{} vrk grab {}
-primary_output: (pass-through of input lines at controlled rate)
-primary_context: reads from stdin only
-avoid: "Do not use for precise timing — throttle is approximate; for exact intervals use sleep in a loop"
-contract:
-  input: stdin
-  output: stdout
-  output_format: text
-failure:
-  exit_code: 2
-  stderr_contains: "throttle: --rate is required"
-  example_command: echo 'test' | vrk throttle
-mcp:
-  callable: false
+tagline: Rate limiter for pipes - --rate N/s or N/m
+description: |
+  Limit throughput in a pipeline to stay within API rate limits. Sits
+  between source and consumer, re-emitting lines at a controlled rate.
+  Supports initial burst windows and token-based rate limiting for LLM APIs.
+group: v1
+example: cat urls.txt | vrk throttle --rate 10/s | xargs -I{} vrk grab {}
 flags:
-  - name: rate
-    default: ""
+  - flag: --rate
+    short: "-r"
+    type: string
     description: "Rate limit in N/s or N/m format (required)"
-  - name: burst
-    default: "0"
+  - flag: --burst
+    short: ""
+    type: int
     description: Emit first N lines immediately before applying rate limit
-  - name: tokens-field
-    default: ""
+  - flag: --tokens-field
+    short: ""
+    type: string
     description: Dot-path to JSONL field for token-based rate limiting
-  - name: json
-    default: "false"
+  - flag: --json
+    short: "-j"
+    type: bool
     description: Append metadata record after all output
-  - name: quiet
-    default: "false"
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress stderr output
-examples:
-  - title: Rate-limit URL fetches
-    command: seq 5 | vrk throttle --rate 10/s
-    output: "1\n2\n3\n4\n5"
-    test: false
-  - title: failure case
-    command: echo 'test' | vrk throttle
-    output: "usage error: throttle: --rate is required"
-    is_failure: true
-before: |
-  import time
-  for url in urls:
-      fetch(url)
-      time.sleep(0.1)
-after: cat urls.txt | vrk throttle --rate 10/s | xargs -I{} vrk grab {}
 exit_codes:
-  0: All lines emitted at specified rate
-  1: "Stdin read error, write error, or --tokens-field not found"
-  2: "--rate missing or invalid, interactive TTY"
-related:
-  - sip
-  - grab
-  - coax
-composable_with:
-  - grab
-  - xargs
-  - curl
+  - code: 0
+    meaning: All lines emitted at specified rate
+  - code: 1
+    meaning: Stdin read error, write error, or --tokens-field not found
+  - code: 2
+    meaning: --rate missing or invalid, interactive TTY
+og_image:
+  headline: "Rate-limit your pipes. Stay under API caps."
+  code: "cat urls.txt | vrk throttle --rate 10/s | xargs vrk grab"
+mcp_callable: false

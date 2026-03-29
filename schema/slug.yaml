@@ -1,57 +1,36 @@
 name: slug
-tagline: "URL/filename slug generator - --separator, --max, --json"
-tier: utility
-when_to_use: When you need URL-safe or filesystem-safe identifiers from arbitrary text
-hero_command: echo 'Hello World' | vrk slug
-primary_output: hello-world
-primary_context: reads from stdin
-avoid: Do not use for unique IDs - slug is deterministic; same input always gives same output
-contract:
-  input: stdin
-  output: stdout
-  output_format: text
-failure:
-  exit_code: 2
-  stderr_contains: "slug: no input"
-  example_command: vrk slug
-mcp:
-  callable: true
+tagline: URL/filename slug generator - --separator, --max, --json
+description: |
+  Generate URL-safe slugs from arbitrary text. Unicode NFD normalization,
+  lowercase, keeps only [a-z0-9]. Truncates at word boundary with --max.
+  Configurable separator. Batch processing one line at a time.
+group: v1
+example: echo 'My Article Title' | vrk slug
 flags:
-  - name: separator
-    default: "-"
+  - flag: --separator
+    short: ""
+    type: string
     description: Word separator character or string
-  - name: max
-    default: "0"
-    description: "Max output length; truncated at last separator (0 = no limit)"
-  - name: json
-    default: "false"
+  - flag: --max
+    short: ""
+    type: int
+    description: Max output length; truncated at last separator (0 = no limit)
+  - flag: --json
+    short: "-j"
+    type: bool
     description: "Emit JSON per line: {input, output}"
-  - name: quiet
-    default: "false"
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress stderr output
-examples:
-  - title: Generate a slug
-    command: echo 'Hello World' | vrk slug
-    output: hello-world
-    test: true
-  - title: failure case
-    command: vrk slug
-    output: "usage error: slug: no input: pipe text to stdin"
-    is_failure: true
-before: |
-  import re, unicodedata
-  s = unicodedata.normalize('NFD', text)
-  s = re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')
-after: echo 'Hello World' | vrk slug
 exit_codes:
-  0: Success
-  1: Runtime error (I/O failure)
-  2: Interactive TTY with no stdin
-related:
-  - recase
-  - pct
-  - moniker
-composable_with:
-  - jq
-  - kv
-  - xargs
+  - code: 0
+    meaning: Success
+  - code: 1
+    meaning: Runtime error (I/O failure)
+  - code: 2
+    meaning: Interactive TTY with no stdin
+og_image:
+  headline: "Slugify anything. URL-safe, Unicode-aware."
+  code: "echo 'My Article (2024)' | vrk slug"
+mcp_callable: true

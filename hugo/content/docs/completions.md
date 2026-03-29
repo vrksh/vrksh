@@ -1,21 +1,21 @@
 ---
 title: "vrk completions"
-description: "Shell completion script generator — bash, zsh, fish."
+description: "Shell completion script generator - bash, zsh, fish."
 tool: completions
 group: meta
 mcp_callable: false
 noindex: false
 ---
 
-## The problem
+## What it does
 
-Typing `vrk` followed by a tool name and flags from memory is slow and
-error-prone, especially when a tool has flags you rarely use.
+Generates shell completion scripts for Bash, Zsh, and Fish.
+After installation, Tab-completes tool names and their flags.
 
-## The fix
+The completion script is generated from the tool registry inside the binary,
+so it always matches the exact version you are running.
 
-Generate a completion script for your shell and source it once. After that,
-pressing Tab completes tool names and flags.
+## Install completions
 
 ### Bash
 
@@ -27,13 +27,14 @@ source ~/.bash_completion.d/vrk
 Or system-wide:
 
 ```bash
-vrk completions bash > /etc/bash_completion.d/vrk
+sudo vrk completions bash > /etc/bash_completion.d/vrk
 ```
 
 ### Zsh
 
 ```bash
 vrk completions zsh > "${fpath[1]}/_vrk"
+exec zsh
 ```
 
 ### Fish
@@ -42,8 +43,42 @@ vrk completions zsh > "${fpath[1]}/_vrk"
 vrk completions fish > ~/.config/fish/completions/vrk.fish
 ```
 
-## How it works
+Takes effect immediately in new sessions.
 
-The completion script is generated from the tool registry that ships inside the
-binary. Every tool registers its name, description, and flags at init time, so
-the completion output always matches the exact binary you are running.
+## Verify
+
+Type `vrk` and press Tab to see all tool names:
+
+```
+$ vrk <TAB>
+assert    base      chunk     coax      digest    emit      epoch
+grab      jsonl     jwt       kv        links     mask      moniker
+pct       plain     prompt    recase    sip       slug      sse
+throttle  tok       urlinfo   uuid      validate
+```
+
+Type a tool name and `--` then Tab to see flag completions:
+
+```
+$ vrk tok --<TAB>
+--budget  --json    --model   --quiet
+```
+
+## What gets completed
+
+- All tool names as subcommands of `vrk`
+- All flags for each tool (long and short forms)
+
+## Flags
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--json` | `-j` | bool | `false` | Emit errors as JSON |
+
+## Exit codes
+
+| Exit | Meaning |
+|------|---------|
+| 0 | Script emitted to stdout |
+| 1 | Unknown shell argument |
+| 2 | No shell argument provided |

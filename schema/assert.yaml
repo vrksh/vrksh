@@ -1,60 +1,40 @@
 name: assert
-tagline: "Pipeline condition check — jq conditions, --contains, --matches"
-tier: utility
-when_to_use: When you need a gate in a pipeline that stops on unexpected data
-hero_command: "echo 'build succeeded' | vrk assert --contains 'succeeded'"
-primary_output: build succeeded
-primary_context: reads from stdin
-avoid: "Do not use for complex validation logic — use validate with --schema for structural checks"
-contract:
-  input: stdin
-  output: stdout
-  output_format: text
-failure:
-  exit_code: 1
-  stderr_contains: "assert: assertion failed: input does not contain"
-  example_command: "echo 'build failed' | vrk assert --contains 'succeeded'"
-mcp:
-  callable: true
+tagline: Pipeline condition check - jq conditions, --contains, --matches
+description: |
+  Gate a pipeline on a condition. Reads input, checks the condition, passes
+  data through on success, exits non-zero on failure. jq expressions for
+  JSON, --contains/--matches for plain text.
+group: v1
+example: vrk grab https://api.example.com/health | vrk assert --contains '"status":"ok"'
 flags:
-  - name: contains
-    default: ""
+  - flag: --contains
+    short: ""
+    type: string
     description: Assert stdin contains this literal substring
-  - name: matches
-    default: ""
+  - flag: --matches
+    short: ""
+    type: string
     description: Assert stdin matches this regular expression
-  - name: message
-    default: ""
+  - flag: --message
+    short: "-m"
+    type: string
     description: Custom message on failure
-  - name: json
-    default: "false"
+  - flag: --json
+    short: "-j"
+    type: bool
     description: Emit errors as JSON to stdout
-  - name: quiet
-    default: "false"
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress stderr output on failure
-examples:
-  - title: Assert text contains a substring
-    command: "echo 'build succeeded' | vrk assert --contains 'succeeded'"
-    output: build succeeded
-    test: true
-  - title: failure case
-    command: "echo 'build failed' | vrk assert --contains 'succeeded'"
-    output: 'assert: assertion failed: input does not contain "succeeded"'
-    is_failure: true
-before: |
-  if "succeeded" not in output:
-      sys.exit(1)
-  print(output)
-after: "echo 'build succeeded' | vrk assert --contains 'succeeded'"
 exit_codes:
-  0: "All conditions passed; input passed through to stdout"
-  1: "Assertion failed, or runtime error"
-  2: "No condition specified, mixed modes, invalid regex, interactive TTY"
-related:
-  - validate
-  - coax
-  - grab
-composable_with:
-  - grab
-  - prompt
-  - jq
+  - code: 0
+    meaning: All conditions passed; input passed through to stdout
+  - code: 1
+    meaning: Assertion failed, or runtime error
+  - code: 2
+    meaning: No condition specified, mixed modes, invalid regex, interactive TTY
+og_image:
+  headline: "Assert conditions. Stop bad data."
+  code: "vrk assert --contains '\"status\":\"ok\"' < response.json"
+mcp_callable: true

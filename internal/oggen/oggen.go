@@ -7,7 +7,7 @@
 //   - Text: #E8E8E8 (--color-text)
 //   - Muted: #707070 (--color-muted)
 //   - Accent: #6EE7B7 (--color-accent, commands + highlights)
-//   - Fonts: Plus Jakarta Sans (headings), JetBrains Mono (code/brand)
+//   - Fonts: Urbanist (headings), JetBrains Mono (code/brand)
 //   - Layout: left-aligned, vertically centered, terminal block
 package oggen
 
@@ -142,19 +142,19 @@ func renderCommand(dc *gg.Context, toolName, tagline, command, headline string) 
 	dc.DrawLine(pad, 82, pad+bw, 82)
 	dc.Stroke()
 
-	// Tool name - accent, Plus Jakarta Sans SemiBold
-	if err := setFont(dc, "PlusJakartaSans-SemiBold.ttf", 42); err != nil {
+	// Tool name - accent, Urbanist Medium
+	if err := setFont(dc, "Urbanist-Medium.ttf", 42); err != nil {
 		return err
 	}
 	dc.SetColor(accentCl)
 	dc.DrawString("vrk "+toolName, pad, 160)
 
-	// Subtitle - Crimson Pro Italic, matching website hero subhead
-	if err := setFont(dc, "CrimsonPro-Italic.ttf", 22); err != nil {
+	// Subtitle - Urbanist Regular
+	if err := setFont(dc, "Urbanist-Regular.ttf", 26); err != nil {
 		return err
 	}
-	dc.SetColor(mutedCl)
-	dc.DrawString(headline, pad, 205)
+	dc.SetColor(textCl)
+	dc.DrawString(headline, pad, 210)
 
 	// Terminal block
 	blockPadLeft := pad + 4
@@ -171,8 +171,8 @@ func renderCommand(dc *gg.Context, toolName, tagline, command, headline string) 
 	dc.SetColor(accentCl)
 	dc.DrawString("$ "+command, blockPadLeft, 345)
 
-	// Tagline - Crimson Pro Regular, serif annotation
-	if err := setFont(dc, "CrimsonPro-Regular.ttf", 20); err != nil {
+	// Tagline - JetBrains Mono, monospace comment
+	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 18); err != nil {
 		return err
 	}
 	dc.SetColor(mutedCl)
@@ -201,19 +201,19 @@ func renderPipeline(dc *gg.Context, pipeline, tagline string) error {
 	dc.DrawLine(pad, 82, pad+bw, 82)
 	dc.Stroke()
 
-	// Title - Plus Jakarta Sans SemiBold
-	if err := setFont(dc, "PlusJakartaSans-SemiBold.ttf", 42); err != nil {
+	// Title - Urbanist Medium
+	if err := setFont(dc, "Urbanist-Medium.ttf", 42); err != nil {
 		return err
 	}
 	dc.SetColor(textCl)
 	dc.DrawString("Unix tools for AI pipelines", pad, 160)
 
-	// Subtitle - Crimson Pro Italic
-	if err := setFont(dc, "CrimsonPro-Italic.ttf", 26); err != nil {
+	// Subtitle - Urbanist Regular
+	if err := setFont(dc, "Urbanist-Regular.ttf", 28); err != nil {
 		return err
 	}
-	dc.SetColor(mutedCl)
-	dc.DrawString("One binary. No dependencies. Composable.", pad, 208)
+	dc.SetColor(textCl)
+	dc.DrawString("One binary. No dependencies. Composable.", pad, 212)
 
 	// Terminal block
 	blockPadLeft := pad + 4

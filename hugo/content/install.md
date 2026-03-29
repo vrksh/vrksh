@@ -1,16 +1,22 @@
 ---
 title: "Install"
-description: "Install vrksh - Homebrew, go install, or binary download."
+description: "Install vrksh - Homebrew, go install, or shell script."
 noindex: false
 ---
 
-## Homebrew
+## Homebrew (macOS and Linux)
 
 ```bash
-brew install vrk
+brew install vrksh/homebrew-vrksh/vrk
 ```
 
 The tap is [vrksh/homebrew-vrksh](https://github.com/vrksh/homebrew-vrksh). Homebrew handles updates automatically.
+
+Verify the install:
+
+```bash
+vrk --manifest | head -1
+```
 
 ## go install
 
@@ -18,43 +24,74 @@ The tap is [vrksh/homebrew-vrksh](https://github.com/vrksh/homebrew-vrksh). Home
 go install github.com/vrksh/vrksh@latest
 ```
 
-Requires Go 1.22 or later. The binary lands in `$GOPATH/bin/vrk`.
+Requires Go 1.25+. The binary lands in `$GOPATH/bin/vrk`.
 
-## Binary download
-
-```bash
-curl -sSL https://vrk.sh/install.sh | sh
-```
-
-The install script detects your OS and architecture, downloads the right binary, verifies the SHA256 checksum, and installs to `/usr/local/bin/vrk` (or `~/.local/bin/vrk` if `/usr/local/bin` is not writable).
-
-### Manual download
-
-Download from [GitHub releases](https://github.com/vrksh/vrksh/releases):
-
-| Platform | File |
-|----------|------|
-| macOS (Apple Silicon) | `vrk_darwin_arm64.tar.gz` |
-| macOS (Intel) | `vrk_darwin_amd64.tar.gz` |
-| Linux (x86_64) | `vrk_linux_amd64.tar.gz` |
-| Linux (ARM64) | `vrk_linux_arm64.tar.gz` |
-
-### Verify
+## Shell script (CI and ephemeral environments)
 
 ```bash
-sha256sum vrk_linux_amd64.tar.gz
-# compare with checksums.txt from the release
+curl -fsSL vrk.sh/install.sh | sh
 ```
 
-### Symlink (optional)
+The script detects your OS and architecture, downloads the right binary, verifies the SHA256 checksum, and installs to `/usr/local/bin/vrk` (or `~/.local/bin/vrk` if `/usr/local/bin` is not writable).
 
-If your agent environment expects tools in a specific location:
+For environments where you want the agent onboarding block printed after install:
 
 ```bash
-ln -sf /usr/local/bin/vrk /usr/local/bin/vrk-tok
+curl -fsSL vrk.sh/agent.sh | sh
 ```
 
-The multicall binary responds to `vrk tok` and symlinked names like `vrk-tok`.
+## Shell completions
+
+### Bash
+
+```bash
+vrk completions bash > ~/.bash_completion.d/vrk
+source ~/.bash_completion.d/vrk
+```
+
+### Zsh
+
+```bash
+vrk completions zsh > "${fpath[1]}/_vrk"
+exec zsh
+```
+
+### Fish
+
+```bash
+vrk completions fish > ~/.config/fish/completions/vrk.fish
+```
+
+## Verify
+
+```bash
+vrk --manifest | jq '.tools | length'
+```
+
+```
+26
+```
+
+## Uninstall
+
+Homebrew:
+
+```bash
+brew uninstall vrk
+```
+
+Manual:
+
+```bash
+rm $(which vrk)
+```
+
+If you used `vrk --bare` to create symlinks, remove them first:
+
+```bash
+vrk --bare --remove
+rm $(which vrk)
+```
 
 ## Platform note
 

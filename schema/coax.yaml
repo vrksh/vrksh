@@ -1,67 +1,48 @@
 name: coax
-tagline: Retry wrapper — --times, --backoff, --on, --until
-tier: pipeline
-when_to_use: When a command might fail transiently and needs automatic retries with backoff
-hero_command: vrk coax -- curl -sf https://api.example.com/data
-primary_output: (output of wrapped command)
-primary_context: wraps a command
-avoid: Do not use for permanent failures — coax retries do not fix usage errors or missing credentials
-contract:
-  input: stdin
-  output: stdout
-  output_format: text
-failure:
-  exit_code: 2
-  stderr_contains: "missing command: use -- to separate command from coax flags"
-  example_command: vrk coax
-mcp:
-  callable: false
+tagline: Retry wrapper - --times, --backoff, --on, --until
+description: |
+  Retry a command with configurable backoff. Stdin is buffered and re-supplied
+  on each attempt. Supports fixed and exponential backoff, exit code filtering,
+  and shell condition checks.
+group: v1
+example: vrk coax --times 5 --backoff exp:200ms -- curl -sf https://api.example.com
 flags:
-  - name: times
-    default: "3"
+  - flag: --times
+    short: ""
+    type: int
     description: Number of retries (total attempts = N+1)
-  - name: backoff
-    default: ""
-    description: Delay between retries (500ms or exp:100ms)
-  - name: backoff-max
-    default: "0"
-    description: Cap for exponential backoff
-  - name: "on"
-    default: "[]"
-    description: Retry only on these exit codes
-  - name: until
-    default: ""
+  - flag: --backoff
+    short: ""
+    type: string
+    description: "Delay between retries: 500ms for fixed, exp:100ms for exponential"
+  - flag: --backoff-max
+    short: ""
+    type: duration
+    description: Cap for exponential backoff; 0 means uncapped
+  - flag: --on
+    short: ""
+    type: "[]int"
+    description: Retry only on these exit codes; repeatable
+  - flag: --until
+    short: ""
+    type: string
     description: Shell condition; retry while this exits non-zero
-  - name: quiet
-    default: "false"
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress retry progress lines
-  - name: json
-    default: "false"
+  - flag: --json
+    short: "-j"
+    type: bool
     description: Emit errors as JSON
-examples:
-  - title: Retry a command 3 times
-    command: vrk coax -- curl -sf https://api.example.com/data
-    output: (output from curl)
-    test: false
-  - title: failure case
-    command: vrk coax
-    output: "usage error: missing command: use -- to separate command from coax flags"
-    is_failure: true
-before: |
-  for i in range(4):
-      result = subprocess.run(cmd)
-      if result.returncode == 0:
-          break
-      time.sleep(2 ** i)
-after: vrk coax --times 3 --backoff exp:200ms -- curl -sf https://api.example.com
 exit_codes:
-  0: Command succeeded
-  1: All retries exhausted (last exit code)
-  2: Missing command after --, invalid --backoff spec
-related:
-  - prompt
-  - grab
-composable_with:
-  - curl
-  - prompt
-  - grab
+  - code: 0
+    meaning: Command succeeded (first attempt or a retry)
+  - code: 1
+    meaning: All retries exhausted (last exit code from wrapped command)
+  - code: 2
+    meaning: Missing command after --, invalid --backoff spec
+og_image:
+  headline: "Retry flaky commands. With backoff."
+  code: "vrk coax --times 5 --backoff exp:200ms -- curl -sf URL"
+mcp_callable: false

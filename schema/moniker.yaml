@@ -1,63 +1,44 @@
 name: moniker
-tagline: "Memorable name generator - run IDs, job labels, temp dirs"
-tier: utility
-when_to_use: When you need a human-readable, pronounceable identifier instead of a UUID
-hero_command: vrk moniker --seed 42
-primary_output: distant-shore
-primary_context: generates output (no input)
-avoid: Do not use when uniqueness must be cryptographically guaranteed - use uuid instead
-contract:
-  input: none
-  output: stdout
-  output_format: text
-failure:
-  exit_code: 2
-  stderr_contains: "moniker: --count must be >= 1"
-  example_command: vrk moniker --count 0
-mcp:
-  callable: true
+tagline: Memorable name generator - run IDs, job labels, temp dirs
+description: |
+  Generate adjective-noun names from a curated word list. Deterministic
+  with --seed. Within-run uniqueness via Fisher-Yates shuffle. Add words
+  with --words for lower collision probability.
+group: v1
+example: vrk moniker --seed 42
 flags:
-  - name: count
-    default: "1"
+  - flag: --count
+    short: "-n"
+    type: int
     description: Number of names to generate
-  - name: separator
-    default: "-"
+  - flag: --separator
+    short: ""
+    type: string
     description: Word separator
-  - name: words
-    default: "2"
+  - flag: --words
+    short: ""
+    type: int
     description: Words per name (minimum 2)
-  - name: seed
-    default: "0"
+  - flag: --seed
+    short: ""
+    type: int64
     description: Random seed for deterministic output
-  - name: json
-    default: "false"
+  - flag: --json
+    short: "-j"
+    type: bool
     description: "Emit JSON per name: {name, words}"
-  - name: quiet
-    default: "false"
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress stderr output
-examples:
-  - title: Generate a deterministic name
-    command: vrk moniker --seed 42
-    output: distant-shore
-    test: true
-  - title: failure case
-    command: vrk moniker --count 0
-    output: "usage error: moniker: --count must be >= 1, got 0"
-    is_failure: true
-before: |
-  import random
-  adj = random.choice(["swift", "quiet", "bold"])
-  noun = random.choice(["falcon", "river", "peak"])
-  print(f"{adj}-{noun}")
-after: vrk moniker
 exit_codes:
-  0: Success
-  1: Word pool exhausted for requested count
-  2: "--count less than 1, --words less than 2"
-related:
-  - uuid
-  - slug
-  - kv
-composable_with:
-  - kv
-  - xargs
+  - code: 0
+    meaning: Success
+  - code: 1
+    meaning: Word pool exhausted for requested count
+  - code: 2
+    meaning: --count less than 1, --words less than 2
+og_image:
+  headline: "Generate memorable names. For pipelines."
+  code: "vrk moniker --seed 42"
+mcp_callable: true

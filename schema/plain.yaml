@@ -1,50 +1,28 @@
 name: plain
-tagline: "Markdown stripper - removes syntax, keeps prose"
-tier: utility
-when_to_use: When you need plain text from markdown before token counting or LLM processing
-hero_command: echo '## Hello **world**' | vrk plain
-primary_output: Hello world
-primary_context: reads from stdin or positional arg
-avoid: Do not use for HTML stripping - plain handles markdown syntax, not raw HTML
-contract:
-  input: stdin
-  output: stdout
-  output_format: text
-failure:
-  exit_code: 2
-  stderr_contains: "plain: no input: pipe markdown to stdin"
-  example_command: vrk plain
-mcp:
-  callable: true
+tagline: Markdown stripper - removes syntax, keeps prose
+description: |
+  Strip markdown syntax and return plain text. Link text preserved, URLs
+  dropped. Code content kept, fences stripped. Heading text becomes plain
+  paragraphs. Saves tokens downstream.
+group: v1
+example: cat README.md | vrk plain | vrk tok --budget 4000
 flags:
-  - name: json
-    default: "false"
-    description: "Emit JSON object with text, input_bytes, output_bytes"
-  - name: quiet
-    default: "false"
+  - flag: --json
+    short: "-j"
+    type: bool
+    description: Emit JSON with text, input_bytes, output_bytes
+  - flag: --quiet
+    short: "-q"
+    type: bool
     description: Suppress stderr output
-examples:
-  - title: Strip markdown to plain text
-    command: echo '## Hello **world**' | vrk plain
-    output: Hello world
-    test: true
-  - title: failure case
-    command: vrk plain
-    output: "usage error: plain: no input: pipe markdown to stdin"
-    is_failure: true
-before: |
-  import re
-  text = re.sub(r'[#*_`\[\]()]', '', markdown_text)
-after: cat README.md | vrk plain
 exit_codes:
-  0: Success
-  1: Could not read stdin or write stdout
-  2: Interactive TTY with no piped input and no positional arg
-related:
-  - tok
-  - grab
-  - links
-composable_with:
-  - tok
-  - prompt
-  - grab
+  - code: 0
+    meaning: Success
+  - code: 1
+    meaning: Could not read stdin or write stdout
+  - code: 2
+    meaning: Interactive TTY with no piped input and no positional arg
+og_image:
+  headline: "Strip markdown. Keep the prose."
+  code: "cat README.md | vrk plain | vrk tok"
+mcp_callable: true

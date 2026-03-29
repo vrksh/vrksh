@@ -1,53 +1,28 @@
 name: jsonl
-tagline: "JSON array <-> JSONL converter - --collect, --json"
-tier: utility
-when_to_use: When converting between JSON arrays and line-delimited JSONL for pipeline processing
-hero_command: echo '[{"a":1},{"b":2}]' | vrk jsonl
-primary_output: |
-  {"a":1}
-  {"b":2}
-primary_context: reads from stdin or positional arg
-avoid: Do not use for JSON formatting - jsonl converts between array and line formats, not pretty-printing
-contract:
-  input: stdin
-  output: stdout
-  output_format: jsonl
-failure:
-  exit_code: 1
-  stderr_contains: "jsonl: input is not a JSON array"
-  example_command: echo '{"a":1}' | vrk jsonl
-mcp:
-  callable: true
+tagline: JSON array to JSONL converter - --collect, --json
+description: |
+  Split JSON arrays into one record per line (default), or collect JSONL
+  lines back into a JSON array (--collect). Streaming decoder handles
+  arrays larger than memory. Preserves large integers with UseNumber().
+group: v1
+example: cat data.json | vrk jsonl
 flags:
-  - name: collect
-    default: "false"
+  - flag: --collect
+    short: "-c"
+    type: bool
     description: Collect JSONL lines into a JSON array
-  - name: json
-    default: "false"
+  - flag: --json
+    short: "-j"
+    type: bool
     description: Append metadata trailer after all records (split mode only)
-examples:
-  - title: Split JSON array to JSONL
-    command: echo '[{"a":1},{"b":2}]' | vrk jsonl
-    output: "{\"a\":1}\n{\"b\":2}"
-    test: true
-  - title: failure case
-    command: echo '{"a":1}' | vrk jsonl
-    output: "error: jsonl: input is not a JSON array; for JSONL -> array use --collect"
-    is_failure: true
-before: |
-  import json, sys
-  for item in json.load(sys.stdin):
-      print(json.dumps(item))
-after: cat data.json | vrk jsonl
 exit_codes:
-  0: "Success, including empty input"
-  1: "Invalid JSON, I/O error"
-  2: "Interactive TTY with no input, unknown flag"
-related:
-  - validate
-  - links
-  - emit
-composable_with:
-  - jq
-  - validate
-  - mask
+  - code: 0
+    meaning: Success, including empty input
+  - code: 1
+    meaning: Invalid JSON, I/O error
+  - code: 2
+    meaning: Interactive TTY with no input, unknown flag
+og_image:
+  headline: "JSON arrays to JSONL. And back."
+  code: "vrk grab api.example.com/users | vrk jsonl"
+mcp_callable: true

@@ -1,57 +1,37 @@
 name: emit
-tagline: "Structured logger — wraps stdin lines as JSONL log records"
-tier: utility
-when_to_use: When you need to convert unstructured text output into timestamped JSONL log records
-hero_command: vrk emit "deployment complete"
-primary_output: '{"ts":"2026-03-28T20:59:48.669Z","level":"info","msg":"deployment complete"}'
-primary_context: reads positional arg or stdin
-avoid: "Do not use as a replacement for structured logging libraries — emit is for pipeline output, not application logs"
-contract:
-  input: stdin
-  output: stdout
-  output_format: jsonl
-failure:
-  exit_code: 2
-  stderr_contains: 'emit: unknown level "invalid": must be debug, info, warn, or error'
-  example_command: echo 'test' | vrk emit --level invalid
-mcp:
-  callable: true
+tagline: Structured logger - wraps stdin lines as JSONL log records
+description: |
+  Turn unstructured text into timestamped JSONL log records. Each line
+  becomes a JSON object with ts, level, and msg fields. Supports tagging
+  by source, auto-detecting log level from line prefixes, and merging
+  extra JSON fields.
+group: v1
+example: some-script.sh | vrk emit --level info --tag my-script
 flags:
-  - name: level
-    default: info
+  - flag: --level
+    short: "-l"
+    type: string
     description: "Log level: debug, info, warn, error"
-  - name: tag
-    default: ""
+  - flag: --tag
+    short: ""
+    type: string
     description: Value for the tag field on every record
-  - name: msg
-    default: ""
-    description: "Fixed message override; stdin lines parsed as JSON and merged"
-  - name: parse-level
-    default: "false"
+  - flag: --msg
+    short: ""
+    type: string
+    description: Fixed message override; stdin lines parsed as JSON and merged
+  - flag: --parse-level
+    short: ""
+    type: bool
     description: Auto-detect level from ERROR/WARN/INFO/DEBUG line prefixes
-examples:
-  - title: Emit a log record
-    command: vrk emit "deployment complete"
-    output: '{"ts":"...","level":"info","msg":"deployment complete"}'
-    test: false
-  - title: failure case
-    command: echo 'test' | vrk emit --level invalid
-    output: 'usage error: emit: unknown level "invalid": must be debug, info, warn, or error'
-    is_failure: true
-before: |
-  import json, datetime
-  print(json.dumps({"ts": datetime.utcnow().isoformat() + "Z",
-                    "level": "info", "msg": line}))
-after: some-script.sh | vrk emit --level info --tag my-script
 exit_codes:
-  0: All non-empty lines emitted as JSONL records
-  1: Stdin scanner error or write failure
-  2: "Interactive TTY with no positional arg, or unknown --level value"
-related:
-  - mask
-  - coax
-  - jsonl
-composable_with:
-  - coax
-  - mask
-  - kv
+  - code: 0
+    meaning: All non-empty lines emitted as JSONL records
+  - code: 1
+    meaning: Stdin scanner error or write failure
+  - code: 2
+    meaning: Interactive TTY with no positional arg, or unknown --level value
+og_image:
+  headline: "Structured logs. From any pipe."
+  code: "vrk coax -- ./deploy.sh | vrk emit --tag deploy"
+mcp_callable: true
