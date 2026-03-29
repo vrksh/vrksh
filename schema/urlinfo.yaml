@@ -5,6 +5,7 @@ description: |
   with --field, including nested query parameters via dot-path syntax.
   Pure string parser - no network calls, no DNS lookups.
 group: v1
+category: utilities
 example: echo 'https://api.example.com:8443/v2/users?page=2' | vrk urlinfo
 flags:
   - flag: --field

@@ -5,6 +5,7 @@ description: |
   or raw HTML (--raw). Applies readability-style content extraction.
   Static HTML only - no JavaScript execution.
 group: v1
+category: pipeline
 example: vrk grab --text https://example.com/article
 flags:
   - flag: --text

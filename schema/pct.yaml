@@ -5,6 +5,7 @@ description: |
   application/x-www-form-urlencoded rules where spaces become +.
   Handles multi-byte UTF-8 correctly. One result per line for batch use.
 group: v1
+category: utilities
 example: echo 'hello world' | vrk pct --encode
 flags:
   - flag: --encode

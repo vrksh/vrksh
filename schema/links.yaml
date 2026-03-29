@@ -5,6 +5,7 @@ description: |
   a JSONL record with text, URL, and source line number. Handles inline
   markdown, reference-style, HTML anchors, and bare URLs in a single pass.
 group: v1
+category: utilities
 example: cat README.md | vrk links
 flags:
   - flag: --bare

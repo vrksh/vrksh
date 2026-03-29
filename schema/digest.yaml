@@ -5,6 +5,7 @@ description: |
   for webhook signatures with constant-time verification. Compare file hashes
   with --compare. Streaming - safe for arbitrarily large inputs.
 group: v1
+category: utilities
 example: vrk digest 'hello'
 flags:
   - flag: --algo

@@ -5,6 +5,7 @@ description: |
   windows. Each chunk is a JSONL record with index, text, and exact token
   count. Supports paragraph-aware splitting and overlap for context continuity.
 group: v1
+category: core
 example: cat long-doc.md | vrk chunk --size 4000
 flags:
   - flag: --size

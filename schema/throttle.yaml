@@ -5,6 +5,7 @@ description: |
   between source and consumer, re-emitting lines at a controlled rate.
   Supports initial burst windows and token-based rate limiting for LLM APIs.
 group: v1
+category: utilities
 example: cat urls.txt | vrk throttle --rate 10/s | xargs -I{} vrk grab {}
 flags:
   - flag: --rate

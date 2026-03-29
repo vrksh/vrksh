@@ -5,6 +5,7 @@ description: |
   with --seed. Within-run uniqueness via Fisher-Yates shuffle. Add words
   with --words for lower collision probability.
 group: v1
+category: utilities
 example: vrk moniker --seed 42
 flags:
   - flag: --count

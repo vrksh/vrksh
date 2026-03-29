@@ -5,6 +5,7 @@ description: |
   the vrk prefix. Preview with --dry-run, remove with --remove. Only
   overwrites existing files with --force.
 group: v1
+category: meta
 example: vrk --bare --dry-run
 flags:
   - flag: --force

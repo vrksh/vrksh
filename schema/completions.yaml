@@ -5,6 +5,7 @@ description: |
   tool names and their flags. Generated from the tool registry inside the
   binary, so it always matches the exact version you are running.
 group: v1
+category: meta
 example: vrk completions bash > ~/.bash_completion.d/vrk
 flags:
   - flag: --json

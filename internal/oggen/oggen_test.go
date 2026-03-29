@@ -16,6 +16,7 @@ func writeTool(t *testing.T, dir, name string) {
 tagline: The ` + name + ` tool tagline.
 description: Test tool.
 group: v1
+category: core
 example: cat input.txt | vrk ` + name + ` --json
 flags:
   - flag: --json

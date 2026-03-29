@@ -5,6 +5,7 @@ description: |
   on each attempt. Supports fixed and exponential backoff, exit code filtering,
   and shell condition checks.
 group: v1
+category: pipeline
 example: vrk coax --times 5 --backoff exp:200ms -- curl -sf https://api.example.com
 flags:
   - flag: --times

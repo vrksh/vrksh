@@ -5,6 +5,7 @@ description: |
   password= values, and common key prefixes. Shannon entropy pass catches
   high-entropy strings the patterns miss. Streaming - safe for large inputs.
 group: v1
+category: pipeline
 example: cat output.txt | vrk mask
 flags:
   - flag: --pattern

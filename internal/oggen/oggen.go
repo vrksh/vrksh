@@ -238,12 +238,12 @@ func drawBrandBar(dc *gg.Context, pillLabel string) error {
 //   - "vrk <toolname>" in Urbanist Medium, accent green
 //   - Headline in Urbanist Regular, white
 //   - Terminal block with glow: "$ command" in accent, "# tagline" in muted
-func renderCommand(dc *gg.Context, toolName, tagline, command, headline, group string) error {
+func renderCommand(dc *gg.Context, toolName, tagline, command, headline, category string) error {
 	drawBg(dc)
 	drawDotGrid(dc)
 
 	// Brand bar
-	if err := drawBrandBar(dc, group); err != nil {
+	if err := drawBrandBar(dc, category); err != nil {
 		return err
 	}
 
@@ -375,7 +375,7 @@ func RenderAll(tools []schema.Tool, outDir string) error {
 	}
 	for _, t := range tools {
 		dc := gg.NewContext(imgW, imgH)
-		if err := renderCommand(dc, t.Name, t.Tagline, t.OGImage.Code, t.OGImage.Headline, t.Group); err != nil {
+		if err := renderCommand(dc, t.Name, t.Tagline, t.OGImage.Code, t.OGImage.Headline, t.Category); err != nil {
 			return fmt.Errorf("rendering %s: %w", t.Name, err)
 		}
 		if err := dc.SavePNG(filepath.Join(outDir, t.Name+".png")); err != nil {

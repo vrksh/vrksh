@@ -4,6 +4,7 @@ description: |
   Count tokens using cl100k_base. Exact for GPT-4, ~95% accurate for Claude.
   Exits 1 if input exceeds --budget. The guard that prevents surprise API bills.
 group: v1
+category: core
 example: cat prompt.txt | vrk tok --budget 4000
 flags:
   - flag: --json

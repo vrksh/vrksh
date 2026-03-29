@@ -5,6 +5,7 @@ description: |
   lowercase, keeps only [a-z0-9]. Truncates at word boundary with --max.
   Configurable separator. Batch processing one line at a time.
 group: v1
+category: utilities
 example: echo 'My Article Title' | vrk slug
 flags:
   - flag: --separator

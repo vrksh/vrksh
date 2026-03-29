@@ -5,6 +5,7 @@ description: |
   offsets (+3d, -1h), timezone conversion, and JSON output with all
   representations. Temperature defaults to 0 for determinism.
 group: v1
+category: utilities
 example: vrk epoch 1740009600 --iso
 flags:
   - flag: --iso

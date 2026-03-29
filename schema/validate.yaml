@@ -5,6 +5,7 @@ description: |
   to stdout. Invalid records are dropped with a warning. Use --strict to stop
   on the first failure. Use --fix to auto-repair with vrk prompt.
 group: v1
+category: pipeline
 example: cat records.jsonl | vrk validate --schema '{"name":"string","age":"number"}' --strict
 flags:
   - flag: --schema

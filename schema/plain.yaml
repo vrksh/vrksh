@@ -5,6 +5,7 @@ description: |
   dropped. Code content kept, fences stripped. Heading text becomes plain
   paragraphs. Saves tokens downstream.
 group: v1
+category: utilities
 example: cat README.md | vrk plain | vrk tok --budget 4000
 flags:
   - flag: --json

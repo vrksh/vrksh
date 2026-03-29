@@ -5,6 +5,7 @@ description: |
   namespaces for isolation, TTL for expiry, and atomic increment/decrement
   for counters. Subcommands: set, get, del, list, incr, decr.
 group: v1
+category: pipeline
 example: vrk kv set --ns cache mykey "myvalue" --ttl 1h
 flags:
   - flag: --ns

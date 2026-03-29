@@ -5,6 +5,7 @@ description: |
   blank-line delimiters, multi-line data fields, and [DONE] sentinels.
   Extract nested fields with --field dot-path syntax.
 group: v1
+category: pipeline
 example: curl -sN https://api.example.com/stream | vrk sse
 flags:
   - flag: --event

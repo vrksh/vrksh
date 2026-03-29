@@ -5,6 +5,7 @@ description: |
   data through on success, exits non-zero on failure. jq expressions for
   JSON, --contains/--matches for plain text.
 group: v1
+category: utilities
 example: vrk grab https://api.example.com/health | vrk assert --contains '"status":"ok"'
 flags:
   - flag: --contains

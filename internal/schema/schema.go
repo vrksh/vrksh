@@ -17,6 +17,7 @@ type Tool struct {
 	Tagline     string     `yaml:"tagline"`
 	Description string     `yaml:"description"`
 	Group       string     `yaml:"group"`
+	Category    string     `yaml:"category"`
 	Example     string     `yaml:"example"`
 	Flags       []Flag     `yaml:"flags"`
 	ExitCodes   []ExitCode `yaml:"exit_codes"`
@@ -45,6 +46,7 @@ type OGImage struct {
 }
 
 var validGroups = map[string]bool{"v1": true, "v2": true, "v3": true}
+var validCategories = map[string]bool{"core": true, "pipeline": true, "utilities": true, "meta": true}
 
 // LoadDir reads all *.yaml files from dir, parses them as Tool structs,
 // and returns them sorted alphabetically by name.
@@ -90,6 +92,9 @@ func Validate(t Tool) error {
 	}
 	if !validGroups[t.Group] {
 		return fmt.Errorf("%s: group must be v1, v2, or v3 (got %q)", t.Name, t.Group)
+	}
+	if !validCategories[t.Category] {
+		return fmt.Errorf("%s: category must be core, pipeline, utilities, or meta (got %q)", t.Name, t.Category)
 	}
 	if len(t.Flags) == 0 {
 		return fmt.Errorf("%s: at least one flag is required", t.Name)

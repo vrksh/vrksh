@@ -5,6 +5,7 @@ description: |
   lines back into a JSON array (--collect). Streaming decoder handles
   arrays larger than memory. Preserves large integers with UseNumber().
 group: v1
+category: utilities
 example: cat data.json | vrk jsonl
 flags:
   - flag: --collect

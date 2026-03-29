@@ -4,6 +4,7 @@ description: |
   Decode and inspect JWT tokens without verifying signatures. Extract
   individual claims, check expiry, or validate time-based claims (exp, nbf, iat).
 group: v1
+category: utilities
 example: vrk jwt --claim sub eyJhbGciOiJIUzI1NiJ9...
 flags:
   - flag: --json

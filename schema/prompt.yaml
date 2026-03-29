@@ -5,6 +5,7 @@ description: |
   OpenAI APIs with optional JSON schema validation, retry with temperature
   escalation, and budget guards. Temperature defaults to 0 for determinism.
 group: v1
+category: core
 example: echo "Summarize this" | vrk prompt --model claude-sonnet-4-6 --json
 flags:
   - flag: --model

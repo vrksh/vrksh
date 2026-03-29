@@ -5,6 +5,7 @@ description: |
   lexicographically by creation time for database primary keys.
   Batch generation with --count, structured output with --json.
 group: v1
+category: utilities
 example: vrk uuid --v7
 flags:
   - flag: --v7

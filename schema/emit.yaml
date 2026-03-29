@@ -6,6 +6,7 @@ description: |
   by source, auto-detecting log level from line prefixes, and merging
   extra JSON fields.
 group: v1
+category: utilities
 example: some-script.sh | vrk emit --level info --tag my-script
 flags:
   - flag: --level

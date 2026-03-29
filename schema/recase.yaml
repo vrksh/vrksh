@@ -5,6 +5,7 @@ description: |
   acronyms correctly - HTMLParser becomes html_parser, not h_t_m_l_parser.
   Processes one name per line for batch conversion.
 group: v1
+category: utilities
 example: echo 'getUserName' | vrk recase --to snake
 flags:
   - flag: --to

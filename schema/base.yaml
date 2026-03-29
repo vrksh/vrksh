@@ -5,6 +5,7 @@ description: |
   on every platform. Strips exactly one trailing newline from stdin before
   encoding. Two subcommands: encode --to and decode --from.
 group: v1
+category: utilities
 example: echo 'hello' | vrk base encode --to base64
 flags:
   - flag: --to

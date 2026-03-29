@@ -5,6 +5,7 @@ description: |
   sampling (--count) gives uniform random samples. --every for deterministic
   1-in-N. --first for head. --sample for probabilistic inclusion.
 group: v1
+category: utilities
 example: cat huge.jsonl | vrk sip --count 100 --seed 42
 flags:
   - flag: --first

@@ -13,6 +13,7 @@ tagline: Count tokens. Guard LLM calls with a budget.
 description: |
   Token counter and budget guard. Uses cl100k_base by default.
 group: v1
+category: core
 example: cat prompt.txt | vrk tok --budget 4000 --fail
 flags:
   - flag: --budget
@@ -93,6 +94,7 @@ func TestLoadMultipleFiles(t *testing.T) {
 tagline: Decode and inspect JWTs.
 description: JWT decoder.
 group: v1
+category: core
 example: vrk jwt eyJhbGciOiJIUzI1NiJ9...
 flags:
   - flag: --claim
@@ -156,6 +158,7 @@ func TestValidateRejectsMissingName(t *testing.T) {
 tagline: Some tagline.
 description: Some description.
 group: v1
+category: core
 example: vrk foo bar
 flags:
   - flag: --json
@@ -188,6 +191,7 @@ func TestValidateRejectsMissingTagline(t *testing.T) {
 tagline: ""
 description: Some description.
 group: v1
+category: core
 example: vrk tok foo
 flags:
   - flag: --json
@@ -220,6 +224,7 @@ func TestValidateRejectsMissingExample(t *testing.T) {
 tagline: Some tagline.
 description: Some description.
 group: v1
+category: core
 example: ""
 flags:
   - flag: --json
@@ -252,6 +257,7 @@ func TestValidateRejectsMissingOGHeadline(t *testing.T) {
 tagline: Some tagline.
 description: Some description.
 group: v1
+category: core
 example: vrk tok foo
 flags:
   - flag: --json
@@ -284,6 +290,7 @@ func TestValidateRejectsMissingOGCode(t *testing.T) {
 tagline: Some tagline.
 description: Some description.
 group: v1
+category: core
 example: vrk tok foo
 flags:
   - flag: --json
@@ -348,6 +355,7 @@ func TestValidateRejectsMissingExitCode0(t *testing.T) {
 tagline: Some tagline.
 description: Some description.
 group: v1
+category: core
 example: vrk tok foo
 flags:
   - flag: --json
@@ -378,6 +386,7 @@ func TestValidateRejectsMissingExitCode1(t *testing.T) {
 tagline: Some tagline.
 description: Some description.
 group: v1
+category: core
 example: vrk tok foo
 flags:
   - flag: --json
@@ -408,6 +417,7 @@ func TestValidateRejectsEmptyFlags(t *testing.T) {
 tagline: Some tagline.
 description: Some description.
 group: v1
+category: core
 example: vrk tok foo
 flags: []
 exit_codes:
@@ -436,6 +446,7 @@ func TestValidateRejectsOGCodeNotShellCommand(t *testing.T) {
 tagline: Some tagline.
 description: Some description.
 group: v1
+category: core
 example: vrk tok foo
 flags:
   - flag: --json
@@ -470,6 +481,7 @@ func TestLoadDirSortsAlphabetically(t *testing.T) {
 tagline: Test tool.
 description: Test.
 group: v1
+category: core
 example: vrk ` + name + ` foo
 flags:
   - flag: --json
