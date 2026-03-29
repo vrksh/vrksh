@@ -49,7 +49,7 @@ For tool discovery:
 - `vrk --skills` shows the full reference
 
 Key patterns:
-- Always `vrk tok --budget N` before `vrk prompt` to guard context windows
+- Always `vrk tok --check N` before `vrk prompt` to gate context windows
 - Always `vrk validate --schema` after `vrk prompt --schema` to verify output
 - Use `vrk mask` before logging to redact secrets
 - Pipeline order: input -> transform -> guard -> execute -> store

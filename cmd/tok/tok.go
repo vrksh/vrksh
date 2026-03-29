@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
@@ -14,7 +15,10 @@ import (
 // isTerminal is a var so tests can override TTY detection without a real fd.
 var isTerminal = shared.IsTerminal
 
-// tokOutput is the shape emitted by --json.
+// readAll is a var so tests can inject I/O errors.
+var readAll = io.ReadAll
+
+// tokOutput is the shape emitted by --json in measurement mode.
 type tokOutput struct {
 	Tokens int    `json:"tokens"`
 	Model  string `json:"model"`
@@ -23,26 +27,26 @@ type tokOutput struct {
 func init() {
 	shared.Register(shared.ToolMeta{
 		Name:  "tok",
-		Short: "Token counter — cl100k_base, --budget guard",
+		Short: "Token counter - cl100k_base, --check gate",
 		Flags: []shared.FlagMeta{
 			{Name: "json", Shorthand: "j", Usage: "emit output as JSON"},
-			{Name: "budget", Usage: "exit 1 if token count exceeds N"},
+			{Name: "check", Usage: "pass input through if within N tokens; exit 1 if over"},
 			{Name: "model", Shorthand: "m", Usage: "tokenizer model (currently only cl100k_base is supported)"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
 	})
 }
 
-// Run is the entry point for vrk tok. Returns 0 (success), 1 (runtime/budget
+// Run is the entry point for vrk tok. Returns 0 (success), 1 (runtime/check
 // error), or 2 (usage error). Never calls os.Exit.
 func Run() int {
 	fs := pflag.NewFlagSet("tok", pflag.ContinueOnError)
 	var jsonFlag bool
-	var budget int
+	var check int
 	var model string
 	var quietFlag bool
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit output as JSON")
-	fs.IntVar(&budget, "budget", 0, "exit 1 if token count exceeds N")
+	fs.IntVar(&check, "check", 0, "pass input through if within N tokens; exit 1 if over")
 	fs.StringVarP(&model, "model", "m", "cl100k_base", "tokenizer model (currently only cl100k_base is supported)")
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
@@ -53,10 +57,14 @@ func Run() int {
 		if errors.Is(err, pflag.ErrHelp) {
 			return printUsage(fs)
 		}
+		// Custom message for --check without a value.
+		if strings.Contains(err.Error(), "check") {
+			return shared.UsageErrorf("tok: --check requires a token limit: vrk tok --check 8000")
+		}
 		return shared.UsageErrorf("%s", err.Error())
 	}
 
-	// --quiet: suppress all stderr output (including errors) — callers get exit codes only.
+	// --quiet: suppress all stderr output (including errors) - callers get exit codes only.
 	defer shared.SilenceStderr(quietFlag)()
 
 	// Resolve the effective model name for output. --model affects the label
@@ -65,40 +73,34 @@ func Run() int {
 		model = "cl100k_base"
 	}
 
+	checkSet := fs.Changed("check")
+
 	// TTY guard: an interactive terminal with no args is a usage error. An empty
 	// stdin pipe is intentional (0 tokens) and must pass through normally.
-	// ReadInputOptional can't distinguish the two — so we check explicitly first.
 	if len(fs.Args()) == 0 && isTerminal(int(os.Stdin.Fd())) {
 		return shared.UsageErrorf("tok: no input: pipe text to stdin or pass as argument")
 	}
 
-	// Read input: positional args joined with a space, or full stdin.
-	// tok needs the full text before counting — ReadInputOptional handles the
-	// one-trailing-newline strip and returns "" for an empty pipe (→ 0 tokens).
-	input, err := shared.ReadInputOptional(fs.Args())
+	if checkSet {
+		return runCheck(fs.Args(), check, jsonFlag, quietFlag, model)
+	}
+
+	return runMeasure(fs.Args(), jsonFlag, model)
+}
+
+// runMeasure is the measurement mode (no --check). Counts tokens and prints
+// the count or JSON to stdout. Always exits 0 on success.
+func runMeasure(args []string, jsonFlag bool, model string) int {
+	input, err := shared.ReadInputOptional(args)
 	if err != nil {
 		return shared.Errorf("tok: %v", err)
 	}
 
-	// Count tokens.
 	count, err := tokcount.CountTokens(input)
 	if err != nil {
 		return shared.Errorf("tok: initialising tokeniser: %v", err)
 	}
 
-	// Budget guard: always a hard check. tok does not have a --fail flag;
-	// --budget alone is the guard. A budget that silently passes is useless.
-	if budget > 0 && count > budget {
-		if jsonFlag {
-			return shared.PrintJSONError(map[string]any{
-				"error": fmt.Sprintf("tok: %d tokens exceeds budget of %d", count, budget),
-				"code":  1,
-			})
-		}
-		return shared.Errorf("tok: %d tokens exceeds budget of %d", count, budget)
-	}
-
-	// Output.
 	if jsonFlag {
 		if err := shared.PrintJSON(tokOutput{Tokens: count, Model: model}); err != nil {
 			return shared.Errorf("tok: %v", err)
@@ -112,13 +114,80 @@ func Run() int {
 	return 0
 }
 
+// runCheck is the --check mode. Reads all input, counts tokens, and either
+// passes the raw input through to stdout (within limit) or exits 1 (over limit).
+func runCheck(args []string, limit int, jsonFlag, quietFlag bool, model string) int {
+	// Read raw input. Two paths:
+	// - Positional args: join with space, no trailing newline.
+	// - Stdin: read raw bytes, preserve byte-for-byte.
+	var raw []byte
+	if len(args) > 0 {
+		raw = []byte(strings.Join(args, " "))
+	} else {
+		var err error
+		raw, err = readAll(os.Stdin)
+		if err != nil {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("tok: reading stdin: %v", err),
+					"code":  1,
+				})
+			}
+			return shared.Errorf("tok: reading stdin: %v", err)
+		}
+	}
+
+	// Strip one trailing newline for token counting (echo adds \n).
+	// Raw bytes are preserved for passthrough.
+	countInput := strings.TrimSuffix(string(raw), "\n")
+
+	count, err := tokcount.CountTokens(countInput)
+	if err != nil {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{
+				"error": fmt.Sprintf("tok: initialising tokeniser: %v", err),
+				"code":  1,
+			})
+		}
+		return shared.Errorf("tok: initialising tokeniser: %v", err)
+	}
+
+	if count > limit {
+		// Over limit: stdout empty.
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{
+				"error":  fmt.Sprintf("%d tokens exceeds limit of %d", count, limit),
+				"tokens": count,
+				"limit":  limit,
+				"code":   1,
+			})
+		}
+		if !quietFlag {
+			fmt.Fprintf(os.Stderr, "tok: %d tokens exceeds limit of %d\n", count, limit)
+		}
+		return 1
+	}
+
+	// Within limit: write raw bytes to stdout.
+	if _, err := os.Stdout.Write(raw); err != nil {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{
+				"error": fmt.Sprintf("tok: writing output: %v", err),
+				"code":  1,
+			})
+		}
+		return shared.Errorf("tok: writing output: %v", err)
+	}
+	return 0
+}
+
 // Flags returns flag metadata for MCP schema generation.
-// This FlagSet is never used for parsing — Run() creates its own.
+// This FlagSet is never used for parsing - Run() creates its own.
 func Flags() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("tok", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.BoolP("json", "j", false, "emit output as JSON")
-	fs.Int("budget", 0, "exit 1 if token count exceeds N")
+	fs.Int("check", 0, "pass input through if within N tokens; exit 1 if over")
 	fs.StringP("model", "m", "cl100k_base", "tokenizer model (currently only cl100k_base is supported)")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs
@@ -130,8 +199,12 @@ func printUsage(fs *pflag.FlagSet) int {
 		"usage: tok [flags] [text]",
 		"       echo <text> | tok [flags]",
 		"",
-		"Token counter — counts tokens in stdin using cl100k_base (exact for GPT-4,",
-		"~95% accurate for Claude). Optionally fails if over a token budget.",
+		"Token counter - counts tokens using cl100k_base (exact for GPT-4,",
+		"~95% accurate for Claude).",
+		"",
+		"Without --check: prints the token count to stdout.",
+		"With --check N: passes input through if within N tokens, exits 1 if over.",
+		"--check reads all stdin before passing through.",
 		"",
 		"flags:",
 	}

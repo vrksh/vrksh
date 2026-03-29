@@ -112,7 +112,7 @@ else
 fi
 
 # ------------------------------------------------------------
-# Test 5: tools/list → vrk_tok has --budget and --model in inputSchema
+# Test 5: tools/list -> vrk_tok has --check and --model in inputSchema
 # ------------------------------------------------------------
 if echo "$RESP" | python3 -c '
 import json, sys
@@ -120,12 +120,12 @@ d = json.loads(sys.stdin.readline())
 tools = {t["name"]: t for t in d["result"]["tools"]}
 tok = tools["vrk_tok"]
 props = tok["inputSchema"]["properties"]
-assert "budget" in props, "missing budget"
+assert "check" in props, "missing check"
 assert "model" in props, "missing model"
-assert "budget" in props and props["budget"]["description"], "budget has no description"
+assert "check" in props and props["check"]["description"], "check has no description"
 assert "model" in props and props["model"]["description"], "model has no description"
 ' 2>/dev/null; then
-  ok "test 5: vrk_tok has budget and model flags with descriptions"
+  ok "test 5: vrk_tok has check and model flags with descriptions"
 else
   fail "test 5: vrk_tok inputSchema" "response: $RESP"
 fi

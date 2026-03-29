@@ -1,7 +1,6 @@
 ---
 title: "vrk tok"
-description: "Count tokens before LLM calls. Exit 1 if over budget. Prevents silent prompt truncation."
-og_title: "vrk tok - token counter and budget guard for LLM prompts"
+description: "Count tokens. Gate pipelines before they fail."
 tool: tok
 group: v1
 mcp_callable: true
@@ -12,50 +11,31 @@ noindex: false
 
 ## About
 
-Counts tokens in your text using the cl100k_base tokenizer. Exact for GPT-4 and roughly 95% accurate for Claude. Use it as a guard before sending prompts to an LLM - if the input exceeds your token budget, tok exits 1 and your pipeline stops before the API call.
-
-## The problem
-
-LLM APIs silently truncate prompts that exceed the context window. You get a degraded response with no error. There is no built-in way to check token count before you send.
-
-## Before and after
-
-**Before**
-
-```bash
-python3 -c "
-import tiktoken
-enc = tiktoken.get_encoding('cl100k_base')
-print(len(enc.encode(open('prompt.txt').read())))
-"
-```
-
-**After**
-
-```bash
-cat prompt.txt | vrk tok --budget 4000
-```
+Token counter and pipeline gate. Uses cl100k_base (~95% accurate for Claude).
+Without --check: pure measurement, always exits 0.
+With --check N: passes input through if within N tokens, exits 1 with empty
+stdout if over. The sentinel before any LLM call.
 
 ## Example
 
 ```bash
-cat prompt.txt | vrk tok --budget 4000
+cat prompt.txt | vrk tok --check 8000 | vrk prompt
 ```
 
 ## Exit codes
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success, within budget |
-| 1 | Over budget or I/O error |
-| 2 | Usage error - no input, unknown flag |
+| 0 | Measurement success; or --check within limit |
+| 1 | --check over limit; I/O error; tokenizer error |
+| 2 | Usage error — unknown flag, no stdin, --check without value |
 
 ## Flags
 
 | Flag | Short | Type | Description |
 |------|-------|------|-------------|
-| `--json` | -j | bool | Emit JSON with token count and metadata |
-| `--budget` |   | int | Exit 1 if token count exceeds N |
-| `--model` | -m | string | Tokenizer model (currently cl100k_base only) |
-| `--quiet` | -q | bool | Suppress stderr output |
+| `--check` |   | int | Pass input through if ≤N tokens; exit 1 with empty stdout if over |
+| `--model` |   | string | Tokenizer — cl100k_base (default) |
+| `--json` | -j | bool | Emit JSON (measurement) or JSON error (gate). Does not wrap passthrough. |
+| `--quiet` | -q | bool | Suppress stderr on failure |
 

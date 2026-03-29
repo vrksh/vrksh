@@ -12,7 +12,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `jwt` | Decode and inspect JWTs (no signature verification) | `--claim <key>`, `--expired`, `--valid`, `--json` |
 | `epoch` | Convert between Unix timestamps and ISO 8601 | `--iso`, `--tz <zone>`, `--now`, `--at <ts>` |
 | `uuid` | Generate UUIDs | `--v7`, `--count <n>`, `--json` |
-| `tok` | Count tokens, enforce budget | `--budget <n>`, `--model <name>` |
+| `tok` | Count tokens, gate pipeline by token limit | `--check <n>`, `--model <name>` |
 | `sse` | Parse Server-Sent Events stream to JSONL | `--event <name>`, `--field <path>` |
 | `coax` | Retry a command until it succeeds | `--times <n>`, `--backoff <spec>`, `--on <code>`, `--until <cmd>` |
 | `prompt` | Send a prompt to an LLM, emit response | `--model`, `--system`, `--json`, `--schema` |
@@ -44,7 +44,7 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 - Output: data → stdout only
 - Errors: → stderr only; stdout is empty on error
 - Exit 0: success
-- Exit 1: runtime error (invalid input, API failure, budget exceeded)
+- Exit 1: runtime error (invalid input, API failure, limit exceeded)
 - Exit 2: usage error (missing input, unknown flag, bad argument)
 - `--help`: always works, exits 0, prints to stdout
 
@@ -68,9 +68,9 @@ echo "$JWT" | vrk jwt --expired | vrk prompt --system "..."
 echo '+3d' | vrk epoch --at 1740009600    # always 1740268800, regardless of system time
 ```
 
-**3. Token budget enforcement**
+**3. Token limit gate**
 ```bash
-cat context.txt | vrk tok --budget 4000   # exits 1 if over budget
+cat context.txt | vrk tok --check 4000   # passes through if within limit, exits 1 if over
 ```
 
 **4. Extract a single JWT claim**

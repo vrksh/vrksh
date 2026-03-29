@@ -28,7 +28,7 @@ One binary: `vrk`. Unix tools for AI pipelines.
 | `slug` | URL/filename slug generator - --separator, --max, --json |
 | `sse` | SSE stream parser - text/event-stream to JSONL |
 | `throttle` | rate limiter for pipes - --rate N/s or N/m |
-| `tok` | token counter - cl100k_base, --budget guard, --json. |
+| `tok` | Count tokens. Gate pipelines before they fail. |
 | `urlinfo` | URL parser - scheme, host, port, path, query, --field |
 | `uuid` | UUID generator - v4/v7, --count, --json |
 | `validate` | JSONL schema validator - --schema, --strict, --fix, --json |

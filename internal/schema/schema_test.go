@@ -9,31 +9,31 @@ import (
 // validToolYAML returns a complete, valid tool YAML string.
 func validToolYAML() string {
 	return `name: tok
-tagline: Count tokens. Guard LLM calls with a budget.
+tagline: Count tokens. Gate pipelines with --check.
 description: |
-  Token counter and budget guard. Uses cl100k_base by default.
+  Token counter and pipeline gate. Uses cl100k_base by default.
 group: v1
 category: core
-example: cat prompt.txt | vrk tok --budget 4000 --fail
+example: cat prompt.txt | vrk tok --check 4000 | vrk prompt
 flags:
-  - flag: --budget
+  - flag: --check
     short: ""
     type: int
-    description: Exit 1 if token count exceeds N
+    description: Pass input through if within N tokens; exit 1 if over
   - flag: --json
     short: "-j"
     type: bool
     description: Emit JSON with token count and metadata
 exit_codes:
   - code: 0
-    meaning: Success, within budget
+    meaning: Success, within limit
   - code: 1
-    meaning: Over budget or I/O error
+    meaning: Over limit or I/O error
   - code: 2
     meaning: Usage error
 og_image:
-  headline: "Count tokens. Guard LLM calls with a budget."
-  code: "cat prompt.txt | vrk tok --budget 4000 --fail"
+  headline: "Count tokens. Gate pipelines with --check."
+  code: "cat prompt.txt | vrk tok --check 4000 | vrk prompt"
 mcp_callable: true
 `
 }
@@ -62,7 +62,7 @@ func TestLoadAndRoundTrip(t *testing.T) {
 	if tok.Name != "tok" {
 		t.Errorf("name: got %q, want %q", tok.Name, "tok")
 	}
-	if tok.Tagline != "Count tokens. Guard LLM calls with a budget." {
+	if tok.Tagline != "Count tokens. Gate pipelines with --check." {
 		t.Errorf("tagline: got %q", tok.Tagline)
 	}
 	if tok.Group != "v1" {
@@ -74,13 +74,13 @@ func TestLoadAndRoundTrip(t *testing.T) {
 	if len(tok.Flags) != 2 {
 		t.Errorf("flags: got %d, want 2", len(tok.Flags))
 	}
-	if tok.Flags[0].Flag != "--budget" {
-		t.Errorf("flag[0]: got %q, want %q", tok.Flags[0].Flag, "--budget")
+	if tok.Flags[0].Flag != "--check" {
+		t.Errorf("flag[0]: got %q, want %q", tok.Flags[0].Flag, "--check")
 	}
-	if tok.OGImage.Headline != "Count tokens. Guard LLM calls with a budget." {
+	if tok.OGImage.Headline != "Count tokens. Gate pipelines with --check." {
 		t.Errorf("og_image.headline: got %q", tok.OGImage.Headline)
 	}
-	if tok.OGImage.Code != "cat prompt.txt | vrk tok --budget 4000 --fail" {
+	if tok.OGImage.Code != "cat prompt.txt | vrk tok --check 4000 | vrk prompt" {
 		t.Errorf("og_image.code: got %q", tok.OGImage.Code)
 	}
 }

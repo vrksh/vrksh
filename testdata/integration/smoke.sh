@@ -132,7 +132,7 @@ assert_exit "epoch value in kv expires via TTL" 1 "$ec"
 unset VRK_KV_PATH
 
 # ---------------------------------------------------------------------------
-# Section 3 — tok + kv (budget guard pattern)
+# Section 3 — tok + kv (check gate pattern)
 # ---------------------------------------------------------------------------
 echo "--- Section 3: tok + kv ---"
 
@@ -145,10 +145,11 @@ $VRK kv set token_count "$count"
 retrieved=$($VRK kv get token_count)
 assert_stdout "tok count stored and retrieved via kv" "$count" "$retrieved"
 
-echo "$text" | $VRK tok --budget 100 > /dev/null
-assert_exit "tok --budget passes under limit" 0 $?
-ec=$(set +e; echo "$text" | $VRK tok --budget 1 2>/dev/null; echo $?)
-assert_exit "tok --budget fails over limit" 1 "$ec"
+out=$(echo "$text" | $VRK tok --check 100 2>/dev/null)
+assert_exit "tok --check passes under limit" 0 $?
+assert_stdout "tok --check passthrough" "$text" "$out"
+ec=$(set +e; echo "$text" | $VRK tok --check 1 2>/dev/null; echo $?)
+assert_exit "tok --check fails over limit" 1 "$ec"
 
 unset VRK_KV_PATH
 
@@ -343,7 +344,7 @@ unset VRK_KV_PATH
 # ---------------------------------------------------------------------------
 echo "--- Section 11: prompt (offline --explain) ---"
 
-# tok budget gate → prompt --explain: under budget, prompt would be called
+# tok check gate + prompt --explain: under limit, prompt would be called
 text="Summarize this for me"
 count=$(echo "$text" | $VRK tok --quiet)
 explain=$(echo "$text" | $VRK prompt --explain)
@@ -388,10 +389,10 @@ else
   VRK_KV_PATH="$TMPDIR/prompt_kv.db"
   export VRK_KV_PATH
 
-  # tok budget check before prompt: gate the call
+  # tok check gate before prompt: gate the call
   text="What is 2 + 2?"
-  echo "$text" | $VRK tok --budget 500 > /dev/null
-  assert_exit "tok budget gate before prompt (under limit)" 0 $?
+  echo "$text" | $VRK tok --check 500 > /dev/null 2>/dev/null
+  assert_exit "tok check gate before prompt (under limit)" 0 $?
 
   # prompt + kv: cache the response by a uuid request key
   req_id=$($VRK uuid)
@@ -443,8 +444,8 @@ export VRK_KV_PATH
 check_empty_stdout "kv get missing key" 1 $VRK kv get no_such_key_xyz
 unset VRK_KV_PATH
 
-# tok over budget: stdout empty, exit 1 (runtime error — budget exceeded)
-check_empty_stdout "tok --budget exceeded" 1 sh -c "echo 'hello world' | $VRK tok --budget 1"
+# tok over limit: stdout empty, exit 1 (runtime error - check exceeded)
+check_empty_stdout "tok --check exceeded" 1 sh -c "echo 'hello world' | $VRK tok --check 1"
 
 # epoch bad input (natural language): stdout empty, exit 2 (usage error — unparseable input)
 check_empty_stdout "epoch bad input" 2 sh -c "echo 'next tuesday' | $VRK epoch"

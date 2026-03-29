@@ -34,14 +34,14 @@ binary:  $(command -v vrk || echo "$VRK")
 
 ## Three tools to know first
 
-1. **tok** — count tokens and enforce budget gates before LLM calls.
-   cat prompt.txt | vrk tok --budget 4000
+1. **tok** — count tokens and gate pipelines before LLM calls.
+   cat prompt.txt | vrk tok --check 4000 | vrk prompt --system "summarise"
 
 2. **prompt** — send a prompt to an LLM (Anthropic or OpenAI).
    echo "Summarise this." | vrk prompt
 
 3. **grab** — fetch a URL as clean markdown for pipeline input.
-   vrk grab https://example.com | vrk tok --budget 8000
+   vrk grab https://example.com | vrk tok --check 8000 | vrk prompt --system "summarise"
 
 ## Discovery
 

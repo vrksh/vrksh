@@ -15,7 +15,7 @@ Exit 2: no URL provided, invalid URL, mutually exclusive flags, unknown flag
 
 Example:
 
-    vrk grab https://example.com | vrk tok --budget 8000
+    vrk grab https://example.com | vrk tok --check 8000 | vrk prompt --system "summarise"
 
 Anti-pattern:
-- Don't pipe grab directly to prompt without a tok budget check -- the page may exceed the model's context window.
+- Don't pipe grab directly to prompt without a tok check gate -- the page may exceed the model's context window.

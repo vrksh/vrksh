@@ -162,49 +162,94 @@ exit_code=$(set +e; echo 'hello world' | "$VRK" tok --json --model cl100k_base >
 assert_exit "json+model: exit 0" 0 "$exit_code"
 
 # ------------------------------------------------------------
-# 5. --budget: within budget
+# 5. --check: within limit
 # ------------------------------------------------------------
 echo ""
-echo "--- --budget (within) ---"
+echo "--- --check (within limit) ---"
 
-stdout=$(echo 'hello world' | "$VRK" tok --budget 5 2>/dev/null)
+out=$(echo 'hello world' | "$VRK" tok --check 8000 2>/dev/null)
+exit_code=$(set +e; echo 'hello world' | "$VRK" tok --check 8000 > /dev/null 2>&1; echo $?)
+assert_exit          "--check within limit: exit 0"               0              "$exit_code"
+assert_stdout_equals "--check within limit: input passed through" "hello world"  "$out"
+
+# stderr must be empty on success (silent success)
+stderr=$(echo 'hello world' | "$VRK" tok --check 8000 2>&1 >/dev/null)
+assert_stderr_empty  "--check within limit: stderr empty"  "$stderr"
+
+# ------------------------------------------------------------
+# 6. --check: over limit
+# ------------------------------------------------------------
+echo ""
+echo "--- --check (over limit) ---"
+
+exit_code=$(set +e; echo 'hello world' | "$VRK" tok --check 1 > /dev/null 2>&1; echo $?)
+assert_exit "--check over limit: exit 1" 1 "$exit_code"
+
+out=$(echo 'hello world' | "$VRK" tok --check 1 2>/dev/null || true)
+assert_stdout_empty "--check over limit: stdout empty" "$out"
+
+# ------------------------------------------------------------
+# 7. --check without value: exit 2
+# ------------------------------------------------------------
+echo ""
+echo "--- --check without value ---"
+
+exit_code=$(set +e +o pipefail; echo 'hello world' | "$VRK" tok --check 2>/dev/null; echo $?)
+assert_exit "--check without value: exit 2" 2 "$exit_code"
+
+# ------------------------------------------------------------
+# 8. --check + --json over limit
+# ------------------------------------------------------------
+echo ""
+echo "--- --check + --json (over limit) ---"
+
+out=$(echo 'hello world' | "$VRK" tok --check 1 --json 2>/dev/null || true)
+exit_code=$(set +e; echo 'hello world' | "$VRK" tok --check 1 --json > /dev/null 2>&1; echo $?)
+assert_exit "--check --json over limit: exit 1" 1 "$exit_code"
+if echo "$out" | grep -q '"error"' && echo "$out" | grep -q '"limit"'; then
+  ok "--check --json over limit: JSON has error and limit fields"
+else
+  fail "--check --json over limit: missing JSON fields" "got: $out"
+fi
+
+# stderr must be empty when --json is active
+stderr=$(echo 'hello world' | "$VRK" tok --check 1 --json 2>&1 >/dev/null || true)
+assert_stderr_empty "--check --json: stderr empty" "$stderr"
+
+# ------------------------------------------------------------
+# 8b. --check byte-for-byte transparency
+# ------------------------------------------------------------
+echo ""
+echo "--- --check byte-for-byte ---"
+
+input='{"a":1,  "b":2}'
+out=$(printf '%s' "$input" | "$VRK" tok --check 8000 2>/dev/null)
+assert_stdout_equals "--check byte-for-byte: exact match" "$input" "$out"
+
+# ------------------------------------------------------------
+# 8c. Pipeline: tok --check gates correctly
+# ------------------------------------------------------------
+echo ""
+echo "--- pipeline ---"
+
+out=$(echo 'hello world' | "$VRK" tok --check 8000 2>/dev/null | cat)
+assert_stdout_equals "pipeline: tok --check + cat" "hello world" "$out"
+
+# Pipeline gate: over limit stops downstream
+byte_count=$(echo 'hello world' | { "$VRK" tok --check 1 2>/dev/null || true; } | wc -c | tr -d ' ')
+assert_stdout_equals "pipeline: over limit stops downstream" "0" "$byte_count"
+
+# ------------------------------------------------------------
+# 8d. --budget and --fail rejected as unknown flags
+# ------------------------------------------------------------
+echo ""
+echo "--- removed flags ---"
+
 exit_code=$(set +e; echo 'hello world' | "$VRK" tok --budget 5 > /dev/null 2>&1; echo $?)
-assert_exit        "budget 5: exit 0"        0    "$exit_code"
-assert_stdout_equals "budget 5: stdout = 2"  "2"  "$stdout"
-
-# ------------------------------------------------------------
-# 6. --budget: over budget (no --fail)
-# ------------------------------------------------------------
-echo ""
-echo "--- --budget (exceeded) ---"
-
-stdout=$(set +e; echo 'hello world' | "$VRK" tok --budget 1 2>/dev/null; true)
-stderr=$(set +e; echo 'hello world' | "$VRK" tok --budget 1 2>&1 >/dev/null; true)
-exit_code=$(set +e; echo 'hello world' | "$VRK" tok --budget 1 > /dev/null 2>&1; echo $?)
-assert_exit           "budget 1: exit 1"            1                          "$exit_code"
-assert_stdout_empty   "budget 1: stdout empty"       "$stdout"
-assert_stderr_contains "budget 1: stderr message"   "2 tokens exceeds budget of 1"  "$stderr"
-
-# ------------------------------------------------------------
-# 7. --fail is not a flag on tok — must be rejected as unknown (exit 2)
-# ------------------------------------------------------------
-echo ""
-echo "--- --fail rejected ---"
+assert_exit "--budget: exit 2 (unknown flag)" 2 "$exit_code"
 
 exit_code=$(set +e; echo 'hello world' | "$VRK" tok --fail > /dev/null 2>&1; echo $?)
 assert_exit "--fail: exit 2 (unknown flag)" 2 "$exit_code"
-
-# ------------------------------------------------------------
-# 8. Pipeline safety: nothing passes through on exit 1
-# ------------------------------------------------------------
-echo ""
-echo "--- pipeline safety ---"
-
-# echo 'hello world' | vrk tok --budget 1 | wc -c → 0
-# vrk tok exits 1 here, so wrap it in `|| true` to stop pipefail from aborting
-# the outer pipeline — we want to count the (empty) bytes that reach wc -c.
-byte_count=$(echo 'hello world' | { "$VRK" tok --budget 1 2>/dev/null || true; } | wc -c | tr -d ' ')
-assert_stdout_equals "pipeline: wc -c = 0" "0" "$byte_count"
 
 # ------------------------------------------------------------
 # 9. 100-token fixture file
@@ -251,13 +296,21 @@ fi
 echo ""
 echo "--- --quiet ---"
 
-# Over budget with quiet should exit 1 and have no stderr
-stdout=$(set +e; echo 'hello world' | "$VRK" tok --quiet --budget 1 2>/dev/null; true)
-stderr=$(set +e; echo 'hello world' | "$VRK" tok --quiet --budget 1 2>&1 >/dev/null; true)
-exit_code=$(set +e; echo 'hello world' | "$VRK" tok --quiet --budget 1 > /dev/null 2>&1; echo $?)
-assert_exit            "--quiet budget: exit 1"         1        "$exit_code"
-assert_stdout_empty    "--quiet budget: stdout empty"            "$stdout"
-assert_stderr_empty    "--quiet budget: stderr empty"            "$stderr"
+# --check + --quiet within limit: passes through silently
+out=$(echo 'hello world' | "$VRK" tok --check 8000 --quiet 2>/dev/null)
+exit_code=$(set +e; echo 'hello world' | "$VRK" tok --check 8000 --quiet > /dev/null 2>&1; echo $?)
+stderr=$(echo 'hello world' | "$VRK" tok --check 8000 --quiet 2>&1 >/dev/null)
+assert_exit            "--quiet --check within: exit 0"          0              "$exit_code"
+assert_stdout_equals   "--quiet --check within: passthrough"     "hello world"  "$out"
+assert_stderr_empty    "--quiet --check within: stderr empty"                   "$stderr"
+
+# --check + --quiet over limit: exit 1, stdout empty, stderr empty
+exit_code=$(set +e; echo 'hello world' | "$VRK" tok --check 1 --quiet > /dev/null 2>&1; echo $?)
+out=$(echo 'hello world' | "$VRK" tok --check 1 --quiet 2>/dev/null || true)
+stderr=$(echo 'hello world' | "$VRK" tok --check 1 --quiet 2>&1 >/dev/null || true)
+assert_exit            "--quiet --check over: exit 1"            1              "$exit_code"
+assert_stdout_empty    "--quiet --check over: stdout empty"                     "$out"
+assert_stderr_empty    "--quiet --check over: stderr empty"                     "$stderr"
 
 # Valid count with quiet should still produce stdout
 stdout=$(echo 'hello world' | "$VRK" tok --quiet 2>/dev/null) || true

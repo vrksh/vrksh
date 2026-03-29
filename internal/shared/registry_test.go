@@ -13,7 +13,7 @@ func TestRegisterAndRetrieve(t *testing.T) {
 		Short: "Token counter",
 		Flags: []FlagMeta{
 			{Name: "json", Shorthand: "j", Usage: "emit output as JSON"},
-			{Name: "budget", Usage: "exit 1 if token count exceeds N"},
+			{Name: "check", Usage: "pass input through if within N tokens; exit 1 if over"},
 		},
 	})
 	Register(ToolMeta{

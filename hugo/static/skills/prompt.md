@@ -21,7 +21,7 @@ Exit 2: no input in interactive terminal, unknown flag
 
 Example:
 
-    cat doc.txt | vrk tok --budget 4000 && cat doc.txt | vrk prompt --system "summarise"
+    cat doc.txt | vrk tok --check 4000 | vrk prompt --system "summarise"
 
 Anti-pattern:
 - Don't confuse --json (metadata envelope) with --schema (structured LLM output). --json wraps the response; --schema tells the LLM to respond in JSON.

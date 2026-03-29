@@ -166,86 +166,202 @@ func TestJsonOutput(t *testing.T) {
 	}
 }
 
-// --- --budget ---
+// --- --check ---
 
-func TestBudgetWithin(t *testing.T) {
-	// "hello world" = 2 tokens; budget 5 → within budget, print count, exit 0.
-	stdout, _, code := runTok(t, []string{"--budget", "5"}, "hello world")
+func TestTokCheckWithinLimitNoNewline(t *testing.T) {
+	// "hello world" (no trailing \n) passes through byte-for-byte, exit 0.
+	stdout, stderr, code := runTok(t, []string{"--check", "8000"}, "hello world")
 	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (within budget)", code)
+		t.Fatalf("exit code = %d, want 0", code)
 	}
-	if stdout != "2\n" {
-		t.Errorf("stdout = %q, want %q", stdout, "2\n")
+	if stdout != "hello world" {
+		t.Errorf("stdout = %q, want %q", stdout, "hello world")
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty (silent success)", stderr)
 	}
 }
 
-func TestBudgetExceeded(t *testing.T) {
-	// "hello world" = 2 tokens; budget 1 → over budget, exit 1, stdout empty.
-	stdout, stderr, code := runTok(t, []string{"--budget", "1"}, "hello world")
+func TestTokCheckWithinLimitNewline(t *testing.T) {
+	// "hello world\n" (with trailing \n) passes through byte-for-byte, exit 0.
+	stdout, stderr, code := runTok(t, []string{"--check", "8000"}, "hello world\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != "hello world\n" {
+		t.Errorf("stdout = %q, want %q", stdout, "hello world\n")
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty (silent success)", stderr)
+	}
+}
+
+func TestTokCheckSilentSuccess(t *testing.T) {
+	// --check within limit: stderr must be empty (no informational message).
+	_, stderr, code := runTok(t, []string{"--check", "8000"}, "hello world")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestTokCheckOverLimit(t *testing.T) {
+	// "hello world" = 2 tokens; --check 1 → over limit, exit 1, stdout empty.
+	stdout, _, code := runTok(t, []string{"--check", "1"}, "hello world")
 	if code != 1 {
-		t.Fatalf("exit code = %d, want 1 (over budget)", code)
+		t.Fatalf("exit code = %d, want 1 (over limit)", code)
 	}
 	if stdout != "" {
-		t.Errorf("stdout must be empty on budget failure, got %q", stdout)
-	}
-	if !strings.Contains(stderr, "2 tokens exceeds budget of 1") {
-		t.Errorf("stderr = %q, want it to contain %q", stderr, "2 tokens exceeds budget of 1")
+		t.Errorf("stdout must be empty on over-limit, got %q", stdout)
 	}
 }
 
-func TestFailFlagRejected(t *testing.T) {
-	// tok has no --fail flag. Passing it must be a usage error (exit 2), not
-	// silently ignored. This prevents the -f trap where a following digit
-	// becomes a stray positional arg (e.g. -f 1 counts "input 1" not "input").
-	stdout, _, code := runTok(t, []string{"--budget", "1", "--fail"}, "hello world")
-	if code != 2 {
-		t.Fatalf("exit code = %d, want 2 (--fail is unknown on tok)", code)
+func TestTokCheckQuiet(t *testing.T) {
+	// --check within limit + --quiet: stderr empty, input passes through.
+	stdout, stderr, code := runTok(t, []string{"--check", "8000", "--quiet"}, "hello world")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
 	}
-	if stdout != "" {
-		t.Errorf("stdout must be empty on usage error, got %q", stdout)
+	if stdout != "hello world" {
+		t.Errorf("stdout = %q, want %q", stdout, "hello world")
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
 	}
 }
 
-func TestBudgetPipelineOutputEmpty(t *testing.T) {
-	// When budget is exceeded the tool exits 1 with nothing on stdout.
-	// This simulates: echo 'hello world' | vrk tok --budget 1 | wc -c → 0
-	stdout, _, code := runTok(t, []string{"--budget", "1"}, "hello world")
+func TestTokCheckQuietOverLimit(t *testing.T) {
+	// --check over limit + --quiet: stderr empty, stdout empty, exit 1.
+	stdout, stderr, code := runTok(t, []string{"--check", "1", "--quiet"}, "hello world")
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if len(stdout) != 0 {
-		t.Errorf("stdout length = %d, want 0 (nothing must pass through on exit 1)", len(stdout))
+	if stdout != "" {
+		t.Errorf("stdout must be empty, got %q", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("--quiet: stderr = %q, want empty", stderr)
 	}
 }
 
-func TestBudgetExceededWithJSON(t *testing.T) {
-	// --budget 1 with "hello world" (2 tokens) triggers a budget error.
-	// When --json is set, the error must go to stdout as JSON; stderr must be empty.
-	stdout, stderr, code := runTok(t, []string{"--budget", "1", "--json"}, "hello world")
+func TestTokCheckJSONOverLimit(t *testing.T) {
+	// --check over limit + --json: JSON error on stdout, stderr empty, exit 1.
+	stdout, stderr, code := runTok(t, []string{"--check", "1", "--json"}, "hello world")
 	if code != 1 {
-		t.Fatalf("exit code = %d, want 1 (over budget)", code)
+		t.Fatalf("exit code = %d, want 1", code)
 	}
 	if stderr != "" {
-		t.Errorf("--json: stderr must be empty on error, got %q", stderr)
+		t.Errorf("--json: stderr must be empty, got %q", stderr)
 	}
 	if stdout == "" {
 		t.Fatal("--json: stdout must contain JSON error, got empty")
 	}
 	var obj map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
-		t.Fatalf("--json: stdout is not valid JSON: %v\ngot: %q", err, stdout)
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
 	}
 	if _, ok := obj["error"]; !ok {
-		t.Error("--json: JSON missing key \"error\"")
+		t.Error("JSON missing key \"error\"")
+	}
+	if _, ok := obj["tokens"]; !ok {
+		t.Error("JSON missing key \"tokens\"")
+	}
+	if _, ok := obj["limit"]; !ok {
+		t.Error("JSON missing key \"limit\"")
 	}
 	if c, _ := obj["code"].(float64); int(c) != 1 {
-		t.Errorf("--json: code = %v, want 1", obj["code"])
+		t.Errorf("code = %v, want 1", obj["code"])
+	}
+}
+
+func TestTokCheckJSONWithinLimit(t *testing.T) {
+	// --check within limit + --json: raw passthrough (not JSON), exit 0.
+	stdout, stderr, code := runTok(t, []string{"--check", "8000", "--json"}, "hello world")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != "hello world" {
+		t.Errorf("stdout = %q, want %q (raw passthrough, not JSON)", stdout, "hello world")
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestTokCheckByteForByte(t *testing.T) {
+	// Exact bytes preserved: whitespace, no trailing newline added.
+	input := `{"a":1,  "b":2}`
+	stdout, _, code := runTok(t, []string{"--check", "8000"}, input)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != input {
+		t.Errorf("stdout = %q, want %q (byte-for-byte)", stdout, input)
+	}
+}
+
+func TestTokCheckDoubleNewline(t *testing.T) {
+	// Input ending in \n\n: raw bytes preserved in stdout.
+	// Token count is on stripped string (one trailing \n removed).
+	input := "hello world\n\n"
+	stdout, _, code := runTok(t, []string{"--check", "8000"}, input)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != input {
+		t.Errorf("stdout = %q, want %q", stdout, input)
+	}
+}
+
+func TestTokCheckNoValue(t *testing.T) {
+	// --check without an integer argument: exit 2 with clear message.
+	_, stderr, code := runTok(t, []string{"--check"}, "hello world")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "requires a token limit") {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, "requires a token limit")
+	}
+}
+
+func TestTokCheckZero(t *testing.T) {
+	// --check 0 with non-empty input: any positive count > 0, exit 1.
+	stdout, _, code := runTok(t, []string{"--check", "0"}, "hello world")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout must be empty, got %q", stdout)
+	}
+}
+
+func TestTokCheckZeroEmpty(t *testing.T) {
+	// --check 0 with empty input: 0 tokens <= 0, exit 0.
+	stdout, _, code := runTok(t, []string{"--check", "0"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty", stdout)
+	}
+}
+
+func TestTokCheckPositionalArg(t *testing.T) {
+	// Positional arg + --check: passes through joined args, no trailing newline.
+	stdout, _, code := runTok(t, []string{"--check", "8000", "hello world"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != "hello world" {
+		t.Errorf("stdout = %q, want %q", stdout, "hello world")
 	}
 }
 
 func TestJSONErrorToStdout(t *testing.T) {
-	// Canonical contract test: --json routes budget errors to stdout as JSON.
-	stdout, stderr, code := runTok(t, []string{"--budget", "1", "--json"}, "hello world")
+	// Canonical contract test: --json routes --check errors to stdout as JSON.
+	stdout, stderr, code := runTok(t, []string{"--check", "1", "--json"}, "hello world")
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -343,21 +459,6 @@ func Test100TokenString(t *testing.T) {
 }
 
 // --- --quiet flag tests ---
-
-// TestQuietSuppressesStderrOnBudgetExceeded verifies that --quiet suppresses
-// stderr when budget is exceeded. Exit code is still 1.
-func TestQuietSuppressesStderrOnBudgetExceeded(t *testing.T) {
-	stdout, stderr, code := runTok(t, []string{"--budget", "1", "--quiet"}, "hello world")
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1 (over budget)", code)
-	}
-	if stdout != "" {
-		t.Errorf("stdout must be empty on budget failure, got %q", stdout)
-	}
-	if stderr != "" {
-		t.Errorf("--quiet: stderr = %q, want empty", stderr)
-	}
-}
 
 // TestQuietDoesNotAffectStdout verifies that --quiet does not suppress stdout
 // on success.

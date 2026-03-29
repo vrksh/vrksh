@@ -15,7 +15,7 @@
     },
     {
       "name": "tok",
-      "description": "token counter - cl100k_base, --budget guard, --json."
+      "description": "Count tokens. Gate pipelines before they fail."
     },
     {
       "name": "sse",

@@ -281,28 +281,29 @@ vrk uuid --v7 --count 10 --json | jq -r '.uuid'
 
 ---
 
-## tok — Token Counter and Budget Guard
+## tok — Token Counter
 
 Counts tokens in stdin using the cl100k_base tokenizer. Exact for GPT-4 family,
-~95% accurate for Claude. Optionally fails if over a budget.
+~95% accurate for Claude. With `--check N`, acts as a pipeline gate: passes input
+through if within the token limit, exits 1 if over.
 Input: positional argument or stdin.
 
 ### Flags
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--budget <N>` | — | Exit 1 if token count exceeds N |
+| `--check <N>` | - | Pass input through if within N tokens; exit 1 with empty stdout if over. Reads all stdin before deciding. |
 | `--model <name>` | `-m` | Tokenizer model label (default: `cl100k_base`; only cl100k_base is currently implemented) |
-| `--json` | `-j` | Emit output as `{"tokens": N, "model": "cl100k_base"}` |
+| `--json` | `-j` | Emit output as `{"tokens": N, "model": "cl100k_base"}` (measurement mode) or JSON error (check mode) |
 | `--quiet` | `-q` | Suppress all stderr output (exit codes unaffected) |
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success — count printed (or JSON emitted), within budget if `--budget` was set |
-| 1 | Over budget — `--budget N` was set and token count exceeds N |
-| 2 | Usage error — unknown flag; running interactively with no piped input |
+| 0 | Success - count printed (or JSON emitted); `--check` within limit |
+| 1 | Over limit - `--check N` was set and token count exceeds N |
+| 2 | Usage error - unknown flag; running interactively with no piped input |
 
 ### Examples
 
@@ -312,32 +313,32 @@ cat prompt.txt | vrk tok
 
 # Count a string directly
 vrk tok "hello world"
-# → 2
+# -> 2
 
 # JSON output
 echo "hello world" | vrk tok --json
-# → {"tokens":2,"model":"cl100k_base"}
+# -> {"tokens":2,"model":"cl100k_base"}
 
-# Budget guard — exit 1 if over 4000 tokens
-cat prompt.txt | vrk tok --budget 4000
+# Gate: pass through if within 8000 tokens
+echo "hello world" | vrk tok --check 8000
+# -> hello world  (exits 0, input passes through unchanged)
 
-# Budget guard with --fail (identical to --budget alone on tok)
-cat prompt.txt | vrk tok --budget 4000 --fail
+# Gate: exit 1 if over limit
+cat big_context.txt | vrk tok --check 100
+# -> (nothing on stdout, exits 1)
 
 # Count with explicit model label
 echo "hello world" | vrk tok --model cl100k_base
-# → 2
+# -> 2
 ```
 
 ### Compose patterns
 
 ```bash
-# Pre-flight check before sending to an LLM — abort if too large
-cat prompt.txt | vrk tok --budget 4000 && cat prompt.txt | vrk prompt --system "summarise this"
-
-# Gate in a pipeline — nothing downstream runs if over budget
-cat big_context.txt | vrk tok --budget 8000 | vrk prompt --system "answer: $QUESTION"
-# (vrk tok exits 1 and passes nothing to vrk prompt when over budget)
+# Gate in a pipeline - input passes through to prompt if within limit
+cat big_context.txt | vrk tok --check 8000 | vrk prompt --system "answer: $QUESTION"
+# (within 8000: full pipeline runs, doc reaches prompt unchanged)
+# (over 8000: pipeline stops at tok, nothing reaches prompt)
 
 # Count tokens and store result
 TOKENS=$(cat prompt.txt | vrk tok)
@@ -346,19 +347,19 @@ echo "Sending $TOKENS tokens to the model"
 # JSON output for structured logging
 cat prompt.txt | vrk tok --json | vrk kv set "last_prompt_tokens"
 
-# CI size gate — fail build if generated prompt is too large
-cat generated_prompt.txt | vrk tok --budget 100000 || { echo "Prompt too large"; exit 1; }
+# CI size gate - fail build if generated prompt is too large
+cat generated_prompt.txt | vrk tok --check 100000 > /dev/null || { echo "Prompt too large"; exit 1; }
 ```
 
 ### Gotchas
 
-- **`--model` is a label, not a tokenizer switch.** Passing `--model claude-3-opus` or any other value still uses cl100k_base internally — the flag exists for forward compatibility and `--json` output labelling. Only `cl100k_base` is currently implemented; any other string is accepted without error but does not change which tokenizer runs.
-- **cl100k_base is approximate for Claude (~95% accurate).** The exact Claude tokenizer is not publicly available. Set `--budget` at 90% of the model's actual context limit to absorb the error margin.
-- **`--budget` is the only guard flag on `tok`** — it exits 1 when exceeded. `tok` has no `--fail` flag; passing it is a usage error (exit 2).
+- **`--check` buffers all stdin** before deciding whether to pass through - O(input size) memory. For inputs >100MB, sample first with `vrk sip`.
+- **`--json` + `--check` within limit** passes raw input through, not a JSON envelope. `--json` only affects the error path.
+- **`--check 0`** exits 1 for any non-empty input. Valid but rarely useful.
+- **Positional arg passthrough** joins with space, no trailing newline. Stdin passthrough preserves raw bytes exactly including trailing newlines.
+- **`--model` is a label, not a tokenizer switch.** Passing `--model claude-3-opus` or any other value still uses cl100k_base internally - the flag exists for forward compatibility and `--json` output labelling. Only `cl100k_base` is currently implemented; any other string is accepted without error but does not change which tokenizer runs.
+- **cl100k_base is approximate for Claude (~95% accurate).** The exact Claude tokenizer is not publicly available. Set `--check` at 90% of the model's actual context limit to absorb the error margin.
 - **Empty pipe is 0 tokens, not an error.** `cat /dev/null | vrk tok` exits 0 and prints `0`. Only running `vrk tok` interactively in a terminal (no pipe) exits 2.
-- **When budget is exceeded, stdout is empty.** The count is reported only on success. On exit 1, only stderr contains the message. This makes `vrk tok --budget N | next-command` safe — `next-command` receives no input when the budget check fails.
-- **`--json` does not change error format.** When budget is exceeded, stderr is always plain text regardless of `--json`. Stdout is still empty on exit 1.
-- Stdout is always empty on error — errors go to stderr only.
 
 ---
 
@@ -847,7 +848,7 @@ vrk coax --times 3 --backoff exp:1s --on 1 -- \
 ### Gotchas
 
 - **`--json` means metadata envelope, not "respond in JSON".** To request JSON from the LLM, use `--schema`. `--json` wraps the response in `{response, model, tokens_used, latency_ms, request_hash}`.
-- **`--budget` is a hard gate.** It fires before the API call — even if no API key is set. There is no soft warning mode; use `vrk tok --budget N` if you want the token count without stopping the pipeline.
+- **`--budget` is a hard gate.** It fires before the API call - even if no API key is set. There is no soft warning mode; use `vrk tok --check N` to gate the pipeline upstream.
 - **Temperature default is 0.** Responses are deterministic by default. `--retry` escalates temperature across attempts (0.0 → 0.1 → 0.2). Do not add a `--temperature` flag unless explicitly extending the tool.
 - **API keys are never in output.** The key value is scrubbed from all error messages and `--explain` output before writing to stdout or stderr. `--explain` uses `$ANTHROPIC_API_KEY` / `$OPENAI_API_KEY` as shell variable references.
 - **No conversation history.** Each call is stateless — there is no session context between invocations. For multi-turn conversations, build the context into the prompt text before calling.
@@ -941,7 +942,7 @@ done
 
 # Budget-safe chunked summarisation
 cat long_doc.txt | vrk chunk --size 3000 | jq -r '.text' | while read -r chunk; do
-  echo "$chunk" | vrk tok --budget 3000 && echo "$chunk" | vrk prompt --system "Summarise."
+  echo "$chunk" | vrk tok --check 3000 | vrk prompt --system "Summarise."
 done
 
 # Store all chunks in kv, keyed by document ID and chunk index
@@ -1042,7 +1043,7 @@ vrk grab https://example.com | vrk chunk --size 1000
 
 ```bash
 # Fetch, count tokens, guard before sending to LLM
-vrk grab https://example.com | vrk tok --budget 8000 && \
+vrk grab https://example.com | vrk tok --check 8000 | \
   vrk grab https://example.com | vrk prompt --system "Summarise this page."
 
 # Store fetched content in kv keyed by URL

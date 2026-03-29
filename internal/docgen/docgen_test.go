@@ -28,10 +28,10 @@ flags:
     short: "-j"
     type: bool
     description: Emit JSON output
-  - flag: --budget
+  - flag: --check
     short: ""
     type: int
-    description: Token budget limit
+    description: Pass input through if within N tokens
 exit_codes:
   - code: 0
     meaning: Success
@@ -121,8 +121,8 @@ func TestGenerateToolDoc(t *testing.T) {
 	if !strings.Contains(s, "`--json`") {
 		t.Error("missing --json in flags table")
 	}
-	if !strings.Contains(s, "`--budget`") {
-		t.Error("missing --budget in flags table")
+	if !strings.Contains(s, "`--check`") {
+		t.Error("missing --check in flags table")
 	}
 
 	// Check example

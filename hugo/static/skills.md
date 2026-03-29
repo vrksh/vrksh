@@ -473,23 +473,23 @@ Exit 2: --rate missing or invalid, interactive TTY
 cat urls.txt | vrk throttle --rate 10/s | xargs -I{} vrk grab {}
 ```
 
-## tok - token counter - cl100k_base, --budget guard, --json.
+## tok - Count tokens. Gate pipelines before they fail.
 
 Group: v1
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--json` | -j | Emit JSON with token count and metadata |
-| `--budget` |   | Exit 1 if token count exceeds N |
-| `--model` | -m | Tokenizer model (currently cl100k_base only) |
-| `--quiet` | -q | Suppress stderr output |
+| `--check` |   | Pass input through if ≤N tokens; exit 1 with empty stdout if over |
+| `--model` |   | Tokenizer — cl100k_base (default) |
+| `--json` | -j | Emit JSON (measurement) or JSON error (gate). Does not wrap passthrough. |
+| `--quiet` | -q | Suppress stderr on failure |
 
-Exit 0: Success, within budget
-Exit 1: Over budget or I/O error
-Exit 2: Usage error - no input, unknown flag
+Exit 0: Measurement success; or --check within limit
+Exit 1: --check over limit; I/O error; tokenizer error
+Exit 2: Usage error — unknown flag, no stdin, --check without value
 
 ```bash
-cat prompt.txt | vrk tok --budget 4000
+cat prompt.txt | vrk tok --check 8000 | vrk prompt
 ```
 
 ## urlinfo - URL parser - scheme, host, port, path, query, --field
