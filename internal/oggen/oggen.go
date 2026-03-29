@@ -9,7 +9,7 @@
 //   - Text: #E8E8E8 (--color-text)
 //   - Muted: #707070 (--color-muted)
 //   - Accent: #6EE7B7 (--color-accent, commands + highlights)
-//   - Fonts: Urbanist (headings), JetBrains Mono (code/brand)
+//   - Fonts: Urbanist (headings), IBM Plex Mono (code/brand)
 //   - Layout: left-aligned, terminal block, pill badge, tree logo
 package oggen
 
@@ -160,7 +160,7 @@ func drawLetterspaced(dc *gg.Context, text string, x, y, spacing float64) {
 
 // drawPill draws a small rounded pill badge with uppercase letterspaced text.
 func drawPill(dc *gg.Context, label string, x, y float64) error {
-	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 14); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 14); err != nil {
 		return err
 	}
 	upper := strings.ToUpper(label)
@@ -216,7 +216,7 @@ func drawBrandBar(dc *gg.Context, pillLabel string) error {
 	dc.DrawImage(logoDc.Image(), int(pad), 52)
 
 	// "vrk.sh" next to logo
-	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 22); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 22); err != nil {
 		return err
 	}
 	dc.SetColor(mutedCl)
@@ -272,21 +272,21 @@ func renderCommand(dc *gg.Context, toolName, tagline, command, headline, categor
 	drawTerminalBlock(dc, blockX, blockY, blockW, blockH, 8)
 
 	// "$ command" inside block
-	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 28); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 28); err != nil {
 		return err
 	}
 	dc.SetColor(accentCl)
 	dc.DrawString("$ "+command, blockPadLeft, 330)
 
 	// "# tagline" inside block
-	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 18); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 18); err != nil {
 		return err
 	}
 	dc.SetColor(mutedCl)
 	dc.DrawString("# "+tagline, blockPadLeft, 388)
 
 	// Bottom-right: "vrk.sh" URL
-	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 16); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 16); err != nil {
 		return err
 	}
 	dc.SetColor(mutedCl)
@@ -315,7 +315,7 @@ func renderPipeline(dc *gg.Context, command, subtitle, comment string) error {
 	logoDc.DrawImage(logo, 0, 0)
 	dc.DrawImage(logoDc.Image(), int(pad), 52)
 
-	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 22); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 22); err != nil {
 		return err
 	}
 	dc.SetColor(mutedCl)
@@ -345,20 +345,20 @@ func renderPipeline(dc *gg.Context, command, subtitle, comment string) error {
 	drawGlow(dc, blockX+blockW/2, blockY+blockH/2, blockW/2, blockH/2)
 	drawTerminalBlock(dc, blockX, blockY, blockW, blockH, 8)
 
-	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 26); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 26); err != nil {
 		return err
 	}
 	dc.SetColor(accentCl)
 	dc.DrawString("$ "+command, blockPadLeft, 345)
 
-	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 20); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 20); err != nil {
 		return err
 	}
 	dc.SetColor(mutedCl)
 	dc.DrawString("# "+comment, blockPadLeft, 403)
 
 	// Bottom-right: "vrk.sh" URL
-	if err := setFont(dc, "JetBrainsMono-Regular.ttf", 16); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 16); err != nil {
 		return err
 	}
 	dc.SetColor(mutedCl)
