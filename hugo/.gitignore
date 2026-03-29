@@ -1,4 +1,5 @@
 node_modules/
 public/
+data/
 .hugo_build.lock
 static/css/main.css

@@ -230,12 +230,20 @@ func drawBrandBar(dc *gg.Context, pillLabel string) error {
 	return nil
 }
 
+// truncateCommand truncates a command string to maxLen chars, adding "..." if needed.
+func truncateCommand(cmd string, maxLen int) string {
+	if len(cmd) <= maxLen {
+		return cmd
+	}
+	return cmd[:maxLen-3] + "..."
+}
+
 // renderCommand draws Variant 1: Command Highlight (per-tool).
 //
 // Layout (mirrors the vrk.sh hero section):
 //   - Top bar: tree logo + "vrk.sh" left, group pill badge right
 //   - Dot grid background
-//   - "vrk <toolname>" in Urbanist Medium, accent green
+//   - "vrk <toolname>" in Urbanist Medium 64pt, accent green
 //   - Headline in Urbanist Regular, white
 //   - Terminal block with glow: "$ command" in accent, "# tagline" in muted
 func renderCommand(dc *gg.Context, toolName, tagline, command, headline, category string) error {
@@ -247,43 +255,44 @@ func renderCommand(dc *gg.Context, toolName, tagline, command, headline, categor
 		return err
 	}
 
-	// Tool name - accent, Urbanist Medium
-	if err := setFont(dc, "Urbanist-Medium.ttf", 42); err != nil {
+	// Tool name - accent, Urbanist Medium, 64pt for readability at card size
+	if err := setFont(dc, "Urbanist-Medium.ttf", 64); err != nil {
 		return err
 	}
 	dc.SetColor(accentCl)
-	dc.DrawString("vrk "+toolName, pad, 160)
+	dc.DrawString("vrk "+toolName, pad, 180)
 
 	// Headline - Urbanist Regular, white
 	if err := setFont(dc, "Urbanist-Regular.ttf", 26); err != nil {
 		return err
 	}
 	dc.SetColor(textCl)
-	dc.DrawString(headline, pad, 210)
+	dc.DrawString(headline, pad, 232)
 
 	// Terminal block with glow
 	blockPadLeft := pad + 4
 	blockX := pad - 20
-	blockY := 265.0
+	blockY := 285.0
 	blockW := float64(imgW) - 2*(pad-20)
 	blockH := 150.0
 
 	drawGlow(dc, blockX+blockW/2, blockY+blockH/2, blockW/2, blockH/2)
 	drawTerminalBlock(dc, blockX, blockY, blockW, blockH, 8)
 
-	// "$ command" inside block
+	// "$ command" inside block - truncate long commands
+	cmd := truncateCommand(command, 57)
 	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 28); err != nil {
 		return err
 	}
 	dc.SetColor(accentCl)
-	dc.DrawString("$ "+command, blockPadLeft, 330)
+	dc.DrawString("$ "+cmd, blockPadLeft, 350)
 
 	// "# tagline" inside block
 	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 18); err != nil {
 		return err
 	}
 	dc.SetColor(mutedCl)
-	dc.DrawString("# "+tagline, blockPadLeft, 388)
+	dc.DrawString("# "+tagline, blockPadLeft, 408)
 
 	// Bottom-right: "vrk.sh" URL
 	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 16); err != nil {
