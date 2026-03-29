@@ -708,14 +708,14 @@ echo "last exit: $?"
 ## prompt — LLM Call for Pipelines
 
 Sends a prompt to an LLM and prints the response. Defaults to Anthropic
-(`claude-sonnet-4-5`). Reads from stdin or a positional argument.
+(`claude-sonnet-4-6`). Reads from stdin or a positional argument.
 Input: positional argument or stdin.
 
 ### Flags
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--model` | `-m` | string | `claude-sonnet-4-5` | Model name; overridden by `VRK_DEFAULT_MODEL` env var |
+| `--model` | `-m` | string | `claude-sonnet-4-6` | Model name; overridden by `VRK_DEFAULT_MODEL` env var |
 | `--endpoint <url>` | — | string | `""` | OpenAI-compatible API base URL; overrides provider detection |
 | `--budget <N>` | — | int | 0 | Exit 1 before calling the API if prompt exceeds N tokens (0 = disabled) |
 | `--fail` | `-f` | bool | false | Accepted; meaningful with `--schema` (exit 1 on mismatch) |
@@ -752,7 +752,7 @@ When `--endpoint` or `VRK_LLM_URL` is set, `--model` is required (exit 2 if abse
 ```json
 {
   "response": "pong",
-  "model": "claude-sonnet-4-5",
+  "model": "claude-sonnet-4-6",
   "tokens_used": 12,
   "latency_ms": 340,
   "request_hash": "<sha256hex>"
@@ -786,7 +786,7 @@ cat big_doc.txt | vrk prompt --budget 4000
 echo "hello" | vrk prompt --explain
 
 # Override model for a session via env var
-export VRK_DEFAULT_MODEL=claude-opus-4-5
+export VRK_DEFAULT_MODEL=claude-opus-4-6
 echo "hello" | vrk prompt
 
 # Custom endpoint (Ollama, LM Studio, vLLM, LocalAI, Jan)

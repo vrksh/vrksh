@@ -143,12 +143,12 @@ vrk kv set mykey val --dry-run   # shows what would be written without writing
 1. `--model` flag
 2. `$VRK_DEFAULT_MODEL` env var
 3. `~/.config/vrk/config.toml` → `default_model`
-4. Built-in default (`claude-sonnet-4-5`)
+4. Built-in default (`claude-sonnet-4-6`)
 
 **Examples:**
 ```bash
 cat prompt.txt | vrk prompt --model gpt-4o
-cat prompt.txt | vrk prompt --model claude-opus-4-5
+cat prompt.txt | vrk prompt --model claude-opus-4-6
 cat prompt.txt | vrk prompt --model ollama/llama3   # local via --endpoint
 ```
 

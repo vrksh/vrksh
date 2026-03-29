@@ -595,7 +595,7 @@ func init() {
 		Name:  "prompt",
 		Short: "Send a prompt to an LLM and print the response",
 		Flags: []shared.FlagMeta{
-			{Name: "model", Shorthand: "m", Usage: "LLM model (default: claude-sonnet-4-5 or VRK_DEFAULT_MODEL)"},
+			{Name: "model", Shorthand: "m", Usage: "LLM model (default: claude-sonnet-4-6 or VRK_DEFAULT_MODEL)"},
 			{Name: "budget", Usage: "exit 1 if prompt exceeds N tokens (0 = disabled)"},
 			{Name: "fail", Shorthand: "f", Usage: "fail on non-2xx API response or schema mismatch"},
 			{Name: "json", Shorthand: "j", Usage: "emit response as JSON envelope with metadata"},
@@ -627,7 +627,7 @@ func Run() int {
 		systemArg   string
 	)
 
-	fs.StringVarP(&modelFlag, "model", "m", "", "LLM model (default: claude-sonnet-4-5 or VRK_DEFAULT_MODEL)")
+	fs.StringVarP(&modelFlag, "model", "m", "", "LLM model (default: claude-sonnet-4-6 or VRK_DEFAULT_MODEL)")
 	fs.IntVar(&budget, "budget", 0, "exit 1 if prompt exceeds N tokens (0 = disabled)")
 	fs.BoolVarP(&failFlag, "fail", "f", false, "fail on non-2xx API response or schema mismatch")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit response as JSON envelope with metadata")
@@ -977,7 +977,7 @@ func Run() int {
 func Flags() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("prompt", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.StringP("model", "m", "", "LLM model (default: claude-sonnet-4-5 or VRK_DEFAULT_MODEL)")
+	fs.StringP("model", "m", "", "LLM model (default: claude-sonnet-4-6 or VRK_DEFAULT_MODEL)")
 	fs.Int("budget", 0, "exit 1 if prompt exceeds N tokens (0 = disabled)")
 	fs.BoolP("fail", "f", false, "fail on non-2xx API response or schema mismatch")
 	fs.BoolP("json", "j", false, "emit response as JSON envelope with metadata")
@@ -998,7 +998,7 @@ func printUsage(fs *pflag.FlagSet) int {
 		"       echo <text> | prompt [flags]",
 		"",
 		"Send a prompt to an LLM and print the response. Reads from stdin or",
-		"a positional argument. Defaults to claude-sonnet-4-5 via Anthropic.",
+		"a positional argument. Defaults to claude-sonnet-4-6 via Anthropic.",
 		"",
 		"  --system <text>      system prompt as literal text",
 		"  --system @file.txt   system prompt read from file",
