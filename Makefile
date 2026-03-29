@@ -62,10 +62,10 @@ smoke: build
 	@echo "--- cmd/grab/grab_smoke_test.go ---"
 	VRK=$(CURDIR)/vrk go test -tags smoke ./cmd/grab/... -v -timeout 60s
 
-# Generate Hugo content, static files, data JSON, OG images, and update manifest.
+# Generate Hugo content, OG images, and build site.
 generate: generate-og
 	go run ./internal/docgen/cmd
-	go run ./internal/oggen/cmd
+	hugo --minify --source hugo
 
 # Generate OG images only. Runs before hugo in test-site.
 generate-og:
