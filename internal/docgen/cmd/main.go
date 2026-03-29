@@ -61,5 +61,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Copy manifest to Hugo static dir so it's served at /manifest.json
+	manifestData, err := os.ReadFile(*manifest)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: reading manifest for copy: %v\n", err)
+		os.Exit(1)
+	}
+	staticManifest := fmt.Sprintf("%s/manifest.json", *hugoStatic)
+	if err := os.WriteFile(staticManifest, manifestData, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "error: copying manifest to static: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Printf("generated docs for %d tools\n", len(tools))
 }
