@@ -7,7 +7,7 @@
     },
     {
       "name": "epoch",
-      "description": "Timestamp converter - unix/ISO, relative time"
+      "description": "timestamp converter - unix/ISO, relative time"
     },
     {
       "name": "uuid",
@@ -15,7 +15,7 @@
     },
     {
       "name": "tok",
-      "description": "Token counter - cl100k_base, --budget guard, --json."
+      "description": "token counter - cl100k_base, --budget guard, --json."
     },
     {
       "name": "sse",
@@ -23,7 +23,7 @@
     },
     {
       "name": "coax",
-      "description": "Retry wrapper - --times, --backoff, --on, --until"
+      "description": "retry wrapper - --times, --backoff, --on, --until"
     },
     {
       "name": "prompt",
@@ -31,11 +31,11 @@
     },
     {
       "name": "kv",
-      "description": "Key-value store - SQLite-backed, namespaces, TTL, atomic counters."
+      "description": "key-value store - SQLite-backed, namespaces, TTL, atomic counters."
     },
     {
       "name": "chunk",
-      "description": "Token-aware text splitter - JSONL chunks within a token budget"
+      "description": "token-aware text splitter - JSONL chunks within a token budget"
     },
     {
       "name": "grab",
@@ -47,11 +47,11 @@
     },
     {
       "name": "links",
-      "description": "Hyperlink extractor - markdown, HTML, bare URLs to JSONL"
+      "description": "hyperlink extractor - markdown, HTML, bare URLs to JSONL"
     },
     {
       "name": "plain",
-      "description": "Markdown stripper - removes syntax, keeps prose"
+      "description": "markdown stripper - removes syntax, keeps prose"
     },
     {
       "name": "validate",
@@ -59,27 +59,27 @@
     },
     {
       "name": "mask",
-      "description": "Secret redactor - entropy + pattern-based, streaming"
+      "description": "secret redactor - entropy + pattern-based, streaming"
     },
     {
       "name": "emit",
-      "description": "Structured logger - wraps stdin lines as JSONL log records"
+      "description": "structured logger - wraps stdin lines as JSONL log records"
     },
     {
       "name": "throttle",
-      "description": "Rate limiter for pipes - --rate N/s or N/m"
+      "description": "rate limiter for pipes - --rate N/s or N/m"
     },
     {
       "name": "digest",
-      "description": "Universal hasher - sha256/md5/sha512, --hmac, --compare"
+      "description": "universal hasher - sha256/md5/sha512, --hmac, --compare"
     },
     {
       "name": "base",
-      "description": "Encoding converter - base64, base64url, hex, base32"
+      "description": "encoding converter - base64, base64url, hex, base32"
     },
     {
       "name": "recase",
-      "description": "Naming convention converter - snake, camel, kebab, pascal, title"
+      "description": "naming convention converter - snake, camel, kebab, pascal, title"
     },
     {
       "name": "slug",
@@ -87,15 +87,15 @@
     },
     {
       "name": "moniker",
-      "description": "Memorable name generator - run IDs, job labels, temp dirs"
+      "description": "memorable name generator - run IDs, job labels, temp dirs"
     },
     {
       "name": "pct",
-      "description": "Percent encoder/decoder - RFC 3986, --encode, --decode, --form"
+      "description": "percent encoder/decoder - RFC 3986, --encode, --decode, --form"
     },
     {
       "name": "sip",
-      "description": "Stream sampler - --first, --count, --every, --sample"
+      "description": "stream sampler - --first, --count, --every, --sample"
     },
     {
       "name": "urlinfo",
@@ -103,7 +103,15 @@
     },
     {
       "name": "assert",
-      "description": "Pipeline condition check - jq conditions, --contains, --matches"
+      "description": "pipeline condition check - jq conditions, --contains, --matches"
+    },
+    {
+      "name": "bare",
+      "description": "symlink creator - use vrksh tools without the vrk prefix"
+    },
+    {
+      "name": "completions",
+      "description": "shell completion script generator - bash, zsh, fish"
     }
   ]
 }
