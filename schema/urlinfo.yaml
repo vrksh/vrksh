@@ -1,5 +1,7 @@
 name: urlinfo
 tagline: URL parser - scheme, host, port, path, query, --field
+meta_description: "Parse URLs and extract components. Get scheme, host, path, query params, or any field individually."
+og_title: "vrk urlinfo - URL parser and component extractor"
 description: |
   Breaks URLs into their components - scheme, host, port, path, query parameters - as structured JSON. You can extract a single piece with --field, including nested query parameters using dot-path syntax. Pure parsing, no network calls.
 problem: >

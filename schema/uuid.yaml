@@ -1,5 +1,7 @@
 name: uuid
 tagline: UUID generator - v4/v7, --count, --json
+meta_description: "Generate UUIDs from the command line. v4 random or v7 time-sorted. Batch with --count."
+og_title: "vrk uuid - UUID v4 and v7 generator"
 description: |
   Generates UUIDs - v4 (random) or v7 (time-ordered). v7 UUIDs sort by creation time, which makes them useful as database primary keys that stay roughly ordered. Consistent output format across macOS and Linux.
 problem: >

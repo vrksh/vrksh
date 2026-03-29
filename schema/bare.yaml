@@ -1,5 +1,7 @@
 name: bare
 tagline: symlink creator - use vrksh tools without the vrk prefix
+meta_description: "Create symlinks for any vrk tool. Use tok, grab, prompt directly without the vrk prefix."
+og_title: "vrk bare - use vrksh tools without the vrk prefix"
 description: |
   Lets you call any vrksh tool by name without the vrk prefix. Instead of vrk tok, vrk jwt, vrk epoch, you just type tok, jwt, epoch. It creates symlinks in the same directory as the binary - nothing is copied, nothing is installed elsewhere.
 problem: >

@@ -1,5 +1,7 @@
 name: grab
 tagline: URL fetcher - clean markdown, plain text, or raw HTML.
+meta_description: "Fetch any URL and get clean markdown back. No BeautifulSoup, no parsing scripts."
+og_title: "vrk grab - fetch any URL as clean markdown"
 description: |
   Fetches a web page and extracts the readable content as clean markdown. Strips navigation, ads, scripts, and boilerplate - you get the article text, not the page chrome. Also supports plain text and raw HTML output modes.
 problem: >

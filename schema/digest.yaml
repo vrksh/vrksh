@@ -1,5 +1,7 @@
 name: digest
 tagline: universal hasher - sha256/md5/sha512, --hmac, --compare
+meta_description: "Hash anything with sha256, md5, or sha512. Verify with --compare. Sign with --hmac. One tool, no flags to memorize."
+og_title: "vrk digest - hash, verify, and HMAC from the command line"
 description: |
   Hashes strings, stdin, or files with SHA-256, MD5, or SHA-512. Also computes HMACs for verifying webhook signatures with constant-time comparison, so timing attacks are not a concern. Streams input, so it handles files of any size without loading them into memory.
 problem: >

@@ -1,5 +1,7 @@
 name: completions
 tagline: shell completion script generator - bash, zsh, fish
+meta_description: "Generate shell completion scripts for bash, zsh, and fish. Tab-complete every vrk tool and flag."
+og_title: "vrk completions - shell completion for bash, zsh, and fish"
 description: |
   Generates tab-completion scripts for your shell. After installing, vrk <tab> completes tool names and vrk tok --<tab> completes flags. The completions are generated from the binary itself, so they always match the version you have installed.
 problem: >

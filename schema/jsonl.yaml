@@ -1,5 +1,7 @@
 name: jsonl
 tagline: JSON array to JSONL converter - --collect, --json
+meta_description: "Convert between JSON arrays and JSONL. Flatten arrays for streaming, collect lines back into arrays."
+og_title: "vrk jsonl - convert between JSON arrays and JSONL"
 description: |
   Converts between JSON arrays and JSONL (one record per line). Splits arrays for pipeline processing, or collects JSONL lines back into an array when an API expects one. Uses a streaming decoder, so it handles arrays larger than available memory.
 problem: >

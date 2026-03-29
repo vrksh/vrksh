@@ -13,19 +13,21 @@ import (
 
 // Tool is the canonical representation of a vrksh tool.
 type Tool struct {
-	Name        string     `yaml:"name"`
-	Tagline     string     `yaml:"tagline"`
-	Description string     `yaml:"description"`
-	Problem     string     `yaml:"problem"`
-	Before      string     `yaml:"before"`
-	After       string     `yaml:"after"`
-	Group       string     `yaml:"group"`
-	Category    string     `yaml:"category"`
-	Example     string     `yaml:"example"`
-	Flags       []Flag     `yaml:"flags"`
-	ExitCodes   []ExitCode `yaml:"exit_codes"`
-	OGImage     OGImage    `yaml:"og_image"`
-	MCPCallable bool       `yaml:"mcp_callable"`
+	Name            string     `yaml:"name"`
+	Tagline         string     `yaml:"tagline"`
+	MetaDescription string     `yaml:"meta_description"`
+	OGTitle         string     `yaml:"og_title"`
+	Description     string     `yaml:"description"`
+	Problem         string     `yaml:"problem"`
+	Before          string     `yaml:"before"`
+	After           string     `yaml:"after"`
+	Group           string     `yaml:"group"`
+	Category        string     `yaml:"category"`
+	Example         string     `yaml:"example"`
+	Flags           []Flag     `yaml:"flags"`
+	ExitCodes       []ExitCode `yaml:"exit_codes"`
+	OGImage         OGImage    `yaml:"og_image"`
+	MCPCallable     bool       `yaml:"mcp_callable"`
 }
 
 // Flag describes a single CLI flag.

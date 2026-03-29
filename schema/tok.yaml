@@ -1,5 +1,7 @@
 name: tok
 tagline: token counter - cl100k_base, --budget guard, --json.
+meta_description: "Count tokens before LLM calls. Exit 1 if over budget. Prevents silent prompt truncation."
+og_title: "vrk tok - token counter and budget guard for LLM prompts"
 description: |
   Counts tokens in your text using the cl100k_base tokenizer. Exact for GPT-4 and roughly 95% accurate for Claude. Use it as a guard before sending prompts to an LLM - if the input exceeds your token budget, tok exits 1 and your pipeline stops before the API call.
 problem: >

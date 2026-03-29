@@ -1,5 +1,7 @@
 name: assert
 tagline: pipeline condition check - jq conditions, --contains, --matches
+meta_description: "Assert conditions mid-pipeline. Exit 1 if a check fails. Catches bad data before it reaches the next stage."
+og_title: "vrk assert - pipeline condition checks that halt on failure"
 description: |
   Checks a condition on your pipeline data and either passes it through or stops the pipeline. You can match JSON with jq expressions or plain text with substring and regex checks. If the condition fails, nothing reaches the next step.
 problem: >

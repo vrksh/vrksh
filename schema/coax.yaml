@@ -1,5 +1,7 @@
 name: coax
 tagline: retry wrapper - --times, --backoff, --on, --until
+meta_description: "Retry flaky commands with exponential backoff. Wrap any pipeline stage to handle transient API failures."
+og_title: "vrk coax - retry wrapper with backoff for flaky commands"
 description: |
   Wraps any command with automatic retries and backoff. If the command fails, coax re-runs it - buffering stdin so each attempt gets the same input. You control how many times to retry, how long to wait between attempts, and which exit codes count as retriable.
 problem: >

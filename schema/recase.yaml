@@ -1,5 +1,7 @@
 name: recase
 tagline: naming convention converter - snake, camel, kebab, pascal, title
+meta_description: "Convert between naming conventions. snake_case, camelCase, kebab-case, PascalCase, and Title Case."
+og_title: "vrk recase - convert between snake, camel, kebab, and more"
 description: |
   Converts between naming conventions - snake_case, camelCase, kebab-case, PascalCase, and Title Case. Auto-detects the input format so you just specify what you want. Handles acronyms correctly: HTMLParser becomes html_parser, not h_t_m_l_parser.
 problem: >

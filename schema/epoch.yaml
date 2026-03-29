@@ -1,5 +1,7 @@
 name: epoch
 tagline: timestamp converter - unix/ISO, relative time
+meta_description: "Convert between Unix timestamps and ISO dates. Supports relative time like +3d or -1h."
+og_title: "vrk epoch - Unix timestamp and ISO date converter"
 description: |
   Converts between Unix timestamps and human-readable dates. You can pass a timestamp, an ISO date, or a relative offset like +3d or -1h. Works the same on macOS and Linux, unlike the date command which differs between platforms.
 problem: >

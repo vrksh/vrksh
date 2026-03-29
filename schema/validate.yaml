@@ -1,5 +1,7 @@
 name: validate
 tagline: JSONL schema validator - --schema, --strict, --fix, --json
+meta_description: "Validate LLM JSON output against a schema. Exit 1 on mismatch. Pipeline stops before bad data propagates."
+og_title: "vrk validate - schema validation for LLM JSON output"
 description: |
   Checks every JSON record in a stream against a schema you provide. Valid records pass through to stdout. Invalid ones are dropped with a warning so downstream tools only see clean data. Use --strict to halt on the first bad record instead of skipping it.
 problem: >

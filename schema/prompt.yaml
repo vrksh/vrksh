@@ -1,5 +1,7 @@
 name: prompt
 tagline: LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
+meta_description: "Pipe text to Claude or GPT from your terminal. Schema validation, retries, deterministic output."
+og_title: "vrk prompt - pipe text to any LLM from your terminal"
 description: |
   Sends a prompt to an LLM and prints the response to stdout. Works with Anthropic and OpenAI APIs. You pipe content in, optionally set a system prompt, and get the response back - no curl commands, no JSON escaping, no response parsing. Temperature defaults to 0 for deterministic output.
 problem: >

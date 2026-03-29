@@ -1,5 +1,7 @@
 name: mask
 tagline: secret redactor - entropy + pattern-based, streaming
+meta_description: "Redact secrets from pipeline output before logging. Detects API keys, tokens, and high-entropy strings automatically."
+og_title: "vrk mask - automatic secret redaction for pipeline output"
 description: |
   Redacts secrets from text before it reaches an LLM or a log file. Catches Bearer tokens, passwords, API keys, and other credentials using built-in patterns. Also flags high-entropy strings that look like secrets but don't match a known pattern. Streams input, so it handles large files safely.
 problem: >

@@ -1,5 +1,7 @@
 name: kv
 tagline: key-value store - SQLite-backed, namespaces, TTL, atomic counters.
+meta_description: "Persistent key-value store for pipelines. SQLite-backed, with namespaces, TTL, and atomic counters."
+og_title: "vrk kv - SQLite key-value store for shell pipelines"
 description: |
   A persistent key-value store for pipelines, backed by SQLite. You can store state between runs - cursors, counters, timestamps - with namespaces to keep things isolated and TTL for automatic expiry. Supports atomic increment and decrement for safe concurrent use.
 problem: >

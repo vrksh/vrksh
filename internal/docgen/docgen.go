@@ -26,7 +26,14 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 		// Frontmatter (group/mcp_callable kept for site filtering, not rendered as badges)
 		b.WriteString("---\n")
 		fmt.Fprintf(&b, "title: \"vrk %s\"\n", t.Name)
-		fmt.Fprintf(&b, "description: \"%s\"\n", t.Tagline)
+		desc := t.Tagline
+		if t.MetaDescription != "" {
+			desc = t.MetaDescription
+		}
+		fmt.Fprintf(&b, "description: \"%s\"\n", desc)
+		if t.OGTitle != "" {
+			fmt.Fprintf(&b, "og_title: \"%s\"\n", t.OGTitle)
+		}
 		fmt.Fprintf(&b, "tool: %s\n", t.Name)
 		fmt.Fprintf(&b, "group: %s\n", t.Group)
 		fmt.Fprintf(&b, "mcp_callable: %v\n", t.MCPCallable)

@@ -1,5 +1,7 @@
 name: links
 tagline: hyperlink extractor - markdown, HTML, bare URLs to JSONL
+meta_description: "Extract every hyperlink from markdown, HTML, or plain text. JSONL output with text, URL, and line number."
+og_title: "vrk links - extract hyperlinks from markdown and HTML"
 description: |
   Extracts every link from markdown, HTML, or plain text in one pass. Each link comes out as a JSONL record with the link text, URL, and source line number. Handles inline markdown links, reference-style links, HTML anchors, and bare URLs.
 problem: >

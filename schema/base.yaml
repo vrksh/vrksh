@@ -1,5 +1,7 @@
 name: base
 tagline: encoding converter - base64, base64url, hex, base32
+meta_description: "Encode and decode base64, base64url, hex, and base32 from the command line. No more openssl flags."
+og_title: "vrk base - base64, hex, and base32 encoding in one tool"
 description: |
   Encodes and decodes between base64, base64url, hex, and base32. Works identically on macOS and Linux - no more remembering whether it is base64 -D or base64 -d. Two subcommands: encode and decode.
 problem: >
