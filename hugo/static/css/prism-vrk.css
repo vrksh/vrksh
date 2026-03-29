@@ -1,0 +1,119 @@
+/* Prism.js theme for vrksh - uses site CSS variables */
+
+code[class*="language-"],
+pre[class*="language-"] {
+  color: var(--color-text);
+  text-shadow: none;
+  font-family: var(--font-mono);
+  direction: ltr;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  tab-size: 2;
+  hyphens: none;
+}
+
+/* Token colors - muted palette that doesn't overpower */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: var(--color-muted);
+}
+
+.token.punctuation {
+  color: #999;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol {
+  color: #F78C6C;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin {
+  color: #C3E88D;
+}
+
+.token.operator,
+.token.entity,
+.token.url {
+  color: #89DDFF;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #C792EA;
+}
+
+.token.function,
+.token.class-name {
+  color: #82AAFF;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #F07178;
+}
+
+/* Light theme overrides */
+[data-theme="light"] .token.comment,
+[data-theme="light"] .token.prolog,
+[data-theme="light"] .token.doctype,
+[data-theme="light"] .token.cdata {
+  color: #6a737d;
+}
+
+[data-theme="light"] .token.punctuation {
+  color: #666;
+}
+
+[data-theme="light"] .token.property,
+[data-theme="light"] .token.tag,
+[data-theme="light"] .token.boolean,
+[data-theme="light"] .token.number,
+[data-theme="light"] .token.constant,
+[data-theme="light"] .token.symbol {
+  color: #D73A49;
+}
+
+[data-theme="light"] .token.selector,
+[data-theme="light"] .token.attr-name,
+[data-theme="light"] .token.string,
+[data-theme="light"] .token.char,
+[data-theme="light"] .token.builtin {
+  color: #22863A;
+}
+
+[data-theme="light"] .token.operator,
+[data-theme="light"] .token.entity,
+[data-theme="light"] .token.url {
+  color: #005CC5;
+}
+
+[data-theme="light"] .token.atrule,
+[data-theme="light"] .token.attr-value,
+[data-theme="light"] .token.keyword {
+  color: #6F42C1;
+}
+
+[data-theme="light"] .token.function,
+[data-theme="light"] .token.class-name {
+  color: #005CC5;
+}
+
+[data-theme="light"] .token.regex,
+[data-theme="light"] .token.important,
+[data-theme="light"] .token.variable {
+  color: #E36209;
+}

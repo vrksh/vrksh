@@ -11,6 +11,9 @@
 <!-- Tailwind CSS -->
 <link rel="stylesheet" href="/css/main.css">
 
+<!-- Syntax highlighting -->
+<link rel="stylesheet" href="/css/prism-vrk.css">
+
 <!-- OG tags -->
 <meta property="og:title" content="{{ if .IsHome }}vrksh - Unix tools for AI pipelines{{ else }}{{ with .Params.og_title }}{{ . }}{{ else }}{{ .Title }} - vrksh{{ end }}{{ end }}">
 <meta property="og:description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">

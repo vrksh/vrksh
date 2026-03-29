@@ -29,6 +29,7 @@ uglyURLs = false
 
 [markup]
   [markup.highlight]
+    codeFences = false
     noClasses = false
     lineNos = false
   [markup.goldmark]
