@@ -1,6 +1,7 @@
 ---
 title: "vrk emit"
-description: "structured logger - wraps stdin lines as JSONL log records"
+description: "Turn plain text into structured JSONL log records. Add timestamps, levels, and fields to any pipeline output."
+og_title: "vrk emit - structured JSONL logging for shell pipelines"
 tool: emit
 group: v1
 mcp_callable: true

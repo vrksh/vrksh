@@ -1,6 +1,7 @@
 ---
 title: "vrk moniker"
-description: "memorable name generator - run IDs, job labels, temp dirs"
+description: "Generate memorable names for run IDs, job labels, and temp dirs. No more UUIDs in log output."
+og_title: "vrk moniker - memorable name generator for run IDs and labels"
 tool: moniker
 group: v1
 mcp_callable: true

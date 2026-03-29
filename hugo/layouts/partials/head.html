@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="/css/main.css">
 
 <!-- OG tags -->
-<meta property="og:title" content="{{ if .IsHome }}vrksh - Unix tools for AI pipelines{{ else }}{{ .Title }}{{ end }}">
+<meta property="og:title" content="{{ if .IsHome }}vrksh - Unix tools for AI pipelines{{ else }}{{ with .Params.og_title }}{{ . }}{{ else }}{{ .Title }} - vrksh{{ end }}{{ end }}">
 <meta property="og:description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
 <meta property="og:type" content="{{ if .IsPage }}article{{ else }}website{{ end }}">
 <meta property="og:url" content="{{ .Permalink }}">

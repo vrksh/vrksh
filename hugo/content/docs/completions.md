@@ -1,6 +1,7 @@
 ---
 title: "vrk completions"
-description: "shell completion script generator - bash, zsh, fish"
+description: "Generate shell completion scripts for bash, zsh, and fish. Tab-complete every vrk tool and flag."
+og_title: "vrk completions - shell completion for bash, zsh, and fish"
 tool: completions
 group: v1
 mcp_callable: false

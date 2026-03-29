@@ -1,6 +1,7 @@
 ---
 title: "vrk kv"
-description: "key-value store - SQLite-backed, namespaces, TTL, atomic counters."
+description: "Persistent key-value store for pipelines. SQLite-backed, with namespaces, TTL, and atomic counters."
+og_title: "vrk kv - SQLite key-value store for shell pipelines"
 tool: kv
 group: v1
 mcp_callable: true

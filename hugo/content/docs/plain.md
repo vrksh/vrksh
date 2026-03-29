@@ -1,6 +1,7 @@
 ---
 title: "vrk plain"
-description: "markdown stripper - removes syntax, keeps prose"
+description: "Strip markdown syntax and keep the prose. Clean input for token counting or plain-text pipelines."
+og_title: "vrk plain - strip markdown to plain text"
 tool: plain
 group: v1
 mcp_callable: true

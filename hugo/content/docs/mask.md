@@ -1,6 +1,7 @@
 ---
 title: "vrk mask"
-description: "secret redactor - entropy + pattern-based, streaming"
+description: "Redact secrets from pipeline output before logging. Detects API keys, tokens, and high-entropy strings automatically."
+og_title: "vrk mask - automatic secret redaction for pipeline output"
 tool: mask
 group: v1
 mcp_callable: true

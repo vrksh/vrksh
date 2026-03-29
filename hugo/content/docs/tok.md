@@ -1,6 +1,7 @@
 ---
 title: "vrk tok"
-description: "token counter - cl100k_base, --budget guard, --json."
+description: "Count tokens before LLM calls. Exit 1 if over budget. Prevents silent prompt truncation."
+og_title: "vrk tok - token counter and budget guard for LLM prompts"
 tool: tok
 group: v1
 mcp_callable: true

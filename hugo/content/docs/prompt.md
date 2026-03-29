@@ -1,6 +1,7 @@
 ---
 title: "vrk prompt"
-description: "LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain."
+description: "Pipe text to Claude or GPT from your terminal. Schema validation, retries, deterministic output."
+og_title: "vrk prompt - pipe text to any LLM from your terminal"
 tool: prompt
 group: v1
 mcp_callable: true

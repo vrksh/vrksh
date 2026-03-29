@@ -1,6 +1,7 @@
 ---
 title: "vrk sip"
-description: "stream sampler - --first, --count, --every, --sample"
+description: "Sample lines from a stream. Take the first N, every Nth, or a random percentage. Works on unbounded input."
+og_title: "vrk sip - sample lines from streams and large files"
 tool: sip
 group: v1
 mcp_callable: true

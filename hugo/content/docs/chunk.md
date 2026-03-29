@@ -1,6 +1,7 @@
 ---
 title: "vrk chunk"
-description: "token-aware text splitter - JSONL chunks within a token budget"
+description: "Split text into token-aware chunks that fit LLM context windows. JSONL output, respects sentence boundaries."
+og_title: "vrk chunk - token-aware text splitter for LLM context windows"
 tool: chunk
 group: v1
 mcp_callable: true

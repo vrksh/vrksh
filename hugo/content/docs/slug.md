@@ -1,6 +1,7 @@
 ---
 title: "vrk slug"
-description: "URL/filename slug generator - --separator, --max, --json"
+description: "Generate URL-safe slugs from any text. Handles unicode, custom separators, and length limits."
+og_title: "vrk slug - URL and filename slug generator"
 tool: slug
 group: v1
 mcp_callable: true

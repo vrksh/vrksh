@@ -1,6 +1,7 @@
 ---
 title: "vrk epoch"
-description: "timestamp converter - unix/ISO, relative time"
+description: "Convert between Unix timestamps and ISO dates. Supports relative time like +3d or -1h."
+og_title: "vrk epoch - Unix timestamp and ISO date converter"
 tool: epoch
 group: v1
 mcp_callable: true

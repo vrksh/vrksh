@@ -1,6 +1,7 @@
 ---
 title: "vrk uuid"
-description: "UUID generator - v4/v7, --count, --json"
+description: "Generate UUIDs from the command line. v4 random or v7 time-sorted. Batch with --count."
+og_title: "vrk uuid - UUID v4 and v7 generator"
 tool: uuid
 group: v1
 mcp_callable: true

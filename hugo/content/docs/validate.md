@@ -1,6 +1,7 @@
 ---
 title: "vrk validate"
-description: "JSONL schema validator - --schema, --strict, --fix, --json"
+description: "Validate LLM JSON output against a schema. Exit 1 on mismatch. Pipeline stops before bad data propagates."
+og_title: "vrk validate - schema validation for LLM JSON output"
 tool: validate
 group: v1
 mcp_callable: true

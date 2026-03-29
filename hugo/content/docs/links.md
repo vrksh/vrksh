@@ -1,6 +1,7 @@
 ---
 title: "vrk links"
-description: "hyperlink extractor - markdown, HTML, bare URLs to JSONL"
+description: "Extract every hyperlink from markdown, HTML, or plain text. JSONL output with text, URL, and line number."
+og_title: "vrk links - extract hyperlinks from markdown and HTML"
 tool: links
 group: v1
 mcp_callable: true

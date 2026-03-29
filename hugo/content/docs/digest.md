@@ -1,6 +1,7 @@
 ---
 title: "vrk digest"
-description: "universal hasher - sha256/md5/sha512, --hmac, --compare"
+description: "Hash anything with sha256, md5, or sha512. Verify with --compare. Sign with --hmac. One tool, no flags to memorize."
+og_title: "vrk digest - hash, verify, and HMAC from the command line"
 tool: digest
 group: v1
 mcp_callable: true

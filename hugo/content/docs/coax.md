@@ -1,6 +1,7 @@
 ---
 title: "vrk coax"
-description: "retry wrapper - --times, --backoff, --on, --until"
+description: "Retry flaky commands with exponential backoff. Wrap any pipeline stage to handle transient API failures."
+og_title: "vrk coax - retry wrapper with backoff for flaky commands"
 tool: coax
 group: v1
 mcp_callable: false

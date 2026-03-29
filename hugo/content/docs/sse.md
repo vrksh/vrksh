@@ -1,6 +1,7 @@
 ---
 title: "vrk sse"
-description: "SSE stream parser - text/event-stream to JSONL"
+description: "Parse Server-Sent Event streams into JSONL. Turns text/event-stream into structured records you can pipe."
+og_title: "vrk sse - parse SSE streams into structured JSONL"
 tool: sse
 group: v1
 mcp_callable: true

@@ -1,6 +1,7 @@
 ---
 title: "vrk pct"
-description: "percent encoder/decoder - RFC 3986, --encode, --decode, --form"
+description: "Percent-encode and decode strings per RFC 3986. Handles URL components and form data correctly."
+og_title: "vrk pct - RFC 3986 percent encoding and decoding"
 tool: pct
 group: v1
 mcp_callable: true

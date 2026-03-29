@@ -1,6 +1,7 @@
 ---
 title: "vrk jwt"
-description: "JWT inspector - decode, --claim, --expired, --valid."
+description: "Decode JWTs and extract claims from the command line. Check expiry, validate structure, pull fields."
+og_title: "vrk jwt - JWT decoder and claim inspector"
 tool: jwt
 group: v1
 mcp_callable: true

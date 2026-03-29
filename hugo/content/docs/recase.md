@@ -1,6 +1,7 @@
 ---
 title: "vrk recase"
-description: "naming convention converter - snake, camel, kebab, pascal, title"
+description: "Convert between naming conventions. snake_case, camelCase, kebab-case, PascalCase, and Title Case."
+og_title: "vrk recase - convert between snake, camel, kebab, and more"
 tool: recase
 group: v1
 mcp_callable: true

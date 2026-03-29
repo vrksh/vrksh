@@ -1,6 +1,7 @@
 ---
 title: "vrk bare"
-description: "symlink creator - use vrksh tools without the vrk prefix"
+description: "Create symlinks for any vrk tool. Use tok, grab, prompt directly without the vrk prefix."
+og_title: "vrk bare - use vrksh tools without the vrk prefix"
 tool: bare
 group: v1
 mcp_callable: false

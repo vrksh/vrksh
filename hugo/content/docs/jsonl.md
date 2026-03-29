@@ -1,6 +1,7 @@
 ---
 title: "vrk jsonl"
-description: "JSON array to JSONL converter - --collect, --json"
+description: "Convert between JSON arrays and JSONL. Flatten arrays for streaming, collect lines back into arrays."
+og_title: "vrk jsonl - convert between JSON arrays and JSONL"
 tool: jsonl
 group: v1
 mcp_callable: true

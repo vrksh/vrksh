@@ -1,6 +1,7 @@
 ---
 title: "vrk assert"
-description: "pipeline condition check - jq conditions, --contains, --matches"
+description: "Assert conditions mid-pipeline. Exit 1 if a check fails. Catches bad data before it reaches the next stage."
+og_title: "vrk assert - pipeline condition checks that halt on failure"
 tool: assert
 group: v1
 mcp_callable: true

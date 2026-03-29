@@ -1,6 +1,7 @@
 ---
 title: "vrk grab"
-description: "URL fetcher - clean markdown, plain text, or raw HTML."
+description: "Fetch any URL and get clean markdown back. No BeautifulSoup, no parsing scripts."
+og_title: "vrk grab - fetch any URL as clean markdown"
 tool: grab
 group: v1
 mcp_callable: true

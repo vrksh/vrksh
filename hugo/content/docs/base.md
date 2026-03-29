@@ -1,6 +1,7 @@
 ---
 title: "vrk base"
-description: "encoding converter - base64, base64url, hex, base32"
+description: "Encode and decode base64, base64url, hex, and base32 from the command line. No more openssl flags."
+og_title: "vrk base - base64, hex, and base32 encoding in one tool"
 tool: base
 group: v1
 mcp_callable: true

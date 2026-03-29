@@ -1,6 +1,7 @@
 ---
 title: "vrk urlinfo"
-description: "URL parser - scheme, host, port, path, query, --field"
+description: "Parse URLs and extract components. Get scheme, host, path, query params, or any field individually."
+og_title: "vrk urlinfo - URL parser and component extractor"
 tool: urlinfo
 group: v1
 mcp_callable: true

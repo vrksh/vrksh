@@ -1,6 +1,7 @@
 ---
 title: "vrk throttle"
-description: "rate limiter for pipes - --rate N/s or N/m"
+description: "Pace LLM batch jobs to respect rate limits. No more failures on job 847 of 10,000."
+og_title: "vrk throttle - rate-limit-aware pacing for LLM batch jobs"
 tool: throttle
 group: v1
 mcp_callable: false
