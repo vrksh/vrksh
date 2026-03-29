@@ -27,10 +27,10 @@ case "$ARCH" in
   *)              fail "unsupported architecture: $ARCH" ;;
 esac
 
-TARBALL="vrk_${OS}_${ARCH}.tar.gz"
+TARBALL="vrk_${VERSION}_${OS}_${ARCH}.tar.gz"
 BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
 DOWNLOAD_URL="${BASE_URL}/${TARBALL}"
-CHECKSUMS_URL="${BASE_URL}/checksums.txt"
+CHECKSUMS_URL="${BASE_URL}/vrk_${VERSION}_checksums.txt"
 
 printf 'installing vrk v%s (%s/%s)\n' "$VERSION" "$OS" "$ARCH"
 
