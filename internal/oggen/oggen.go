@@ -3,14 +3,11 @@
 // Design mirrors the vrk.sh hero section:
 //   - Background: #0D0D0D (--color-bg)
 //   - Dot grid: 1px dots on 24px grid, #2A2A2A (--color-dot)
-//   - Surface: #161616 (--color-surface, terminal block)
-//   - Border: #2A2A2A (--color-border)
-//   - Glow: accent green radial around terminal block (cta-glow)
-//   - Text: #E8E8E8 (--color-text)
-//   - Muted: #707070 (--color-muted)
-//   - Accent: #6EE7B7 (--color-accent, commands + highlights)
+//   - Text: #E8E8E8 (--color-text), 96pt tool name
+//   - Muted: #707070 (--color-muted), 32pt tagline
+//   - Accent: #6EE7B7 (--color-accent), 48pt command
 //   - Fonts: Urbanist (headings), IBM Plex Mono (code/brand)
-//   - Layout: left-aligned, terminal block, pill badge, tree logo
+//   - Layout: left-aligned, large text optimized for social preview readability
 package oggen
 
 import (
@@ -20,7 +17,6 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,11 +41,9 @@ const (
 
 var (
 	bgCl      = color.RGBA{0x0D, 0x0D, 0x0D, 0xFF} // --color-bg
-	surfaceCl = color.RGBA{0x16, 0x16, 0x16, 0xFF} // --color-surface
 	accentCl  = color.RGBA{0x6E, 0xE7, 0xB7, 0xFF} // --color-accent
 	textCl    = color.RGBA{0xE8, 0xE8, 0xE8, 0xFF} // --color-text
 	mutedCl   = color.RGBA{0x70, 0x70, 0x70, 0xFF} // --color-muted
-	borderCl  = color.RGBA{0x2A, 0x2A, 0x2A, 0xFF} // --color-border
 	dotCl     = color.RGBA{0x2A, 0x2A, 0x2A, 0xFF} // --color-dot
 	pillBgCl  = color.RGBA{0x1C, 0x2F, 0x28, 0xFF} // rgba(110,231,183,0.15) on #0D0D0D
 	pillTxCl  = color.RGBA{0x6E, 0xE7, 0xB7, 0xFF} // accent green text
@@ -86,65 +80,6 @@ func drawDotGrid(dc *gg.Context) {
 			dc.Fill()
 		}
 	}
-}
-
-// drawGlow draws a smooth radial green glow behind the terminal block,
-// matching the site's .cta-glow: box-shadow 0 0 40px rgba(110,231,183,0.15).
-// Uses per-pixel blending to avoid moire artifacts from stacked ellipses.
-func drawGlow(dc *gg.Context, cx, cy, radiusX, radiusY float64) {
-	// Glow extends beyond the block edges
-	spreadX := radiusX * 1.5
-	spreadY := radiusY * 1.8
-	x0 := int(math.Max(0, cx-spreadX))
-	y0 := int(math.Max(0, cy-spreadY))
-	x1 := int(math.Min(imgW, cx+spreadX))
-	y1 := int(math.Min(imgH, cy+spreadY))
-
-	for py := y0; py < y1; py++ {
-		for px := x0; px < x1; px++ {
-			// Normalized distance from center (elliptical)
-			dx := (float64(px) - cx) / spreadX
-			dy := (float64(py) - cy) / spreadY
-			d := math.Sqrt(dx*dx + dy*dy)
-			if d >= 1.0 {
-				continue
-			}
-			// Gaussian-ish falloff: strong in center, fades to edges
-			alpha := 14.0 * math.Exp(-3.0*d*d)
-			if alpha < 0.5 {
-				continue
-			}
-			a := uint8(math.Round(alpha))
-			// Blend onto existing pixel
-			existing := dc.Image().At(px, py)
-			er, eg, eb, ea := existing.RGBA()
-			// Premultiplied alpha composite: glow color (0x6E,0xE7,0xB7) over existing
-			ga := uint32(a)
-			nr := (uint32(0x6E)*ga*257 + er*(255-ga)*257/255) / 257
-			ng := (uint32(0xE7)*ga*257 + eg*(255-ga)*257/255) / 257
-			nb := (uint32(0xB7)*ga*257 + eb*(255-ga)*257/255) / 257
-			na := ga*257 + ea*(255-ga)/255
-			dc.SetColor(color.RGBA{
-				R: uint8(nr >> 8),
-				G: uint8(ng >> 8),
-				B: uint8(nb >> 8),
-				A: uint8(na >> 8),
-			})
-			dc.SetPixel(px, py)
-		}
-	}
-}
-
-// drawTerminalBlock draws a rounded-rect terminal-style block.
-func drawTerminalBlock(dc *gg.Context, x, y, bw, bh, radius float64) {
-	dc.SetColor(surfaceCl)
-	dc.DrawRoundedRectangle(x, y, bw, bh, radius)
-	dc.Fill()
-
-	dc.SetColor(borderCl)
-	dc.SetLineWidth(1.2)
-	dc.DrawRoundedRectangle(x, y, bw, bh, radius)
-	dc.Stroke()
 }
 
 // drawLetterspaced draws uppercase letterspaced text (no trailing period).
@@ -205,22 +140,22 @@ func drawBrandBar(dc *gg.Context, pillLabel string) error {
 		return fmt.Errorf("loading logo: %w", err)
 	}
 
-	// Tree logo scaled to 28px, positioned top-left
-	logoSize := 28
+	// Tree logo scaled to 36px, positioned top-left
+	logoSize := 36
 	logoDc := gg.NewContext(logoSize, logoSize)
 	logoDc.Scale(
 		float64(logoSize)/float64(logo.Bounds().Dx()),
 		float64(logoSize)/float64(logo.Bounds().Dy()),
 	)
 	logoDc.DrawImage(logo, 0, 0)
-	dc.DrawImage(logoDc.Image(), int(pad), 52)
+	dc.DrawImage(logoDc.Image(), int(pad), 46)
 
 	// "vrk.sh" next to logo
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 22); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 32); err != nil {
 		return err
 	}
-	dc.SetColor(mutedCl)
-	dc.DrawString("vrk.sh", pad+float64(logoSize)+10, 75)
+	dc.SetColor(textCl)
+	dc.DrawString("vrk.sh", pad+float64(logoSize)+12, 78)
 
 	// Pill badge top-right
 	if err := drawPill(dc, pillLabel, float64(imgW)-pad, 68); err != nil {
@@ -230,22 +165,32 @@ func drawBrandBar(dc *gg.Context, pillLabel string) error {
 	return nil
 }
 
-// truncateCommand truncates a command string to maxLen chars, adding "..." if needed.
-func truncateCommand(cmd string, maxLen int) string {
-	if len(cmd) <= maxLen {
-		return cmd
+// truncateToFit truncates text to fit within maxW pixels at the current font,
+// appending "..." when truncation is needed.
+func truncateToFit(dc *gg.Context, text string, maxW float64) string {
+	w, _ := dc.MeasureString(text)
+	if w <= maxW {
+		return text
 	}
-	return cmd[:maxLen-3] + "..."
+	for i := len(text) - 1; i > 0; i-- {
+		candidate := text[:i] + "..."
+		w, _ = dc.MeasureString(candidate)
+		if w <= maxW {
+			return candidate
+		}
+	}
+	return "..."
 }
 
 // renderCommand draws Variant 1: Command Highlight (per-tool).
 //
-// Layout (mirrors the vrk.sh hero section):
+// Layout optimized for readability at social preview sizes (~500px wide):
 //   - Top bar: tree logo + "vrk.sh" left, group pill badge right
 //   - Dot grid background
-//   - "vrk <toolname>" in Urbanist Medium 64pt, accent green
-//   - Headline in Urbanist Regular, white
-//   - Terminal block with glow: "$ command" in accent, "# tagline" in muted
+//   - "vrk <toolname>" in Urbanist Medium 96pt, white
+//   - "$ command" in IBM Plex Mono 48pt, accent green
+//   - Tagline in Urbanist Regular 32pt, muted
+//   - "vrk.sh" domain bottom-right, 28pt
 func renderCommand(dc *gg.Context, toolName, tagline, command, headline, category string) error {
 	drawBg(dc)
 	drawDotGrid(dc)
@@ -255,57 +200,42 @@ func renderCommand(dc *gg.Context, toolName, tagline, command, headline, categor
 		return err
 	}
 
-	// Tool name - accent, Urbanist Medium, 64pt for readability at card size
-	if err := setFont(dc, "Urbanist-Medium.ttf", 64); err != nil {
-		return err
-	}
-	dc.SetColor(accentCl)
-	dc.DrawString("vrk "+toolName, pad, 180)
-
-	// Headline - Urbanist Regular, white
-	if err := setFont(dc, "Urbanist-Regular.ttf", 26); err != nil {
+	// Tool name - Urbanist Medium, 96pt, #E8E8E8
+	if err := setFont(dc, "Urbanist-Medium.ttf", 96); err != nil {
 		return err
 	}
 	dc.SetColor(textCl)
-	dc.DrawString(headline, pad, 232)
+	dc.DrawString("vrk "+toolName, pad, 230)
 
-	// Terminal block with glow
-	blockPadLeft := pad + 4
-	blockX := pad - 20
-	blockY := 285.0
-	blockW := float64(imgW) - 2*(pad-20)
-	blockH := 150.0
-
-	drawGlow(dc, blockX+blockW/2, blockY+blockH/2, blockW/2, blockH/2)
-	drawTerminalBlock(dc, blockX, blockY, blockW, blockH, 8)
-
-	// "$ command" inside block - truncate long commands
-	cmd := truncateCommand(command, 57)
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 28); err != nil {
+	// Command - IBM Plex Mono, 48pt, accent green (#6EE7B7)
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 48); err != nil {
 		return err
 	}
 	dc.SetColor(accentCl)
-	dc.DrawString("$ "+cmd, blockPadLeft, 350)
+	maxW := float64(imgW) - 2*pad
+	cmd := truncateToFit(dc, "$ "+command, maxW)
+	dc.DrawString(cmd, pad, 340)
 
-	// "# tagline" inside block
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 18); err != nil {
+	// Tagline - Urbanist Regular, 38pt, #A0A0A0
+	if err := setFont(dc, "Urbanist-Regular.ttf", 38); err != nil {
 		return err
 	}
-	dc.SetColor(mutedCl)
-	dc.DrawString("# "+tagline, blockPadLeft, 408)
+	dc.SetColor(color.RGBA{0xA0, 0xA0, 0xA0, 0xFF})
+	dc.DrawString(tagline, pad, 425)
 
-	// Bottom-right: "vrk.sh" URL
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 16); err != nil {
+	// Domain - IBM Plex Mono, 36pt, #A0A0A0, bottom-right
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 36); err != nil {
 		return err
 	}
-	dc.SetColor(mutedCl)
+	dc.SetColor(color.RGBA{0xA0, 0xA0, 0xA0, 0xFF})
 	w, _ := dc.MeasureString("vrk.sh")
-	dc.DrawString("vrk.sh", float64(imgW)-pad-w, imgH-40)
+	dc.DrawString("vrk.sh", float64(imgW)-pad-w, float64(imgH)-40)
 
 	return nil
 }
 
 // renderPipeline draws Variant 2: Pipeline (default/install page).
+// Font sizes scaled proportionally with Variant 1 for social preview readability.
 func renderPipeline(dc *gg.Context, command, subtitle, comment string) error {
 	drawBg(dc)
 	drawDotGrid(dc)
@@ -315,64 +245,58 @@ func renderPipeline(dc *gg.Context, command, subtitle, comment string) error {
 	if err != nil {
 		return fmt.Errorf("loading logo: %w", err)
 	}
-	logoSize := 28
+	logoSize := 36
 	logoDc := gg.NewContext(logoSize, logoSize)
 	logoDc.Scale(
 		float64(logoSize)/float64(logo.Bounds().Dx()),
 		float64(logoSize)/float64(logo.Bounds().Dy()),
 	)
 	logoDc.DrawImage(logo, 0, 0)
-	dc.DrawImage(logoDc.Image(), int(pad), 52)
+	dc.DrawImage(logoDc.Image(), int(pad), 46)
 
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 22); err != nil {
-		return err
-	}
-	dc.SetColor(mutedCl)
-	dc.DrawString("vrk.sh", pad+float64(logoSize)+10, 75)
-
-	// Title - Urbanist Medium
-	if err := setFont(dc, "Urbanist-Medium.ttf", 42); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 32); err != nil {
 		return err
 	}
 	dc.SetColor(textCl)
-	dc.DrawString("Unix tools for AI pipelines", pad, 160)
+	dc.DrawString("vrk.sh", pad+float64(logoSize)+12, 78)
 
-	// Subtitle - Urbanist Regular
-	if err := setFont(dc, "Urbanist-Regular.ttf", 28); err != nil {
+	// Title - Urbanist Medium, 64pt
+	if err := setFont(dc, "Urbanist-Medium.ttf", 64); err != nil {
 		return err
 	}
 	dc.SetColor(textCl)
-	dc.DrawString(subtitle, pad, 212)
+	dc.DrawString("Unix tools for AI pipelines", pad, 180)
 
-	// Terminal block with glow
-	blockPadLeft := pad + 4
-	blockX := pad - 20
-	blockY := 280.0
-	blockW := float64(imgW) - 2*(pad-20)
-	blockH := 150.0
+	// Subtitle - Urbanist Regular, 36pt
+	if err := setFont(dc, "Urbanist-Regular.ttf", 36); err != nil {
+		return err
+	}
+	dc.SetColor(textCl)
+	dc.DrawString(subtitle, pad, 240)
 
-	drawGlow(dc, blockX+blockW/2, blockY+blockH/2, blockW/2, blockH/2)
-	drawTerminalBlock(dc, blockX, blockY, blockW, blockH, 8)
-
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 26); err != nil {
+	// Command - IBM Plex Mono, 40pt, accent green
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 40); err != nil {
 		return err
 	}
 	dc.SetColor(accentCl)
-	dc.DrawString("$ "+command, blockPadLeft, 345)
+	maxW := float64(imgW) - 2*pad
+	cmd := truncateToFit(dc, "$ "+command, maxW)
+	dc.DrawString(cmd, pad, 340)
 
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 20); err != nil {
+	// Comment - IBM Plex Mono, 32pt, #A0A0A0
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 32); err != nil {
 		return err
 	}
-	dc.SetColor(mutedCl)
-	dc.DrawString("# "+comment, blockPadLeft, 403)
+	dc.SetColor(color.RGBA{0xA0, 0xA0, 0xA0, 0xFF})
+	dc.DrawString("# "+comment, pad, 405)
 
-	// Bottom-right: "vrk.sh" URL
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 16); err != nil {
+	// Domain - IBM Plex Mono, 36pt, #A0A0A0, bottom-right
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 36); err != nil {
 		return err
 	}
-	dc.SetColor(mutedCl)
+	dc.SetColor(color.RGBA{0xA0, 0xA0, 0xA0, 0xFF})
 	w, _ := dc.MeasureString("vrk.sh")
-	dc.DrawString("vrk.sh", float64(imgW)-pad-w, imgH-40)
+	dc.DrawString("vrk.sh", float64(imgW)-pad-w, float64(imgH)-40)
 
 	return nil
 }
