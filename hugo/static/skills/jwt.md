@@ -1,15 +1,15 @@
 # jwt - JWT inspector - decode, --claim, --expired, --valid
 
-When to use: decode a JWT payload, extract claims, or check expiry without signature verification.
+When to use: decode and inspect JWT tokens locally without sending them to third-party websites. Extract claims with --claim, check expiry with --expired.
 Composes with: kv, epoch, pct, base
 
-| Flag | Short | Type | Description |
-|------|-------|------|-------------|
-| `--claim` | `-c` | string | Print value of a single claim |
-| `--expired` | `-e` | bool | Exit 1 if the token is expired |
-| `--valid` | | bool | Exit 1 if expired, nbf in future, or iat in future |
-| `--json` | `-j` | bool | Structured JSON output (shape depends on other flags) |
-| `--quiet` | `-q` | bool | Suppress stderr |
+| Flag        | Short | Type   | Description                                           |
+|-------------|-------|--------|-------------------------------------------------------|
+| `--claim`   | `-c`  | string | Print value of a single claim                         |
+| `--expired` | `-e`  | bool   | Exit 1 if the token is expired                        |
+| `--valid`   |       | bool   | Exit 1 if expired, nbf in future, or iat in future    |
+| `--json`    | `-j`  | bool   | Structured JSON output (shape depends on other flags) |
+| `--quiet`   | `-q`  | bool   | Suppress stderr                                       |
 
 Exit 0: success or token is valid
 Exit 1: token expired/invalid, claim not found, runtime error
@@ -21,4 +21,5 @@ Example:
     vrk kv get "user:$SUB"
 
 Anti-pattern:
-- Don't use --json alone to check expiry -- it never exits 1 for an expired token. Use --expired explicitly.
+- Don't paste tokens into jwt.io or other web tools. vrk jwt decodes locally - the token never leaves your machine.
+- Don't use --expired as a full validity check. It only checks exp. Use --valid for a complete check including nbf and iat.

@@ -12,48 +12,138 @@ noindex: false
 
 ## About
 
-Converts between JSON arrays and JSONL (one record per line). Splits arrays for pipeline processing, or collects JSONL lines back into an array when an API expects one. Uses a streaming decoder, so it handles arrays larger than available memory.
+You have a JSON array with 50,000 objects. You need to process each one through a pipeline. `jq '.[]'` works but loads the entire array into memory. On a 2GB JSON file, your process gets OOM-killed.
+
+`vrk jsonl` converts between JSON arrays and JSONL (one JSON object per line). The default mode splits an array into individual lines for pipeline processing. Use `--collect` to go the other direction - gather JSONL lines back into a JSON array. The streaming decoder handles files larger than available memory.
 
 ## The problem
 
-You have a 3GB JSON array from a data export and need to process records one per line. jq -c '.[]' loads the entire array into memory and gets OOM-killed. Going the other direction - collecting JSONL back into an array for an API that expects one - requires careful bracket and comma handling that breaks on empty input.
+Your API returns a JSON array of 50,000 records. You need to validate each one and pipe invalid records to an LLM for repair. jq '.[]' loads the entire array into memory. On a large response, the process is killed. You need line-by-line JSONL but the API only speaks JSON arrays.
 
 ## Before and after
 
 **Before**
 
 ```bash
-# split: jq loads entire array into memory, OOM on large files
-cat data.json | jq -c '.[]'
-# collect: manual bracket/comma handling
-echo '['; cat records.jsonl | sed 's/$/,/' | sed '$ s/,$//' ; echo ']'
+cat data.json | jq '.[]'
+# Loads entire array into memory. OOM on large files.
 ```
 
 **After**
 
 ```bash
 cat data.json | vrk jsonl
-cat records.jsonl | vrk jsonl --collect
 ```
 
 ## Example
 
 ```bash
-cat data.json | vrk jsonl
+cat api-response.json | vrk jsonl | vrk validate --schema '{"name":"string"}'
 ```
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success, including empty input |
-| 1 | Invalid JSON, I/O error |
-| 2 | Interactive TTY with no input, unknown flag |
+| Code | Meaning                                     |
+|------|---------------------------------------------|
+| 0    | Success, including empty input              |
+| 1    | Invalid JSON, I/O error                     |
+| 2    | Interactive TTY with no input, unknown flag |
 
 ## Flags
 
-| Flag | Short | Type | Description |
-|------|-------|------|-------------|
-| `--collect` | -c | bool | Collect JSONL lines into a JSON array |
-| `--json` | -j | bool | Append metadata trailer after all records (split mode only) |
+| Flag        | Short | Type | Description                                                 |
+|-------------|-------|------|-------------------------------------------------------------|
+| `--collect` | -c    | bool | Collect JSONL lines into a JSON array                       |
+| `--json`    | -j    | bool | Append metadata trailer after all records (split mode only) |
 
+
+<!-- notes - edit in notes/jsonl.notes.md -->
+
+## How it works
+
+### Split a JSON array into JSONL
+
+```bash
+$ echo '[{"name":"Alice"},{"name":"Bob"},{"name":"Carol"}]' | vrk jsonl
+{"name":"Alice"}
+{"name":"Bob"}
+{"name":"Carol"}
+```
+
+Each array element becomes one line. Pipe to `while read`, `vrk validate`, or any line-oriented tool.
+
+### Collect JSONL back into an array (--collect)
+
+```bash
+$ printf '{"name":"Alice"}\n{"name":"Bob"}\n' | vrk jsonl --collect
+[{"name":"Alice"},{"name":"Bob"}]
+```
+
+Use this when a downstream tool or API expects a JSON array.
+
+### Metadata trailer (--json)
+
+```bash
+$ echo '[{"a":1},{"b":2}]' | vrk jsonl --json
+{"a":1}
+{"b":2}
+{"_vrk":"jsonl","count":2}
+```
+
+## Pipeline integration
+
+### Split an API response for validation
+
+```bash
+# API returns a JSON array; split it for per-record validation
+curl -s https://api.example.com/users | \
+  vrk jsonl | \
+  vrk validate --schema '{"name":"string","email":"string"}' --strict
+```
+
+### Process array records through an LLM
+
+```bash
+# Split array, process each record, collect results back
+cat data.json | vrk jsonl | \
+  while IFS= read -r record; do
+    echo "$record" | vrk prompt --system 'Classify this record'
+  done | vrk jsonl --collect > results.json
+```
+
+### Sample from a large array
+
+```bash
+# Split a large JSON array, sample 100 records
+cat large-dataset.json | vrk jsonl | vrk sip --count 100 --seed 42
+```
+
+### Throttle array processing
+
+```bash
+# Split array and rate-limit processing to 5 records per second
+cat data.json | vrk jsonl | vrk throttle --rate 5/s | \
+  while IFS= read -r record; do
+    process "$record"
+  done
+```
+
+## When it fails
+
+Invalid JSON input:
+
+```bash
+$ echo 'not json' | vrk jsonl
+error: jsonl: invalid JSON
+$ echo $?
+1
+```
+
+No input:
+
+```bash
+$ vrk jsonl
+usage error: jsonl: no input: pipe JSON to stdin
+$ echo $?
+2
+```

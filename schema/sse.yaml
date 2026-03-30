@@ -3,11 +3,15 @@ tagline: SSE stream parser - text/event-stream to JSONL
 meta_description: "Parse Server-Sent Event streams into JSONL. Turns text/event-stream into structured records you can pipe."
 og_title: "vrk sse - parse SSE streams into structured JSONL"
 description: |
-  Parses Server-Sent Event streams into clean JSONL records. Handles the data: prefixes, blank-line delimiters, multi-line data fields, and [DONE] sentinels that make raw SSE awkward to work with. You can extract nested fields from the JSON data using dot-path syntax.
+  You curl an LLM streaming endpoint and get back a wall of raw Server-Sent Events. Lines prefixed with `data:`, blank lines as delimiters, `[DONE]` sentinels, multi-line data fields. You need structured JSON records you can pipe to the next stage. You write a `grep '^data:' | sed 's/^data: //'` pipeline and it breaks the moment a data field spans two lines.
+
+  `vrk sse` parses `text/event-stream` format into clean JSONL records. It handles `data:` prefixes, blank-line event delimiters, multi-line data concatenation, and `[DONE]` sentinel detection (used by both Anthropic and OpenAI). Use `--field` with dot-path syntax to drill into nested JSON and extract just the text you need.
 problem: >
-  You curl an LLM streaming endpoint and get raw SSE frames - data: prefixes, blank
-  lines, [DONE] sentinels. You need clean JSONL records. You write an awk script
-  that breaks on multi-line data fields.
+  You're streaming a response from Claude's API. The raw output is data: prefixes,
+  blank-line delimiters, and [DONE] sentinels. You need just the text fragments.
+  You write grep + sed + jq and it works until a response contains a JSON object
+  that spans multiple data: lines. Your sed breaks. You miss events. The streamed
+  response has gaps.
 before: |
   curl -sN https://api.example.com/stream | \
     grep '^data: ' | sed 's/^data: //' | grep -v '^\[DONE\]$'
@@ -16,7 +20,7 @@ before: |
 after: "curl -sN https://api.example.com/stream | vrk sse"
 group: v1
 category: pipeline
-example: curl -sN https://api.example.com/stream | vrk sse
+example: "curl -sN $API_URL | vrk sse --field data.delta.text"
 flags:
   - flag: --event
     short: "-e"

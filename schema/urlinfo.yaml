@@ -3,21 +3,21 @@ tagline: URL parser - scheme, host, port, path, query, --field
 meta_description: "Parse URLs and extract components. Get scheme, host, path, query params, or any field individually."
 og_title: "vrk urlinfo - URL parser and component extractor"
 description: |
-  Breaks URLs into their components - scheme, host, port, path, query parameters - as structured JSON. You can extract a single piece with --field, including nested query parameters using dot-path syntax. Pure parsing, no network calls.
+  You need to extract the hostname from a URL in a shell script. You reach for `cut -d'/' -f3` and it works until someone passes a URL with a port number or a username. You try sed with a regex and it handles 90% of cases. The other 10% break your pipeline when real URLs arrive.
+
+  `vrk urlinfo` parses URLs into structured JSON components: scheme, host, port, path, query parameters, fragment, and user. Use `--field` with dot-path syntax to extract a single component. Handles edge cases that regex approaches miss. No network calls - pure parsing.
 problem: >
-  You have a URL from an API response and need to extract a query parameter to pass
-  to the next pipeline step. Splitting on ? and & in bash is fragile - encoded characters,
-  missing parameters, and multiple values for the same key all break your parsing.
+  You're processing a list of URLs and need to group them by domain. You extract
+  the hostname with cut -d'/' -f3. A URL has a port number: https://api.example.com:8080/path.
+  Cut returns "api.example.com:8080" including the port. Your grouping breaks.
+  Another URL has basic auth in it. Your regex didn't account for @ symbols.
 before: |
-  URL="https://api.example.com/callback?code=abc123&state=xyz"
-  echo "$URL" | grep -oP 'code=\K[^&]+'
-  # breaks if code= is missing (grep exits 1, pipeline fails)
-  # breaks on percent-encoded values like code=abc%3D123
-  # not portable: -P (Perl regex) is GNU grep only
-after: "echo \"$URL\" | vrk urlinfo --field query.code"
+  echo 'https://api.example.com:8080/path?q=test' | cut -d'/' -f3
+  # Returns "api.example.com:8080" - includes port
+after: "vrk urlinfo --field host 'https://api.example.com:8080/path?q=test'"
 group: v1
 category: utilities
-example: echo 'https://api.example.com:8443/v2/users?page=2' | vrk urlinfo
+example: "vrk urlinfo 'https://api.example.com:8080/v1/search?q=llm+tools&limit=10'"
 flags:
   - flag: --field
     short: "-F"

@@ -12,52 +12,158 @@ noindex: false
 
 ## About
 
-Decodes JWT tokens and shows you what is inside - without sending them to a third-party website. You can extract a single claim, check whether the token is expired, or validate all time-based claims at once.
+You need to check if a JWT is expired before making an API call. You paste it into jwt.io - a third-party website - and realize you just sent a production token to someone else's server. Or you base64-decode it manually and get the padding wrong.
+
+`vrk jwt` decodes JWT tokens locally, without sending them anywhere. It prints the payload as JSON, extracts individual claims with `--claim`, and checks expiry with `--expired` or full time validity with `--valid`. No signature verification - this is an inspection tool, not an auth library.
 
 ## The problem
 
-You have a JWT from an API response and need to check what is in it. You paste it into jwt.io (leaking the token to a third party) or write a Python one-liner that breaks on padding. You just want to see the claims.
+Your CI pipeline gets a 401 from an API. The token looks valid - it's a long base64 string. You paste it into jwt.io to debug. That token just went to a third-party server. You decode it manually with base64 and get the padding wrong. You add = characters until it works. Twenty minutes to find out the token expired two hours ago.
 
 ## Before and after
 
 **Before**
 
 ```bash
-python3 -c "
-import base64, json, sys
-token = sys.argv[1].split('.')[1]
-token += '=' * (-len(token) % 4)
-print(json.dumps(json.loads(base64.urlsafe_b64decode(token)), indent=2))
-" eyJhbGciOi...
+echo "$TOKEN" | base64 -d 2>/dev/null | jq .
+# base64 padding errors, no expiry check
+# or worse: paste into jwt.io
 ```
 
 **After**
 
 ```bash
-vrk jwt eyJhbGciOi...
+echo $TOKEN | vrk jwt --expired
 ```
 
 ## Example
 
 ```bash
-vrk jwt --claim sub eyJhbGciOiJIUzI1NiJ9...
+echo $TOKEN | vrk jwt --claim sub
 ```
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success or token is valid |
-| 1 | Token expired/invalid or runtime error |
-| 2 | Usage error - bad format, too many args |
+| Code | Meaning                                 |
+|------|-----------------------------------------|
+| 0    | Success or token is valid               |
+| 1    | Token expired/invalid or runtime error  |
+| 2    | Usage error - bad format, too many args |
 
 ## Flags
 
-| Flag | Short | Type | Description |
-|------|-------|------|-------------|
-| `--json` | -j | bool | Emit decoded token as JSON |
-| `--claim` | -c | string | Print value of a single claim |
-| `--expired` | -e | bool | Exit 1 if the token is expired |
-| `--valid` |   | bool | Exit 1 if expired, not-yet-valid, or issued in the future |
-| `--quiet` | -q | bool | Suppress stderr output |
+| Flag        | Short | Type   | Description                                               |
+|-------------|-------|--------|-----------------------------------------------------------|
+| `--json`    | -j    | bool   | Emit decoded token as JSON                                |
+| `--claim`   | -c    | string | Print value of a single claim                             |
+| `--expired` | -e    | bool   | Exit 1 if the token is expired                            |
+| `--valid`   |       | bool   | Exit 1 if expired, not-yet-valid, or issued in the future |
+| `--quiet`   | -q    | bool   | Suppress stderr output                                    |
 
+
+<!-- notes - edit in notes/jwt.notes.md -->
+
+## How it works
+
+### Decode a token
+
+```bash
+$ echo 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiZXhwIjoxNjAwMDAwMDAwLCJpYXQiOjE1MTYyMzkwMjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c' | vrk jwt
+{"exp":1600000000,"iat":1516239022,"name":"John Doe","sub":"1234567890"}
+```
+
+The full payload as JSON, sorted alphabetically. No signature verification - this is for inspection only.
+
+### Extract a single claim
+
+```bash
+$ echo "$TOKEN" | vrk jwt --claim name
+John Doe
+
+$ echo "$TOKEN" | vrk jwt --claim sub
+1234567890
+```
+
+Returns the raw value, no JSON wrapping. Useful for extracting a user ID or email in a script.
+
+### Check if a token is expired
+
+```bash
+$ echo "$TOKEN" | vrk jwt --expired
+error: jwt: token expired 48581h20m37s ago (exp: 2020-09-13T12:26:40Z)
+$ echo $?
+1
+```
+
+Exits 0 if the token is still valid. Exits 1 if expired. The error message shows when it expired and how long ago.
+
+### Full time validity check
+
+```bash
+echo "$TOKEN" | vrk jwt --valid
+```
+
+Checks three things: not expired (`exp`), not before valid time (`nbf`), and not issued in the future (`iat`). Exits 1 if any check fails.
+
+### JSON output
+
+```bash
+echo "$TOKEN" | vrk jwt --json
+```
+
+Wraps the decoded payload in a JSON envelope with header information.
+
+## Pipeline integration
+
+### Check token before API call
+
+```bash
+# Only call the API if the token is still valid
+echo "$TOKEN" | vrk jwt --expired --quiet && \
+  curl -H "Authorization: Bearer $TOKEN" https://api.example.com/data
+```
+
+### Extract user info from a token and store it
+
+```bash
+USER_ID=$(echo "$TOKEN" | vrk jwt --claim sub)
+USER_EMAIL=$(echo "$TOKEN" | vrk jwt --claim email)
+vrk kv set --ns auth "user:$USER_ID" "$USER_EMAIL" --ttl 1h
+```
+
+### Decode and convert timestamps
+
+```bash
+# Get the expiry time as a human-readable date
+EXP=$(echo "$TOKEN" | vrk jwt --claim exp)
+vrk epoch "$EXP" --iso
+```
+
+## When it fails
+
+Expired token:
+
+```bash
+$ echo "$TOKEN" | vrk jwt --expired
+error: jwt: token expired 48581h20m37s ago (exp: 2020-09-13T12:26:40Z)
+$ echo $?
+1
+```
+
+Invalid token format:
+
+```bash
+$ echo "not.a.jwt" | vrk jwt
+error: jwt: invalid token: illegal base64 data
+$ echo $?
+1
+```
+
+No input:
+
+```bash
+$ vrk jwt
+usage error: jwt: no token provided
+$ echo $?
+2
+```

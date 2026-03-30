@@ -3,23 +3,21 @@ tagline: memorable name generator - run IDs, job labels, temp dirs
 meta_description: "Generate memorable names for run IDs, job labels, and temp dirs. No more UUIDs in log output."
 og_title: "vrk moniker - memorable name generator for run IDs and labels"
 description: |
-  Generates memorable adjective-noun names like "bold-falcon" or "calm-otter" from a curated word list. Useful for pipeline runs, temp directories, and job labels where humans need to reference things by name. Deterministic with a seed, and no duplicates within a batch.
+  You need human-readable identifiers for pipeline runs, batch jobs, or temporary directories. UUIDs work but nobody can say "check run 98d06ca5-e747-4a63-8fc9-045f0e02f8d4" in a standup. You want something like Docker's container names - "bold-falcon" - but you don't want to pull in a dependency for it.
+
+  `vrk moniker` generates memorable adjective-noun names from embedded wordlists. Deterministic with `--seed` for reproducible names. Use `--count` for batches and `--words` for longer names when you need more uniqueness. No duplicates within a single batch.
 problem: >
-  During an incident you have six parallel pipeline runs. Someone on the call says
-  "the failing one is 7f3a... no wait, 7f3b..." and everyone is looking at the wrong
-  logs. UUIDs work as identifiers but fail as labels humans reference under pressure.
+  You label pipeline runs with timestamps like run-20260330-174856. Three runs
+  fail in the same minute. The labels are identical. You switch to UUIDs and now
+  nobody can tell "run 98d06ca5" from "run c4fd6dd9" during an incident call.
+  You need names that are unique AND human-friendly.
 before: |
-  RUN_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-  echo "starting run $RUN_ID"
-  # incident call: "which run?" "7f3a9c2e... no, 7f3b..."
-  # six runs open, all starting with 7f3
-after: |
-  RUN_ID=$(vrk moniker --seed "$BUILD_NUMBER")
-  echo "starting run $RUN_ID"
-  # incident call: "which run?" "bold-falcon"
+  echo "run-$(date +%Y%m%d-%H%M%S)"
+  # Identical for concurrent runs, not human-memorable
+after: "vrk moniker"
 group: v1
 category: utilities
-example: vrk moniker --seed 42
+example: "vrk moniker --count 5 --seed 42"
 flags:
   - flag: --count
     short: "-n"

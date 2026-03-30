@@ -3,11 +3,15 @@ tagline: secret redactor - entropy + pattern-based, streaming
 meta_description: "Redact secrets from pipeline output before logging. Detects API keys, tokens, and high-entropy strings automatically."
 og_title: "vrk mask - automatic secret redaction for pipeline output"
 description: |
-  Redacts secrets from text before it reaches an LLM or a log file. Catches Bearer tokens, passwords, API keys, and other credentials using built-in patterns. Also flags high-entropy strings that look like secrets but don't match a known pattern. Streams input, so it handles large files safely.
+  You pipe log output to an LLM for analysis and accidentally send API keys, Bearer tokens, and passwords in the prompt. The LLM provider now has your production credentials. You don't find out until a security audit three months later flags the API call in the provider's logs.
+
+  `vrk mask` redacts secrets from text before it reaches an LLM or a log file. It catches Bearer tokens, passwords, API keys, and other credentials using built-in pattern matching. It also flags high-entropy strings that look like secrets but don't match a known pattern. Add `--pattern` for custom regexes to catch internal identifiers. Streams input line-by-line, so it handles any file size safely.
 problem: >
-  You pipe log output to an LLM for analysis and accidentally send API keys, Bearer
-  tokens, and passwords in the prompt. The LLM provider now has your production
-  credentials in their training pipeline.
+  You're debugging a production issue. You pipe the last 500 lines of your
+  application log to an LLM and ask it what went wrong. The logs contain database
+  connection strings with passwords, API keys in HTTP headers, and Bearer tokens.
+  All of it just went to a third-party API. Your security team asks why production
+  credentials appeared in an external service's request logs.
 before: |
   cat output.log | sed 's/Bearer [^ ]*/Bearer ***/g' | \
     sed 's/password=[^ ]*/password=***/g'
@@ -15,7 +19,7 @@ before: |
 after: "cat output.log | vrk mask"
 group: v1
 category: pipeline
-example: cat output.txt | vrk mask
+example: "cat deploy.log | vrk mask | vrk prompt --system 'What errors occurred?'"
 flags:
   - flag: --pattern
     short: ""

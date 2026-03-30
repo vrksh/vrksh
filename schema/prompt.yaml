@@ -3,11 +3,14 @@ tagline: LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
 meta_description: "Pipe text to Claude or GPT from your terminal. Schema validation, retries, deterministic output."
 og_title: "vrk prompt - pipe text to any LLM from your terminal"
 description: |
-  Sends a prompt to an LLM and prints the response to stdout. Works with Anthropic and OpenAI APIs. You pipe content in, optionally set a system prompt, and get the response back - no curl commands, no JSON escaping, no response parsing. Temperature defaults to 0 for deterministic output.
+  You want to call an LLM from a shell script. So you write a curl command: escape the JSON, set the headers, parse the response, handle errors. The prompt has a newline in it and your JSON breaks. The API returns a 429 and your jq pipeline prints `null`. You've spent more time on HTTP plumbing than on the actual task.
+
+  `vrk prompt` pipes text to Claude or GPT from your terminal and prints the response to stdout. Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, pipe in content, and get back plain text. No curl. No JSON escaping. No response parsing. Temperature defaults to 0 for deterministic, reproducible output. Add `--schema` and the response is validated against a JSON schema. Add `--retry` and failed validations are retried with escalating temperature.
 problem: >
-  You need to call an LLM from a shell script. You write a curl command with JSON
-  escaping, header management, and response parsing. The prompt changes and you
-  break the JSON. The API returns an error and you parse it wrong.
+  You need to summarize 200 documents nightly. Each one needs a curl command with
+  proper JSON escaping, content-type headers, API key management, response extraction,
+  and error handling. One document has a backtick in it. Your JSON breaks. The pipeline
+  keeps running. You get 47 empty summaries before anyone notices.
 before: |
   curl -s https://api.anthropic.com/v1/messages \
     -H "x-api-key: $ANTHROPIC_API_KEY" \
@@ -16,7 +19,7 @@ before: |
 after: "cat article.md | vrk prompt --system 'Summarize this' --model claude-sonnet-4-6"
 group: v1
 category: core
-example: cat article.md | vrk prompt --system 'Summarize this' --model claude-sonnet-4-6 --json
+example: cat article.md | vrk prompt --system 'Summarize the key findings in 3 bullet points'
 flags:
   - flag: --model
     short: "-m"

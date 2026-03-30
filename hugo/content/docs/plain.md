@@ -12,24 +12,21 @@ noindex: false
 
 ## About
 
-Strips markdown formatting and gives you plain prose. Headings, links, fences, and bullet markers are removed, but the actual text content is preserved. Useful before sending content to an LLM where formatting syntax wastes tokens.
+You fetch a markdown document and send it to an LLM. The markdown syntax - headers, link URLs, code fences, bullet markers - consumes tokens but adds no information for the model. A 2,000-token document might be 1,400 tokens as plain text. Over hundreds of documents, that's real money.
+
+`vrk plain` strips markdown formatting and keeps only the prose. Headers become text, links keep their label but drop the URL, code blocks keep their content but lose the fences. The output is clean plain text ready for token-efficient LLM processing.
 
 ## The problem
 
-You feed a markdown README to an LLM and waste tokens on formatting syntax - header markers, link URLs, fence markers, bullet characters. The content is the same but the token count is 20-30% higher than it needs to be.
+You process 500 markdown files through an LLM nightly. Each file has headers, links with long URLs, code fences, and bullet markers. All of that formatting is tokens the model reads but gains nothing from. You're paying for 30% more tokens than the actual content.
 
 ## Before and after
 
 **Before**
 
 ```bash
-# no standard CLI tool for this
-python3 -c "
-import re, sys
-text = sys.stdin.read()
-text = re.sub(r'#{1,6}\s+', '', text)
-text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
-print(text)" < README.md
+cat README.md | sed 's/^#* //' | sed 's/\[([^]]*)\]([^)]*)/\1/g'
+# Fragile regex, misses code blocks, tables, nested formatting
 ```
 
 **After**
@@ -41,21 +38,98 @@ cat README.md | vrk plain
 ## Example
 
 ```bash
-cat README.md | vrk plain | vrk tok --budget 4000
+vrk grab https://example.com/docs | vrk plain | vrk tok
 ```
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | Could not read stdin or write stdout |
-| 2 | Interactive TTY with no piped input and no positional arg |
+| Code | Meaning                                                   |
+|------|-----------------------------------------------------------|
+| 0    | Success                                                   |
+| 1    | Could not read stdin or write stdout                      |
+| 2    | Interactive TTY with no piped input and no positional arg |
 
 ## Flags
 
-| Flag | Short | Type | Description |
-|------|-------|------|-------------|
-| `--json` | -j | bool | Emit JSON with text, input_bytes, output_bytes |
-| `--quiet` | -q | bool | Suppress stderr output |
+| Flag      | Short | Type | Description                                    |
+|-----------|-------|------|------------------------------------------------|
+| `--json`  | -j    | bool | Emit JSON with text, input_bytes, output_bytes |
+| `--quiet` | -q    | bool | Suppress stderr output                         |
 
+
+<!-- notes - edit in notes/plain.notes.md -->
+
+## What gets stripped
+
+| Markdown syntax | Plain text result |
+|----------------|-------------------|
+| `**bold**` | bold |
+| `_italic_` | italic |
+| `[link text](url)` | link text |
+| `` `inline code` `` | inline code |
+| Code fences | Content only, no fences |
+| `# Headers` | Header text |
+| `- bullet` | bullet |
+
+URLs in links are dropped. Code content is kept. Everything that carries meaning stays; everything that's just formatting goes.
+
+## How it works
+
+```bash
+$ printf '**Bold text** and _italic_ and [link](http://x.com)\n\n- bullet one\n- bullet two\n\n```python\nprint("hello")\n```\n' | vrk plain
+Bold text and italic and link
+
+bullet one
+bullet two
+
+print("hello")
+```
+
+### JSON output
+
+```bash
+echo '**hello** world' | vrk plain --json
+```
+
+Wraps the plain text in a JSON envelope with byte counts.
+
+## Pipeline integration
+
+### Save tokens before an LLM call
+
+```bash
+# Strip markdown formatting to reduce token count, then summarize
+vrk grab https://example.com/docs | vrk plain | vrk tok --check 8000 | \
+  vrk prompt --system 'Summarize this document'
+```
+
+### Compare token counts before and after
+
+```bash
+RAW=$(vrk grab https://example.com/docs | vrk tok --json | jq -r '.tokens')
+PLAIN=$(vrk grab https://example.com/docs | vrk plain | vrk tok --json | jq -r '.tokens')
+echo "Markdown: $RAW tokens, Plain: $PLAIN tokens, Saved: $((RAW - PLAIN))"
+```
+
+### Batch processing markdown files
+
+```bash
+# Strip formatting from all docs before chunking and summarizing
+for f in docs/*.md; do
+  cat "$f" | vrk plain | vrk chunk --size 4000 | \
+    while IFS= read -r record; do
+      echo "$record" | jq -r '.text' | vrk prompt --system 'Summarize'
+    done
+done
+```
+
+## When it fails
+
+No input:
+
+```bash
+$ vrk plain
+usage error: plain: no input: pipe text to stdin
+$ echo $?
+2
+```

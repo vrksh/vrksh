@@ -346,7 +346,7 @@ pre:hover .copy-btn,
 [data-theme="light"] .filter-btn[data-filter="pipeline"].active { color: #7C3AED; border-color: #7C3AED; }
 [data-theme="light"] .filter-btn[data-filter="utilities"].active { color: #D97706; border-color: #D97706; }
 
-/* Search result highlights — !important needed to override pagefind-ui's mark{all:revert} */
+/* Search result highlights - !important needed to override pagefind-ui's mark{all:revert} */
 .pagefind-ui mark {
   all: unset !important;
   background-color: var(--color-accent-dim) !important;

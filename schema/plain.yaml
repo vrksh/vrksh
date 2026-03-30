@@ -3,23 +3,21 @@ tagline: markdown stripper - removes syntax, keeps prose
 meta_description: "Strip markdown syntax and keep the prose. Clean input for token counting or plain-text pipelines."
 og_title: "vrk plain - strip markdown to plain text"
 description: |
-  Strips markdown formatting and gives you plain prose. Headings, links, fences, and bullet markers are removed, but the actual text content is preserved. Useful before sending content to an LLM where formatting syntax wastes tokens.
+  You fetch a markdown document and send it to an LLM. The markdown syntax - headers, link URLs, code fences, bullet markers - consumes tokens but adds no information for the model. A 2,000-token document might be 1,400 tokens as plain text. Over hundreds of documents, that's real money.
+
+  `vrk plain` strips markdown formatting and keeps only the prose. Headers become text, links keep their label but drop the URL, code blocks keep their content but lose the fences. The output is clean plain text ready for token-efficient LLM processing.
 problem: >
-  You feed a markdown README to an LLM and waste tokens on formatting syntax -
-  header markers, link URLs, fence markers, bullet characters. The content is the
-  same but the token count is 20-30% higher than it needs to be.
+  You process 500 markdown files through an LLM nightly. Each file has headers,
+  links with long URLs, code fences, and bullet markers. All of that formatting
+  is tokens the model reads but gains nothing from. You're paying for 30% more
+  tokens than the actual content.
 before: |
-  # no standard CLI tool for this
-  python3 -c "
-  import re, sys
-  text = sys.stdin.read()
-  text = re.sub(r'#{1,6}\s+', '', text)
-  text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
-  print(text)" < README.md
+  cat README.md | sed 's/^#* //' | sed 's/\[([^]]*)\]([^)]*)/\1/g'
+  # Fragile regex, misses code blocks, tables, nested formatting
 after: "cat README.md | vrk plain"
 group: v1
 category: utilities
-example: cat README.md | vrk plain | vrk tok --budget 4000
+example: "vrk grab https://example.com/docs | vrk plain | vrk tok"
 flags:
   - flag: --json
     short: "-j"

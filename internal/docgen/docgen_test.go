@@ -107,10 +107,10 @@ func TestGenerateToolDoc(t *testing.T) {
 	if !strings.Contains(s, "## Exit codes") {
 		t.Error("missing Exit codes section")
 	}
-	if !strings.Contains(s, "| Code | Meaning |") {
+	if !strings.Contains(s, "| Code") || !strings.Contains(s, "Meaning") {
 		t.Error("missing exit codes table header")
 	}
-	if !strings.Contains(s, "| 0 | Success |") {
+	if !strings.Contains(s, "| 0") || !strings.Contains(s, "Success") {
 		t.Error("missing exit code 0 in table")
 	}
 

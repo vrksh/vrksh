@@ -1,91 +1,87 @@
 ---
 title: "About"
-description: "What vrk is, how to say it, and how the binary works."
+description: "What vrk is, why it exists, and how the binary works."
 noindex: false
 ---
 
-## Philosophy
+## Why this exists
 
-Agents need deterministic tools. The standard Unix toolkit was designed for humans who handle ambiguity well. vrk fills the gap: small tools that do one thing, fail loudly, and compose predictably. Not smart. Not magical. Reliable.
+You're working with LLMs. Maybe you're building pipelines in Python. Maybe your agent needs to call tools. Maybe you're debugging a prompt from the terminal at 11 PM. Wherever you are, the same problems keep showing up: How many tokens is this document? Did the model's JSON actually match the schema? Is there a secret in this log I'm about to send to an API?
 
-## What it is
+These aren't hard problems. But the solutions are scattered. Token counting is a Python library. Retry with backoff is another library. Secret redaction is a third. Schema validation is a fourth. Each one pulls in dependencies, needs a runtime, and only works inside your Python process. Your agent can't call them. Your CI pipeline can't call them. The developer SSHed into a production box at 2 AM definitely can't call them.
+
+vrk puts all of it in one place. 26 tools for the things that come up constantly when you work with LLMs - token counting, API calls, schema validation, secret redaction, retry logic, rate limiting, state persistence. Each one is a Unix command: stdin in, stdout out, exit codes that mean something. A developer can run them from the terminal. A Python script can shell out to them. An agent can call them as tools. A cron job can chain them together. One static binary, no runtime dependencies, works the same on every platform.
+
+## The name
 
 vrksh (वृक्ष) is the Sanskrit word for tree. The command is `vrk`. The project is `vrksh`. The domain is `vrk.sh`.
 
-vrk is pronounced "vruk" - rhymes with truck, not with "work" or "V-R-K."
-
-A single static binary with 26 Unix-style tools for AI pipelines. Every tool reads stdin, writes stdout, exits 0/1/2. Nothing else.
+Pronounced "vruk" - rhymes with truck.
 
 ## The contract
 
-Every vrk tool follows these rules:
+Every tool follows the same rules. No exceptions.
 
 ```
 stdin   ->  data in
 stdout  ->  data out
-stderr  ->  errors only
+stderr  ->  errors and warnings only
 exit 0  ->  success
 exit 1  ->  failure (bad input, API error, condition not met)
 exit 2  ->  usage error (bad flags, missing input)
---json  ->  errors go to stdout as {"error":"...","code":N}
---help  ->  always works, always explains the tool
+--json  ->  errors go to stdout as {"error":"...","code":N}, stderr empty
+--help  ->  always works, even with no stdin
 ```
 
-This contract is what makes vrk tools composable with each other and callable by agents without special handling. An agent does not need to parse stderr to know if a tool failed - it checks the exit code. It does not need to guess the output format - stdout is always the data.
+This is what makes the tools composable. You don't parse stderr to check if something failed - you check the exit code. You don't guess the output format - stdout is always the data.
+
+It also means every caller gets the same interface. A developer typing in a terminal, a Python subprocess call, an agent executing a tool, a CI step in a GitHub Action - they all interact with vrk the same way. Exit 0 means continue. Exit 1 means stop. Exit 2 means the command was wrong. No SDK, no client library, no language-specific wrapper. The process boundary is the API.
 
 ## How the binary works
 
-vrk uses multicall dispatch - the same binary handles every tool. The first argument selects which tool runs:
+One binary, 26 tools. vrk uses multicall dispatch - the first argument selects which tool runs:
 
 ```bash
-vrk tok              # runs the tok tool
-vrk prompt           # runs the prompt tool
-vrk --manifest       # shows all tools as JSON
-vrk --skills tok     # shows tok's agent skill reference
-vrk --help           # top-level usage
+vrk tok              # count tokens
+vrk prompt           # call an LLM
+vrk grab             # fetch a URL as clean markdown
+vrk mask             # redact secrets
+vrk chunk            # split text into token-sized pieces
 ```
 
-To see every tool available:
+Two built-in flags for agent discovery:
 
 ```bash
-vrk --manifest
+vrk --manifest       # JSON tool list (for programmatic discovery)
+vrk --skills         # full reference with flags, exit codes, gotchas
+vrk --skills tok     # reference for a single tool (lower token cost)
 ```
 
-This prints the embedded JSON tool manifest - the same manifest that agents use for discovery.
+The manifest and skills reference are embedded in the binary. An agent can call `vrk --skills tok` to learn everything about a tool without reading documentation or making network calls.
 
 ## Bare mode
 
-By default, every tool is accessed through the `vrk` prefix: `vrk tok`, `vrk jwt`, `vrk epoch`. [Bare mode](/docs/bare/) creates symlinks so you can call tools directly by name - `tok`, `jwt`, `epoch` - without the prefix.
-
-The symlinks are created in the same directory as the vrk binary. Nothing is copied. Each symlink points back to `vrk`, which detects the name it was called as and dispatches accordingly.
+Typing `vrk` before every command adds friction in interactive sessions. [Bare mode](/docs/bare/) creates symlinks so you can call tools directly by name:
 
 ```bash
 vrk --bare                     # link all tools
-vrk --bare tok jwt epoch       # link only these three
-vrk --bare --dry-run           # preview what would happen
-vrk --bare --list              # show active symlinks
-vrk --bare --remove            # remove all vrk-created symlinks
-vrk --bare --remove tok        # remove a specific symlink
+tok --check 8000 < prompt.txt  # now works without the prefix
 ```
 
-**Collisions are handled safely.** If a file already exists at a symlink path, bare mode skips it and tells you. Use `--force` to overwrite:
+Preview first, commit when ready:
 
 ```bash
-vrk --bare --force             # overwrite all collisions
-vrk --bare --force uuid base   # overwrite only these two
+vrk --bare --dry-run           # show what would be created
+vrk --bare                     # create the symlinks
+vrk --bare --list              # see what's linked
+vrk --bare --remove            # undo everything
 ```
 
-Running bare mode twice is safe - it recognizes existing symlinks and reports them as already linked. `--remove` only deletes symlinks that point to vrk. It will never touch a file it did not create.
-
-If the binary directory requires elevated permissions:
-
-```bash
-sudo vrk --bare
-```
+Collisions are handled safely. If a file already exists at a symlink path, bare mode skips it and warns you. Use `--force` to overwrite. `--remove` only deletes symlinks that point to vrk - it will never touch a file it didn't create.
 
 ## Shell completions
 
-vrk ships with tab completion for bash, zsh, and fish. The [completions](/docs/completions/) tool generates the appropriate script for your shell:
+Tab completion for bash, zsh, and fish:
 
 ```bash
 vrk completions bash > ~/.bash_completion.d/vrk
@@ -93,4 +89,4 @@ vrk completions zsh > ~/.zsh/completions/_vrk
 vrk completions fish > ~/.config/fish/completions/vrk.fish
 ```
 
-After sourcing the script, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags.
+After sourcing, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags. The completions are generated from the binary itself, so they always match the version you have installed.

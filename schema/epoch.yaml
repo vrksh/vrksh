@@ -3,21 +3,22 @@ tagline: timestamp converter - unix/ISO, relative time
 meta_description: "Convert between Unix timestamps and ISO dates. Supports relative time like +3d or -1h."
 og_title: "vrk epoch - Unix timestamp and ISO date converter"
 description: |
-  Converts between Unix timestamps and human-readable dates. You can pass a timestamp, an ISO date, or a relative offset like +3d or -1h. Works the same on macOS and Linux, unlike the date command which differs between platforms.
+  You need a Unix timestamp for "3 days from now" in a shell script. You reach for `date`, but the flags are different on macOS and Linux. `date -d '+3 days'` works on Linux. On macOS it means something else entirely. You search Stack Overflow and find five different answers, all platform-specific.
+
+  `vrk epoch` converts between Unix timestamps and ISO 8601 dates, and handles relative time offsets like `+3d` or `-1h`. Works identically on macOS and Linux. No more `date` flag confusion. Use `--iso` for human-readable output, `--json` for structured output, and `--tz` for timezone conversion.
 problem: >
-  You have a Unix timestamp from an API response and need to know what date it is.
-  The date command syntax differs between macOS and Linux. date -d works on Linux,
-  date -r works on macOS, and neither handles relative offsets like "+3d" natively.
+  Your pipeline stores timestamps as Unix integers. A developer needs to know when
+  1740009600 was. They try `date -d @1740009600` on macOS and get an error. They
+  try `date -r 1740009600` and get the right answer - but that flag doesn't exist
+  on Linux. Every timestamp conversion turns into a platform compatibility puzzle.
 before: |
-  # Linux
-  date -d @1740009600
-  # macOS
-  date -r 1740009600
-  # relative? write Python
+  # Linux: date -d @1740009600
+  # macOS: date -r 1740009600
+  # Neither is portable. Scripts break on the other OS.
 after: "vrk epoch 1740009600 --iso"
 group: v1
 category: utilities
-example: vrk epoch 1740009600 --iso
+example: "vrk epoch '+3d' --iso"
 flags:
   - flag: --iso
     short: ""

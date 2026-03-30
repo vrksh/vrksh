@@ -3,18 +3,21 @@ tagline: naming convention converter - snake, camel, kebab, pascal, title
 meta_description: "Convert between naming conventions. snake_case, camelCase, kebab-case, PascalCase, and Title Case."
 og_title: "vrk recase - convert between snake, camel, kebab, and more"
 description: |
-  Converts between naming conventions - snake_case, camelCase, kebab-case, PascalCase, and Title Case. Auto-detects the input format so you just specify what you want. Handles acronyms correctly: HTMLParser becomes html_parser, not h_t_m_l_parser.
+  Your API returns `snake_case` field names but your frontend expects `camelCase`. You write a sed command to convert and it breaks on acronyms - `http_api_url` becomes `httpApiUrl` instead of handling the abbreviation correctly.
+
+  `vrk recase` converts between naming conventions: snake_case, camelCase, PascalCase, kebab-case, SCREAMING_SNAKE, Title Case, and more. Auto-detects the input convention. Handles acronyms correctly. Processes line by line so you can convert a list of names in one pass.
 problem: >
-  You need to convert getUserName to get_user_name for a database column. You write
-  a regex but it breaks on acronyms - HTMLParser becomes h_t_m_l_parser instead of
-  html_parser. Every naming convention edge case is its own bug.
+  You're migrating an API and need to convert 200 field names from snake_case to
+  camelCase. You write a Python script. It takes 30 lines to handle edge cases:
+  leading underscores, consecutive capitals, numeric suffixes. You test it on
+  http_api_url and get httpApiUrl. Close enough? Not for a public API.
 before: |
-  echo 'getUserName' | sed 's/\([A-Z]\)/_\L\1/g' | sed 's/^_//'
-  # breaks on acronyms: HTMLParser -> h_t_m_l_parser
-after: "echo 'getUserName' | vrk recase --to snake"
+  echo 'user_first_name' | sed 's/_\(.\)/\U\1/g'
+  # Breaks on acronyms, doesn't handle PascalCase or kebab-case
+after: "echo 'user_first_name' | vrk recase --to camel"
 group: v1
 category: utilities
-example: echo 'getUserName' | vrk recase --to snake
+example: "echo 'user_first_name' | vrk recase --to camel"
 flags:
   - flag: --to
     short: ""

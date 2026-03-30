@@ -3,23 +3,21 @@ tagline: JSON array to JSONL converter - --collect, --json
 meta_description: "Convert between JSON arrays and JSONL. Flatten arrays for streaming, collect lines back into arrays."
 og_title: "vrk jsonl - convert between JSON arrays and JSONL"
 description: |
-  Converts between JSON arrays and JSONL (one record per line). Splits arrays for pipeline processing, or collects JSONL lines back into an array when an API expects one. Uses a streaming decoder, so it handles arrays larger than available memory.
+  You have a JSON array with 50,000 objects. You need to process each one through a pipeline. `jq '.[]'` works but loads the entire array into memory. On a 2GB JSON file, your process gets OOM-killed.
+
+  `vrk jsonl` converts between JSON arrays and JSONL (one JSON object per line). The default mode splits an array into individual lines for pipeline processing. Use `--collect` to go the other direction - gather JSONL lines back into a JSON array. The streaming decoder handles files larger than available memory.
 problem: >
-  You have a 3GB JSON array from a data export and need to process records one per
-  line. jq -c '.[]' loads the entire array into memory and gets OOM-killed. Going the
-  other direction - collecting JSONL back into an array for an API that expects one -
-  requires careful bracket and comma handling that breaks on empty input.
+  Your API returns a JSON array of 50,000 records. You need to validate each one
+  and pipe invalid records to an LLM for repair. jq '.[]' loads the entire array
+  into memory. On a large response, the process is killed. You need line-by-line
+  JSONL but the API only speaks JSON arrays.
 before: |
-  # split: jq loads entire array into memory, OOM on large files
-  cat data.json | jq -c '.[]'
-  # collect: manual bracket/comma handling
-  echo '['; cat records.jsonl | sed 's/$/,/' | sed '$ s/,$//' ; echo ']'
-after: |
-  cat data.json | vrk jsonl
-  cat records.jsonl | vrk jsonl --collect
+  cat data.json | jq '.[]'
+  # Loads entire array into memory. OOM on large files.
+after: "cat data.json | vrk jsonl"
 group: v1
 category: utilities
-example: cat data.json | vrk jsonl
+example: "cat api-response.json | vrk jsonl | vrk validate --schema '{\"name\":\"string\"}'"
 flags:
   - flag: --collect
     short: "-c"

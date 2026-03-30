@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agent.sh — install vrk and print agent onboarding block.
+# agent.sh - install vrk and print agent onboarding block.
 # Usage: curl -sSf https://vrk.sh/agent.sh | bash
 
 set -euo pipefail
@@ -34,13 +34,13 @@ binary:  $(command -v vrk || echo "$VRK")
 
 ## Three tools to know first
 
-1. **tok** — count tokens and gate pipelines before LLM calls.
+1. **tok** - count tokens and gate pipelines before LLM calls.
    cat prompt.txt | vrk tok --check 4000 | vrk prompt --system "summarise"
 
-2. **prompt** — send a prompt to an LLM (Anthropic or OpenAI).
+2. **prompt** - send a prompt to an LLM (Anthropic or OpenAI).
    echo "Summarise this." | vrk prompt
 
-3. **grab** — fetch a URL as clean markdown for pipeline input.
+3. **grab** - fetch a URL as clean markdown for pipeline input.
    vrk grab https://example.com | vrk tok --check 8000 | vrk prompt --system "summarise"
 
 ## Discovery

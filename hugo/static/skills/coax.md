@@ -1,16 +1,16 @@
 # coax - Retry wrapper - --times, --backoff, --on, --until
 
-When to use: retry a flaky command with configurable backoff and exit code filtering.
+When to use: retry a flaky command with backoff. Buffers stdin so each retry gets the same input. Use exp:Nms for exponential backoff on rate-limited APIs.
 Composes with: prompt, grab, kv
 
-| Flag | Short | Type | Description |
-|------|-------|------|-------------|
-| `--times` | | int | Number of retries (default: 3); total attempts = N+1 |
-| `--backoff` | | string | Delay spec: `100ms` (fixed) or `exp:100ms` (exponential) |
-| `--backoff-max` | | string | Cap for exponential backoff |
-| `--on` | | int | Retry only on this exit code (repeatable) |
-| `--until` | | string | Shell command; retry until it exits 0 |
-| `--quiet` | `-q` | bool | Suppress coax progress lines |
+| Flag            | Short | Type   | Description                                              |
+|-----------------|-------|--------|----------------------------------------------------------|
+| `--times`       |       | int    | Number of retries (default: 3); total attempts = N+1     |
+| `--backoff`     |       | string | Delay spec: `100ms` (fixed) or `exp:100ms` (exponential) |
+| `--backoff-max` |       | string | Cap for exponential backoff                              |
+| `--on`          |       | int    | Retry only on this exit code (repeatable)                |
+| `--until`       |       | string | Shell command; retry until it exits 0                    |
+| `--quiet`       | `-q`  | bool   | Suppress coax progress lines                             |
 
 Exit 0: command succeeded on some attempt
 Exit (last): all retries exhausted, passes through last command's exit code
@@ -21,4 +21,5 @@ Example:
     vrk coax --times 3 --backoff exp:1s --on 1 -- vrk prompt --system "summarise" < doc.txt
 
 Anti-pattern:
-- Don't forget `--` to separate coax flags from the retried command -- without it, coax exits 2.
+- Don't use fixed backoff for rate-limited APIs. Use exp:200ms or exp:500ms so early retries are fast and later retries give the rate limit time to reset.
+- Don't retry on every exit code. Use --on 1 to only retry on runtime errors, not usage errors (exit 2).

@@ -3,17 +3,23 @@ tagline: pipeline condition check - jq conditions, --contains, --matches
 meta_description: "Assert conditions mid-pipeline. Exit 1 if a check fails. Catches bad data before it reaches the next stage."
 og_title: "vrk assert - pipeline condition checks that halt on failure"
 description: |
-  Checks a condition on your pipeline data and either passes it through or stops the pipeline. You can match JSON with jq expressions or plain text with substring and regex checks. If the condition fails, nothing reaches the next step.
+  Your pipeline calls an LLM and pipes the result to a database. But sometimes the LLM returns `{"error":"rate limited"}` instead of real data. It's valid JSON, it passes through jq, and it ends up in your database. You don't find out until a user reports garbage results.
+
+  `vrk assert` checks conditions on pipeline data and stops the pipeline if the check fails. In JSON mode, it evaluates gojq expressions like `.status == "ok"` or `.items | length > 0`. In text mode, it checks for substrings with `--contains` or regex patterns with `--matches`. Data passes through on success (exit 0) and the pipeline halts on failure (exit 1).
 problem: >
-  You pipe JSON through a pipeline and assume the shape is correct. Three steps later,
-  a malformed record silently corrupts your output. You only notice when a customer
-  reports wrong data.
+  Your pipeline extracts structured data from an LLM, validates the schema, and
+  stores it. The schema is valid but the content is wrong - the LLM returned
+  {"status":"error","message":"rate limited"} and it matched the schema because
+  status is a string. You need to check values, not just types.
 before: |
-  curl -s https://api.example.com/health | jq -e '.status == "ok"' > /dev/null
-after: "vrk grab https://api.example.com/health | vrk assert --contains '\"status\":\"ok\"'"
+  echo "$RESPONSE" | jq -e '.status == "ok"' > /dev/null
+  if [ $? -ne 0 ]; then exit 1; fi
+  echo "$RESPONSE" | next-step
+  # data doesn't pass through, must re-read
+after: "echo $RESPONSE | vrk assert '.status == \"ok\"' | next-step"
 group: v1
 category: utilities
-example: vrk grab https://api.example.com/health | vrk assert --contains '"status":"ok"'
+example: "echo '{\"status\":\"ok\",\"count\":42}' | vrk assert '.count > 0'"
 flags:
   - flag: --contains
     short: ""

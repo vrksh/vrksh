@@ -12,6 +12,7 @@ import (
 
 func main() {
 	schemaDir := flag.String("schema", "schema", "path to schema YAML directory")
+	notesDir := flag.String("notes", "notes", "path to notes markdown directory")
 	hugoContent := flag.String("content", "hugo/content/docs", "output dir for Hugo doc pages")
 	hugoStatic := flag.String("static", "hugo/static", "output dir for static files (skills.md, agents.md, llms.txt)")
 	hugoData := flag.String("data", "hugo/data/tools", "output dir for Hugo data JSON files")
@@ -31,7 +32,7 @@ func main() {
 		}
 	}
 
-	if err := docgen.GenerateToolDocs(tools, *schemaDir, *hugoContent); err != nil {
+	if err := docgen.GenerateToolDocs(tools, *notesDir, *hugoContent); err != nil {
 		fmt.Fprintf(os.Stderr, "error: generating tool docs: %v\n", err)
 		os.Exit(1)
 	}

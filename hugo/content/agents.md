@@ -1,63 +1,63 @@
 ---
 title: "Agent Endpoints"
-description: "Machine-readable endpoints for AI agents - discovery, skills, recipes, and context."
+description: "Machine-readable endpoints for AI agents - discovery, skills, and context. CLI and HTTP."
 noindex: false
 ---
 
-## Machine-readable endpoints
+## Give your agent vrk
 
-vrksh publishes several endpoints designed for AI agents to consume programmatically. Each serves a different stage of agent integration: discovery (what tools exist), orientation (how to use them), and composition (how to combine them). All are plain text or structured data - no HTML parsing required.
+Your agent needs to know three things: what tools exist, what each tool does, and how to compose them. vrk exposes this as machine-readable endpoints - both as CLI commands (for agents with shell access) and as HTTP URLs (for agents that can fetch). No HTML parsing, no scraping, no guessing.
 
-| Endpoint | Format | What it contains | CLI equivalent |
-|----------|--------|-----------------|----------------|
-| [`/manifest.json`](/manifest.json) | JSON | Tool registry - name and description for all 26 tools | `vrk --manifest` |
-| [`/skills.md`](/skills.md) | markdown | All tools: flags, exit codes, gotchas, compose patterns | `vrk --skills` |
-| [`/skills/tok.md`](/skills/tok.md) | markdown | Single tool reference (tok as example - one per tool) | `vrk --skills tok` |
-| [`/agents.md`](/agents.md) | markdown | Agent orientation, MCP config, anti-patterns | - |
-| [`/llms.txt`](/llms.txt) | plain text | LLM discovery convention, categorised tool index | - |
-| [`/recipes.yaml`](/recipes.yaml) | YAML | Compose patterns as structured data | - |
+## Discovery endpoints
 
-## CLI equivalents
+| Endpoint                          | Format     | What it provides                                         | CLI equivalent     |
+|-----------------------------------|------------|----------------------------------------------------------|--------------------|
+| [`/manifest.json`](/manifest.json) | JSON       | Tool registry - name and one-line description for all 26 tools | `vrk --manifest`   |
+| [`/skills.md`](/skills.md)         | Markdown   | Complete reference: every flag, exit code, and compose pattern  | `vrk --skills`     |
+| [`/skills/tok.md`](/skills/tok.md) | Markdown   | Single-tool reference (one file per tool, lower token cost)    | `vrk --skills tok` |
+| [`/agents.md`](/agents.md)         | Markdown   | Agent orientation, anti-patterns, MCP config                   | -                  |
+| [`/llms.txt`](/llms.txt)           | Plain text | LLM discovery convention, categorized tool index               | -                  |
+| [`/recipes.yaml`](/recipes.yaml)   | YAML       | Compose patterns as structured data                            | -                  |
 
-Every discovery endpoint has a CLI counterpart. Agents with shell access should prefer the CLI - it works offline and returns the same content.
+**If your agent has shell access, use the CLI.** It works offline, costs zero tokens to fetch, and always matches the installed version. The HTTP endpoints exist for agents that can only make web requests.
 
 ```bash
-# Full tool registry (JSON)
-vrk --manifest           # same as: curl -s vrk.sh/manifest.json
+# What tools are available?
+vrk --manifest
 
-# Complete skills reference (all tools)
-vrk --skills             # same as: curl -s vrk.sh/skills.md
+# How does tok work? (flags, exit codes, gotchas)
+vrk --skills tok
 
-# Single tool reference (lower token cost)
-vrk --skills tok         # same as: curl -s vrk.sh/skills/tok.md
-vrk --skills prompt      # same as: curl -s vrk.sh/skills/prompt.md
+# Full reference for all tools (use sparingly - large)
+vrk --skills
 ```
 
-## Adding vrksh to your agent's context
+## Adding vrk to your agent's context
 
-Drop this into your agent's `CLAUDE.md` (or equivalent system prompt file) to give it access to vrksh tools:
+Drop this block into your agent's `CLAUDE.md`, system prompt, or tool-use instructions. It teaches the agent the key patterns without consuming the full reference:
 
 ```markdown
-## vrksh - Unix tools for AI pipelines
+## vrksh tools
 
-vrksh is installed as `vrk`. Use it for token counting, URL fetching,
-secret masking, structured logging, and LLM prompting in shell pipelines.
+vrksh is installed as `vrk`. 26 Unix tools for working with LLMs.
 
-For tool discovery:
+Discovery:
 - `vrk --manifest` lists all tools (JSON)
-- `vrk --skills <tool>` shows flags, exit codes, and examples for one tool
-- `vrk --skills` shows the full reference
+- `vrk --skills <tool>` shows one tool's flags, exit codes, and examples
+- `vrk --skills` shows the full reference (all tools)
 
 Key patterns:
-- Always `vrk tok --check N` before `vrk prompt` to gate context windows
-- Always `vrk validate --schema` after `vrk prompt --schema` to verify output
-- Use `vrk mask` before logging to redact secrets
-- Pipeline order: input -> transform -> guard -> execute -> store
+- Always `vrk tok --check N` before `vrk prompt` to prevent silent truncation
+- Always `vrk mask` before `vrk prompt` when input may contain secrets
+- Use `vrk validate --schema` after `vrk prompt --schema` to verify output shape
+- Use `vrk coax --times N --backoff exp:200ms` to wrap flaky API calls
 ```
+
+For the full per-tool reference, the agent can call `vrk --skills <tool>` on demand rather than loading everything into context upfront. This is cheaper and keeps the context window focused.
 
 ## MCP integration
 
-For agents that support [Model Context Protocol](https://modelcontextprotocol.io/), vrksh includes a discovery-only MCP server. See the [MCP page](/mcp/) for setup.
+For agents that support [Model Context Protocol](https://modelcontextprotocol.io/), vrk includes an MCP server. This lets agents discover and call vrk tools through the standard MCP tool-use interface. See the [MCP page](/mcp/) for details.
 
 ```json
 {
@@ -69,3 +69,13 @@ For agents that support [Model Context Protocol](https://modelcontextprotocol.io
   }
 }
 ```
+
+## Agent bootstrap script
+
+For automated setups - CI pipelines, Docker images, or agent provisioning scripts - the agent bootstrap installs vrk and prints an onboarding block:
+
+```bash
+curl -fsSL vrk.sh/agent.sh | sh
+```
+
+The onboarding block includes the installed version, the three most important tools, and pointers to the discovery commands. An agent reading its own setup output gets everything it needs to start using vrk immediately.

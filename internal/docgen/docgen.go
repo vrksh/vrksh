@@ -80,31 +80,57 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 		b.WriteString(t.Example)
 		b.WriteString("\n```\n\n")
 
-		// Exit codes as table
+		// Exit codes as table (aligned)
 		b.WriteString("## Exit codes\n\n")
-		b.WriteString("| Code | Meaning |\n")
-		b.WriteString("|------|---------|\n")
-		// Sort exit codes numerically
 		sortedCodes := make([]schema.ExitCode, len(t.ExitCodes))
 		copy(sortedCodes, t.ExitCodes)
 		sort.Slice(sortedCodes, func(i, j int) bool {
 			return sortedCodes[i].Code < sortedCodes[j].Code
 		})
+		meanW := len("Meaning")
 		for _, ec := range sortedCodes {
-			fmt.Fprintf(&b, "| %d | %s |\n", ec.Code, ec.Meaning)
+			if len(ec.Meaning) > meanW {
+				meanW = len(ec.Meaning)
+			}
+		}
+		fmt.Fprintf(&b, "| Code | %-*s |\n", meanW, "Meaning")
+		fmt.Fprintf(&b, "|------|-%s-|\n", strings.Repeat("-", meanW))
+		for _, ec := range sortedCodes {
+			fmt.Fprintf(&b, "| %d    | %-*s |\n", ec.Code, meanW, ec.Meaning)
 		}
 		b.WriteString("\n")
 
-		// Flags section
+		// Flags section (aligned)
 		b.WriteString("## Flags\n\n")
-		b.WriteString("| Flag | Short | Type | Description |\n")
-		b.WriteString("|------|-------|------|-------------|\n")
+		flagW, shortW, typeW, descW := len("Flag"), len("Short"), len("Type"), len("Description")
+		for _, f := range t.Flags {
+			w := len(f.Flag) + 2 // backticks
+			if w > flagW {
+				flagW = w
+			}
+			sw := len(f.Short)
+			if f.Short == "" {
+				sw = 1
+			}
+			if sw > shortW {
+				shortW = sw
+			}
+			if len(f.Type) > typeW {
+				typeW = len(f.Type)
+			}
+			if len(f.Description) > descW {
+				descW = len(f.Description)
+			}
+		}
+		fmt.Fprintf(&b, "| %-*s | %-*s | %-*s | %-*s |\n", flagW, "Flag", shortW, "Short", typeW, "Type", descW, "Description")
+		fmt.Fprintf(&b, "|-%s-|-%s-|-%s-|-%s-|\n", strings.Repeat("-", flagW), strings.Repeat("-", shortW), strings.Repeat("-", typeW), strings.Repeat("-", descW))
 		for _, f := range t.Flags {
 			short := f.Short
 			if short == "" {
 				short = " "
 			}
-			fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n", f.Flag, short, f.Type, f.Description)
+			name := "`" + f.Flag + "`"
+			fmt.Fprintf(&b, "| %-*s | %-*s | %-*s | %-*s |\n", flagW, name, shortW, short, typeW, f.Type, descW, f.Description)
 		}
 		b.WriteString("\n")
 
@@ -113,7 +139,7 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 			notesPath := filepath.Join(notesDir, t.Name+".notes.md")
 			notesData, err := os.ReadFile(notesPath)
 			if err == nil && len(notesData) > 0 {
-				b.WriteString("\n<!-- notes - edit in schema/")
+				b.WriteString("\n<!-- notes - edit in notes/")
 				b.WriteString(t.Name)
 				b.WriteString(".notes.md -->\n\n")
 				b.WriteString(strings.TrimRight(string(notesData), "\n"))
@@ -154,15 +180,33 @@ func GenerateSkillsMD(tools []schema.Tool, outDir string) error {
 		fmt.Fprintf(&b, "## %s - %s\n\n", t.Name, t.Tagline)
 		fmt.Fprintf(&b, "Group: %s\n\n", t.Group)
 
-		// Flags table
-		b.WriteString("| Flag | Short | Description |\n")
-		b.WriteString("|------|-------|-------------|\n")
+		// Flags table (aligned)
+		sflagW, sshortW, sdescW := len("Flag"), len("Short"), len("Description")
+		for _, f := range t.Flags {
+			w := len(f.Flag) + 2
+			if w > sflagW {
+				sflagW = w
+			}
+			sw := len(f.Short)
+			if f.Short == "" {
+				sw = 1
+			}
+			if sw > sshortW {
+				sshortW = sw
+			}
+			if len(f.Description) > sdescW {
+				sdescW = len(f.Description)
+			}
+		}
+		fmt.Fprintf(&b, "| %-*s | %-*s | %-*s |\n", sflagW, "Flag", sshortW, "Short", sdescW, "Description")
+		fmt.Fprintf(&b, "|-%s-|-%s-|-%s-|\n", strings.Repeat("-", sflagW), strings.Repeat("-", sshortW), strings.Repeat("-", sdescW))
 		for _, f := range t.Flags {
 			short := f.Short
 			if short == "" {
 				short = " "
 			}
-			fmt.Fprintf(&b, "| `%s` | %s | %s |\n", f.Flag, short, f.Description)
+			name := "`" + f.Flag + "`"
+			fmt.Fprintf(&b, "| %-*s | %-*s | %-*s |\n", sflagW, name, sshortW, short, sdescW, f.Description)
 		}
 		b.WriteString("\n")
 
@@ -192,10 +236,24 @@ func GenerateAgentsMD(tools []schema.Tool, outDir string) error {
 	b.WriteString("# vrksh tools\n\n")
 	b.WriteString("One binary: `vrk`. Unix tools for AI pipelines.\n\n")
 
-	b.WriteString("| Tool | Description |\n")
-	b.WriteString("|------|-------------|\n")
+	// Compute column widths for aligned table
+	nameW := len("Tool")
+	descW := len("Description")
 	for _, t := range tools {
-		fmt.Fprintf(&b, "| `%s` | %s |\n", t.Name, t.Tagline)
+		w := len(t.Name) + 2 // backticks
+		if w > nameW {
+			nameW = w
+		}
+		if len(t.Tagline) > descW {
+			descW = len(t.Tagline)
+		}
+	}
+
+	fmt.Fprintf(&b, "| %-*s | %-*s |\n", nameW, "Tool", descW, "Description")
+	fmt.Fprintf(&b, "|-%s-|-%s-|\n", strings.Repeat("-", nameW), strings.Repeat("-", descW))
+	for _, t := range tools {
+		name := "`" + t.Name + "`"
+		fmt.Fprintf(&b, "| %-*s | %-*s |\n", nameW, name, descW, t.Tagline)
 	}
 	b.WriteString("\n")
 	b.WriteString("Full reference: `vrk --skills` or https://vrk.sh/skills.md\n")

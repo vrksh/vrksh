@@ -3,19 +3,23 @@ tagline: universal hasher - sha256/md5/sha512, --hmac, --compare
 meta_description: "Hash anything with sha256, md5, or sha512. Verify with --compare. Sign with --hmac. One tool, no flags to memorize."
 og_title: "vrk digest - hash, verify, and HMAC from the command line"
 description: |
-  Hashes strings, stdin, or files with SHA-256, MD5, or SHA-512. Also computes HMACs for verifying webhook signatures with constant-time comparison, so timing attacks are not a concern. Streams input, so it handles files of any size without loading them into memory.
+  You need to hash a file and compare it against a known checksum. `sha256sum` exists on Linux but not macOS. `shasum -a 256` exists on macOS but the output format differs. You end up with `if [ "$(shasum -a 256 < file | cut -d' ' -f1)" = "$EXPECTED" ]` and it works until someone passes a filename with spaces.
+
+  `vrk digest` hashes with SHA-256 (default), MD5, or SHA-512. It reads from stdin, positional arguments, or files with `--file`. Compare hashes with `--compare`, compute HMACs with `--hmac`, and verify them with `--verify`. Uses constant-time comparison to resist timing attacks.
 problem: >
-  You need to verify a webhook signature or compare file hashes and the openssl
-  command is different for HMAC vs plain hash. You forget the -binary flag, get
-  hex-encoded input to the HMAC, and the signature never matches.
+  You download a binary and want to verify its SHA-256 checksum. On macOS you
+  use shasum -a 256. On Linux you use sha256sum. The output formats differ.
+  You write a verification script and it breaks when someone runs it on the
+  other OS. For HMAC verification, you reach for openssl and the flag syntax
+  is even worse.
 before: |
-  echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" -binary | xxd -p
-  # -binary is easy to forget; without it you HMAC the hex string, not the bytes
-  # output format differs between openssl versions
-after: "echo -n \"$PAYLOAD\" | vrk digest --hmac --key \"$WEBHOOK_SECRET\" --bare"
+  # macOS: shasum -a 256 file.tar.gz
+  # Linux: sha256sum file.tar.gz
+  # Different output formats, different commands
+after: "vrk digest --file file.tar.gz"
 group: v1
 category: utilities
-example: vrk digest 'hello'
+example: "vrk digest --file release.tar.gz --compare"
 flags:
   - flag: --algo
     short: "-a"

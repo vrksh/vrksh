@@ -3,11 +3,14 @@ tagline: JSONL schema validator - --schema, --strict, --fix, --json
 meta_description: "Validate LLM JSON output against a schema. Exit 1 on mismatch. Pipeline stops before bad data propagates."
 og_title: "vrk validate - schema validation for LLM JSON output"
 description: |
-  Checks every JSON record in a stream against a schema you provide. Valid records pass through to stdout. Invalid ones are dropped with a warning so downstream tools only see clean data. Use --strict to halt on the first bad record instead of skipping it.
+  Your LLM returns JSON that looks right but isn't. The `sentiment` field is sometimes a string, sometimes a number. The `confidence` key is missing on 3% of responses. You don't catch it until a downstream aggregation script crashes at 2 AM on 847 records that slipped through without the required fields.
+
+  `vrk validate` checks every JSON record in a JSONL stream against a type schema. Valid records pass through to stdout. Invalid records are dropped with a warning to stderr. Use `--strict` to halt the pipeline on the first bad record. Use `--fix` to send invalid records to an LLM for repair.
 problem: >
-  You have a JSONL stream and need to ensure every record matches a schema before it
-  enters your database. jq can check types but the expressions get unreadable fast.
-  A bad record slips through and corrupts downstream aggregations.
+  You ask an LLM to return {"sentiment":"string","confidence":"number"} for
+  500 product reviews. 487 responses are perfect. 13 return confidence as a string
+  instead of a number. Your Python analysis script crashes on float("high"). You
+  re-run the entire pipeline because you didn't validate between the LLM and the database.
 before: |
   cat records.jsonl | while read line; do
     echo "$line" | jq -e '.name | type == "string"' > /dev/null && \
@@ -17,7 +20,7 @@ before: |
 after: "cat records.jsonl | vrk validate --schema '{\"name\":\"string\",\"age\":\"number\"}'"
 group: v1
 category: pipeline
-example: cat records.jsonl | vrk validate --schema '{"name":"string","age":"number"}' --strict
+example: "cat llm-output.jsonl | vrk validate --schema '{\"sentiment\":\"string\",\"confidence\":\"number\"}' --strict"
 flags:
   - flag: --schema
     short: "-s"

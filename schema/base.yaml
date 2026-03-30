@@ -3,21 +3,24 @@ tagline: encoding converter - base64, base64url, hex, base32
 meta_description: "Encode and decode base64, base64url, hex, and base32 from the command line. No more openssl flags."
 og_title: "vrk base - base64, hex, and base32 encoding in one tool"
 description: |
-  Encodes and decodes between base64, base64url, hex, and base32. Works identically on macOS and Linux - no more remembering whether it is base64 -D or base64 -d. Two subcommands: encode and decode.
+  `base64` behaves differently on macOS and Linux. On macOS it wraps at 76 characters. On Linux it doesn't. `base64 -d` on macOS is `base64 --decode` on Linux. You write a script that works on your Mac and it breaks in CI.
+
+  `vrk base` encodes and decodes base64, base64url, hex, and base32 with identical behavior on every platform. Two subcommands: `encode` and `decode`. Strips one trailing newline from stdin so `echo` input works correctly.
 problem: >
-  You write a deploy script that base64-decodes a secret on macOS. It works. CI runs
-  on Linux and fails because macOS uses base64 -D while Linux uses base64 -d. You add
-  an OS check and now your three-line decode is twelve lines.
+  You base64-encode a value in a script. On macOS, base64 wraps output at 76
+  characters. Your downstream parser chokes on the line breaks. You add -w0
+  but that flag doesn't exist on macOS. You're now maintaining platform-specific
+  branches for a one-line encoding operation.
 before: |
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "$ENCODED" | base64 -D
-  else
-    echo "$ENCODED" | base64 -d
-  fi
-after: "echo \"$ENCODED\" | vrk base decode --from base64"
+  # macOS
+  echo 'hello' | base64
+  # Linux
+  echo 'hello' | base64 -w0
+  # Different flags, different output
+after: "echo 'hello' | vrk base encode --to base64"
 group: v1
 category: utilities
-example: echo 'hello' | vrk base encode --to base64
+example: "echo 'hello' | vrk base encode --to base64"
 flags:
   - flag: --to
     short: ""

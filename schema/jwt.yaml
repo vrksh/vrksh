@@ -3,22 +3,23 @@ tagline: JWT inspector - decode, --claim, --expired, --valid.
 meta_description: "Decode JWTs and extract claims from the command line. Check expiry, validate structure, pull fields."
 og_title: "vrk jwt - JWT decoder and claim inspector"
 description: |
-  Decodes JWT tokens and shows you what is inside - without sending them to a third-party website. You can extract a single claim, check whether the token is expired, or validate all time-based claims at once.
+  You need to check if a JWT is expired before making an API call. You paste it into jwt.io - a third-party website - and realize you just sent a production token to someone else's server. Or you base64-decode it manually and get the padding wrong.
+
+  `vrk jwt` decodes JWT tokens locally, without sending them anywhere. It prints the payload as JSON, extracts individual claims with `--claim`, and checks expiry with `--expired` or full time validity with `--valid`. No signature verification - this is an inspection tool, not an auth library.
 problem: >
-  You have a JWT from an API response and need to check what is in it. You paste it
-  into jwt.io (leaking the token to a third party) or write a Python one-liner that
-  breaks on padding. You just want to see the claims.
+  Your CI pipeline gets a 401 from an API. The token looks valid - it's a long
+  base64 string. You paste it into jwt.io to debug. That token just went to a
+  third-party server. You decode it manually with base64 and get the padding wrong.
+  You add = characters until it works. Twenty minutes to find out the token expired
+  two hours ago.
 before: |
-  python3 -c "
-  import base64, json, sys
-  token = sys.argv[1].split('.')[1]
-  token += '=' * (-len(token) % 4)
-  print(json.dumps(json.loads(base64.urlsafe_b64decode(token)), indent=2))
-  " eyJhbGciOi...
-after: "vrk jwt eyJhbGciOi..."
+  echo "$TOKEN" | base64 -d 2>/dev/null | jq .
+  # base64 padding errors, no expiry check
+  # or worse: paste into jwt.io
+after: "echo $TOKEN | vrk jwt --expired"
 group: v1
 category: utilities
-example: vrk jwt --claim sub eyJhbGciOiJIUzI1NiJ9...
+example: "echo $TOKEN | vrk jwt --claim sub"
 flags:
   - flag: --json
     short: "-j"

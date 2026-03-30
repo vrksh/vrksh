@@ -3,23 +3,21 @@ tagline: percent encoder/decoder - RFC 3986, --encode, --decode, --form
 meta_description: "Percent-encode and decode strings per RFC 3986. Handles URL components and form data correctly."
 og_title: "vrk pct - RFC 3986 percent encoding and decoding"
 description: |
-  Percent-encodes and decodes strings following RFC 3986. Handles the difference between path encoding (spaces become %20) and form encoding (spaces become +) so you don't have to remember which is which. Processes one result per line for batch use.
+  You need to percent-encode a URL parameter. `curl --data-urlencode` encodes the whole value but you just need the encoded string. You reach for Python's urllib.parse.quote and it encodes spaces as `+` in some modes and `%20` in others. The difference between path encoding and form encoding matters, and most tools don't let you choose.
+
+  `vrk pct` percent-encodes and decodes text per RFC 3986. Use `--encode` for path-safe encoding (spaces become `%20`). Add `--form` for HTML form encoding (spaces become `+`). Processes line by line for batch conversion.
 problem: >
-  You build a URL with a query parameter that contains spaces and special characters.
-  You use printf with manual %20 substitution, miss an ampersand, and the API returns
-  a 400. The rules for path encoding vs form encoding differ and you always pick the
-  wrong one.
+  You're building a URL with query parameters in a shell script. A parameter value
+  contains spaces and ampersands. You use Python's quote() but forget the difference
+  between quote() and quote_plus(). Spaces become + instead of %20. The API rejects
+  the request because it expects path encoding, not form encoding.
 before: |
-  QUERY=$(python3 -c "import urllib.parse; print(urllib.parse.quote_plus('$USER_INPUT'))")
-  curl "https://api.example.com/search?q=$QUERY"
-  # quote() for paths, quote_plus() for forms - easy to mix up
-  # breaks if $USER_INPUT contains single quotes
-after: |
-  QUERY=$(echo "$USER_INPUT" | vrk pct --encode --form)
-  curl "https://api.example.com/search?q=$QUERY"
+  python3 -c "from urllib.parse import quote; print(quote('hello world'))"
+  # Pulls in Python runtime for a one-line operation
+after: "echo 'hello world' | vrk pct --encode"
 group: v1
 category: utilities
-example: echo 'hello world' | vrk pct --encode
+example: "echo 'hello world&foo=bar' | vrk pct --encode"
 flags:
   - flag: --encode
     short: ""

@@ -3,23 +3,27 @@ tagline: key-value store - SQLite-backed, namespaces, TTL, atomic counters.
 meta_description: "Persistent key-value store for pipelines. SQLite-backed, with namespaces, TTL, and atomic counters."
 og_title: "vrk kv - SQLite key-value store for shell pipelines"
 description: |
-  A persistent key-value store for pipelines, backed by SQLite. You can store state between runs - cursors, counters, timestamps - with namespaces to keep things isolated and TTL for automatic expiry. Supports atomic increment and decrement for safe concurrent use.
+  Your pipeline needs to remember state between runs - a cursor position, a count of processed items, a last-seen timestamp. You write to a flat file, but concurrent runs corrupt it. You add flock, but that doesn't work on NFS. You reach for Redis, but that's a whole server for one key.
+
+  `vrk kv` is a persistent key-value store backed by SQLite. It stores strings, supports namespaces to isolate different pipelines, TTL for automatic expiry, and atomic increment/decrement for safe concurrent use. The database lives at `~/.vrk.db` (override with `VRK_KV_PATH`). No server. No config. Just set and get.
 problem: >
-  Your pipeline needs to remember state between runs - a cursor, a count, a last-seen
-  timestamp. You write to a flat file, but concurrent runs corrupt it. You add flock,
-  but that does not work on NFS. You reach for Redis, but that is a whole server for
-  one key.
+  Your nightly pipeline processes items from a queue. It needs to track how many
+  items it processed, store the timestamp of the last run, and resume from where
+  it left off if it crashes. You write cursor state to /tmp/last_cursor.txt.
+  A second cron job starts before the first finishes. Both read the same cursor.
+  Both process the same 200 items. Your downstream database has duplicates.
 before: |
   echo "12345" > /tmp/last_cursor.txt
   CURSOR=$(cat /tmp/last_cursor.txt)
   # no atomic increment, no TTL, no namespaces
   # concurrent writes corrupt the file
 after: |
-  vrk kv set cursor "12345" --ttl 1h
+  vrk kv set cursor "12345" --ttl 24h
   vrk kv get cursor
+  vrk kv incr --ns pipeline processed
 group: v1
 category: pipeline
-example: vrk kv set --ns cache mykey "myvalue" --ttl 1h
+example: "vrk kv set --ns nightly-pipeline last_run \"$(vrk epoch --now)\" --ttl 24h"
 flags:
   - flag: --ns
     short: ""

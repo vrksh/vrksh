@@ -3,11 +3,10 @@
 // Design mirrors the vrk.sh hero section:
 //   - Background: #0D0D0D (--color-bg)
 //   - Dot grid: 1px dots on 24px grid, #2A2A2A (--color-dot)
-//   - Text: #E8E8E8 (--color-text), 96pt tool name
-//   - Muted: #707070 (--color-muted), 32pt tagline
-//   - Accent: #6EE7B7 (--color-accent), 48pt command
+//   - Bright text: #F0F0F0, large sizes optimized for Twitter card readability
+//   - Accent: #6EE7B7 (--color-accent), commands in green
 //   - Fonts: Urbanist (headings), IBM Plex Mono (code/brand)
-//   - Layout: left-aligned, large text optimized for social preview readability
+//   - Layout: left-aligned, generous spacing, everything large and readable
 package oggen
 
 import (
@@ -36,17 +35,17 @@ var logoPNG []byte
 const (
 	imgW = 1200
 	imgH = 630
-	pad  = 80.0
+	pad  = 72.0
 )
 
 var (
-	bgCl      = color.RGBA{0x0D, 0x0D, 0x0D, 0xFF} // --color-bg
-	accentCl  = color.RGBA{0x6E, 0xE7, 0xB7, 0xFF} // --color-accent
-	textCl    = color.RGBA{0xE8, 0xE8, 0xE8, 0xFF} // --color-text
-	mutedCl   = color.RGBA{0x70, 0x70, 0x70, 0xFF} // --color-muted
-	dotCl     = color.RGBA{0x2A, 0x2A, 0x2A, 0xFF} // --color-dot
-	pillBgCl  = color.RGBA{0x1C, 0x2F, 0x28, 0xFF} // rgba(110,231,183,0.15) on #0D0D0D
-	pillTxCl  = color.RGBA{0x6E, 0xE7, 0xB7, 0xFF} // accent green text
+	bgCl     = color.RGBA{0x0D, 0x0D, 0x0D, 0xFF}
+	accentCl = color.RGBA{0x6E, 0xE7, 0xB7, 0xFF}
+	textCl   = color.RGBA{0xF0, 0xF0, 0xF0, 0xFF} // brighter than before
+	softCl   = color.RGBA{0xB0, 0xB0, 0xB0, 0xFF} // brighter muted
+	dotCl    = color.RGBA{0x2A, 0x2A, 0x2A, 0xFF}
+	pillBgCl = color.RGBA{0x1C, 0x2F, 0x28, 0xFF}
+	pillTxCl = color.RGBA{0x6E, 0xE7, 0xB7, 0xFF}
 )
 
 func setFont(dc *gg.Context, name string, size float64) error {
@@ -64,14 +63,11 @@ func setFont(dc *gg.Context, name string, size float64) error {
 	return nil
 }
 
-// drawBg fills the canvas with the background color.
 func drawBg(dc *gg.Context) {
 	dc.SetColor(bgCl)
 	dc.Clear()
 }
 
-// drawDotGrid draws a subtle dot grid across the canvas, matching the
-// site's .dot-grid CSS: radial-gradient 1px dots on a 24px grid.
 func drawDotGrid(dc *gg.Context) {
 	dc.SetColor(dotCl)
 	for y := 12.0; y < imgH; y += 24 {
@@ -82,24 +78,13 @@ func drawDotGrid(dc *gg.Context) {
 	}
 }
 
-// drawLetterspaced draws uppercase letterspaced text (no trailing period).
-func drawLetterspaced(dc *gg.Context, text string, x, y, spacing float64) {
-	upper := strings.ToUpper(strings.TrimRight(text, "."))
-	for _, ch := range upper {
-		s := string(ch)
-		dc.DrawString(s, x, y)
-		cw, _ := dc.MeasureString(s)
-		x += cw + spacing
-	}
-}
-
-// drawPill draws a small rounded pill badge with uppercase letterspaced text.
+// drawPill draws a rounded pill badge, 18pt, right-aligned at (x, y center).
 func drawPill(dc *gg.Context, label string, x, y float64) error {
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 14); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 18); err != nil {
 		return err
 	}
 	upper := strings.ToUpper(label)
-	spacing := 3.0
+	spacing := 3.5
 
 	totalW := 0.0
 	for _, ch := range upper {
@@ -108,65 +93,61 @@ func drawPill(dc *gg.Context, label string, x, y float64) error {
 	}
 	totalW -= spacing
 
-	pillW := totalW + 24
-	pillH := 26.0
+	pillW := totalW + 32
+	pillH := 34.0
 	px := x - pillW
 	py := y - pillH/2
 
 	dc.SetColor(pillBgCl)
-	dc.DrawRoundedRectangle(px, py, pillW, pillH, 4)
+	dc.DrawRoundedRectangle(px, py, pillW, pillH, 6)
 	dc.Fill()
 
 	dc.SetColor(pillTxCl)
-	tx := px + 12
+	tx := px + 16
 	for _, ch := range upper {
 		s := string(ch)
-		dc.DrawString(s, tx, y+5)
+		dc.DrawString(s, tx, y+6)
 		cw, _ := dc.MeasureString(s)
 		tx += cw + spacing
 	}
 	return nil
 }
 
-// loadLogo decodes the embedded vrksh tree logo PNG.
 func loadLogo() (image.Image, error) {
 	return png.Decode(bytes.NewReader(logoPNG))
 }
 
-// drawBrandBar draws the top bar: tree logo + "vrk.sh" left, pill badge right.
+// drawBrandBar draws tree logo + "vrk.sh" top-left, optional pill top-right.
 func drawBrandBar(dc *gg.Context, pillLabel string) error {
 	logo, err := loadLogo()
 	if err != nil {
 		return fmt.Errorf("loading logo: %w", err)
 	}
 
-	// Tree logo scaled to 36px, positioned top-left
-	logoSize := 36
+	logoSize := 52
 	logoDc := gg.NewContext(logoSize, logoSize)
 	logoDc.Scale(
 		float64(logoSize)/float64(logo.Bounds().Dx()),
 		float64(logoSize)/float64(logo.Bounds().Dy()),
 	)
 	logoDc.DrawImage(logo, 0, 0)
-	dc.DrawImage(logoDc.Image(), int(pad), 46)
+	dc.DrawImage(logoDc.Image(), int(pad), 34)
 
-	// "vrk.sh" next to logo
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 32); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 40); err != nil {
 		return err
 	}
 	dc.SetColor(textCl)
-	dc.DrawString("vrk.sh", pad+float64(logoSize)+12, 78)
+	dc.DrawString("vrk.sh", pad+float64(logoSize)+16, 78)
 
-	// Pill badge top-right
-	if err := drawPill(dc, pillLabel, float64(imgW)-pad, 68); err != nil {
-		return err
+	if pillLabel != "" {
+		if err := drawPill(dc, pillLabel, float64(imgW)-pad, 62); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-// truncateToFit truncates text to fit within maxW pixels at the current font,
-// appending "..." when truncation is needed.
 func truncateToFit(dc *gg.Context, text string, maxW float64) string {
 	w, _ := dc.MeasureString(text)
 	if w <= maxW {
@@ -182,121 +163,107 @@ func truncateToFit(dc *gg.Context, text string, maxW float64) string {
 	return "..."
 }
 
-// renderCommand draws Variant 1: Command Highlight (per-tool).
-//
-// Layout optimized for readability at social preview sizes (~500px wide):
-//   - Top bar: tree logo + "vrk.sh" left, group pill badge right
-//   - Dot grid background
-//   - "vrk <toolname>" in Urbanist Medium 96pt, white
-//   - "$ command" in IBM Plex Mono 48pt, accent green
-//   - Tagline in Urbanist Regular 32pt, muted
-//   - "vrk.sh" domain bottom-right, 28pt
+// drawSubtext draws "vrk: one binary . small composable tools" centered at bottom.
+func drawSubtext(dc *gg.Context) error {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 26); err != nil {
+		return err
+	}
+	subtext := "vrk:  one binary  \u2022  small composable tools"
+	dc.SetColor(softCl)
+	textW, _ := dc.MeasureString(subtext)
+	x := (float64(imgW) - textW) / 2
+	dc.DrawString(subtext, x, float64(imgH)-30)
+	return nil
+}
+
+// renderCommand draws per-tool OG images (Variant 1).
 func renderCommand(dc *gg.Context, toolName, tagline, command, headline, category string) error {
 	drawBg(dc)
 	drawDotGrid(dc)
 
-	// Brand bar
 	if err := drawBrandBar(dc, category); err != nil {
 		return err
 	}
 
-	// Tool name - Urbanist Medium, 96pt, #E8E8E8
-	if err := setFont(dc, "Urbanist-Medium.ttf", 96); err != nil {
+	// Tool name - 130pt, bright white
+	if err := setFont(dc, "Urbanist-Medium.ttf", 130); err != nil {
 		return err
 	}
 	dc.SetColor(textCl)
-	dc.DrawString("vrk "+toolName, pad, 230)
+	dc.DrawString("vrk "+toolName, pad, 220)
 
-	// Command - IBM Plex Mono, 48pt, accent green (#6EE7B7)
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 48); err != nil {
+	// Command - 44pt, accent green
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 44); err != nil {
 		return err
 	}
 	dc.SetColor(accentCl)
 	maxW := float64(imgW) - 2*pad
 	cmd := truncateToFit(dc, "$ "+command, maxW)
-	dc.DrawString(cmd, pad, 340)
+	dc.DrawString(cmd, pad, 330)
 
-	// Tagline - Urbanist Regular, 38pt, #A0A0A0
-	if err := setFont(dc, "Urbanist-Regular.ttf", 38); err != nil {
+	// Tagline - 36pt, soft gray
+	if err := setFont(dc, "Urbanist-Regular.ttf", 36); err != nil {
 		return err
 	}
-	dc.SetColor(color.RGBA{0xA0, 0xA0, 0xA0, 0xFF})
-	dc.DrawString(tagline, pad, 425)
+	dc.SetColor(softCl)
+	dc.DrawString(tagline, pad, 415)
 
-	// Domain - IBM Plex Mono, 36pt, #A0A0A0, bottom-right
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 36); err != nil {
+	if err := drawSubtext(dc); err != nil {
 		return err
 	}
-	dc.SetColor(color.RGBA{0xA0, 0xA0, 0xA0, 0xFF})
-	w, _ := dc.MeasureString("vrk.sh")
-	dc.DrawString("vrk.sh", float64(imgW)-pad-w, float64(imgH)-40)
 
 	return nil
 }
 
-// renderPipeline draws Variant 2: Pipeline (default/install page).
-// Font sizes scaled proportionally with Variant 1 for social preview readability.
+// renderPipeline draws default/install OG images (Variant 2).
 func renderPipeline(dc *gg.Context, command, subtitle, comment string) error {
 	drawBg(dc)
 	drawDotGrid(dc)
 
-	// Brand bar (no pill for landing pages)
-	logo, err := loadLogo()
-	if err != nil {
-		return fmt.Errorf("loading logo: %w", err)
+	if err := drawBrandBar(dc, ""); err != nil {
+		return err
 	}
-	logoSize := 36
-	logoDc := gg.NewContext(logoSize, logoSize)
-	logoDc.Scale(
-		float64(logoSize)/float64(logo.Bounds().Dx()),
-		float64(logoSize)/float64(logo.Bounds().Dy()),
-	)
-	logoDc.DrawImage(logo, 0, 0)
-	dc.DrawImage(logoDc.Image(), int(pad), 46)
 
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 32); err != nil {
+	// Title - 84pt, two lines, bright white
+	if err := setFont(dc, "Urbanist-Medium.ttf", 84); err != nil {
 		return err
 	}
 	dc.SetColor(textCl)
-	dc.DrawString("vrk.sh", pad+float64(logoSize)+12, 78)
+	dc.DrawString("The missing coreutils", pad, 205)
+	dc.DrawString("for the agent era", pad, 300)
 
-	// Title - Urbanist Medium, 64pt
-	if err := setFont(dc, "Urbanist-Medium.ttf", 64); err != nil {
-		return err
+	// Subtitle - 30pt, soft gray
+	if subtitle != "" {
+		if err := setFont(dc, "Urbanist-Regular.ttf", 30); err != nil {
+			return err
+		}
+		dc.SetColor(softCl)
+		dc.DrawString(subtitle, pad, 335)
 	}
-	dc.SetColor(textCl)
-	dc.DrawString("Unix tools for AI pipelines", pad, 180)
 
-	// Subtitle - Urbanist Regular, 36pt
-	if err := setFont(dc, "Urbanist-Regular.ttf", 36); err != nil {
-		return err
+	// Command - 34pt, accent green
+	cmdY := 390.0
+	if subtitle != "" {
+		cmdY = 400.0
 	}
-	dc.SetColor(textCl)
-	dc.DrawString(subtitle, pad, 240)
-
-	// Command - IBM Plex Mono, 40pt, accent green
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 40); err != nil {
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 34); err != nil {
 		return err
 	}
 	dc.SetColor(accentCl)
 	maxW := float64(imgW) - 2*pad
 	cmd := truncateToFit(dc, "$ "+command, maxW)
-	dc.DrawString(cmd, pad, 340)
+	dc.DrawString(cmd, pad, cmdY)
 
-	// Comment - IBM Plex Mono, 32pt, #A0A0A0
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 32); err != nil {
+	// Comment - 26pt, soft gray
+	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 26); err != nil {
 		return err
 	}
-	dc.SetColor(color.RGBA{0xA0, 0xA0, 0xA0, 0xFF})
-	dc.DrawString("# "+comment, pad, 405)
+	dc.SetColor(softCl)
+	dc.DrawString("# "+comment, pad, cmdY+55)
 
-	// Domain - IBM Plex Mono, 36pt, #A0A0A0, bottom-right
-	if err := setFont(dc, "IBMPlexMono-Regular.ttf", 36); err != nil {
+	if err := drawSubtext(dc); err != nil {
 		return err
 	}
-	dc.SetColor(color.RGBA{0xA0, 0xA0, 0xA0, 0xFF})
-	w, _ := dc.MeasureString("vrk.sh")
-	dc.DrawString("vrk.sh", float64(imgW)-pad-w, float64(imgH)-40)
 
 	return nil
 }
@@ -325,8 +292,8 @@ func RenderDefault(outDir string) error {
 	}
 	dc := gg.NewContext(imgW, imgH)
 	if err := renderPipeline(dc,
-		"vrk grab URL | vrk prompt | vrk kv set summary",
-		"One binary. No dependencies. Composable.",
+		"vrk grab URL | vrk prompt | vrk kv set out",
+		"",
 		"fetch -> summarize -> store",
 	); err != nil {
 		return err
@@ -342,8 +309,8 @@ func RenderInstall(outDir string) error {
 	dc := gg.NewContext(imgW, imgH)
 	if err := renderPipeline(dc,
 		"curl -fsSL vrk.sh/install.sh | sh",
-		"Install vrksh in one command",
-		"one binary, zero dependencies",
+		"",
+		"install vrksh in one command",
 	); err != nil {
 		return err
 	}

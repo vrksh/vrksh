@@ -3,11 +3,14 @@ tagline: retry wrapper - --times, --backoff, --on, --until
 meta_description: "Retry flaky commands with exponential backoff. Wrap any pipeline stage to handle transient API failures."
 og_title: "vrk coax - retry wrapper with backoff for flaky commands"
 description: |
-  Wraps any command with automatic retries and backoff. If the command fails, coax re-runs it - buffering stdin so each attempt gets the same input. You control how many times to retry, how long to wait between attempts, and which exit codes count as retriable.
+  Your LLM call fails at step 3 of a 10-step pipeline. The whole pipeline restarts from zero. You lose 9 API calls of work because one HTTP request hit a rate limit. You add a retry loop with `sleep` in bash, but you hardcode the delay at 2 seconds, forget to cap the retry count, and stdin was consumed on the first attempt so every retry sends empty input.
+
+  `vrk coax` retries flaky commands with configurable backoff. It buffers stdin so each retry gets the same input. You set the retry count, choose fixed or exponential backoff, cap the maximum delay, and optionally restrict retries to specific exit codes. It handles the three things bash retry loops always get wrong: stdin replay, backoff strategy, and retry limits.
 problem: >
-  You call an external API in a script and it fails once out of fifty times. You add
-  a retry loop with sleep, but you hardcode the delay, forget to cap retries, and
-  the stdin is consumed on the first attempt so retries send empty input.
+  You have a nightly pipeline that calls an LLM API 200 times. The API returns 429
+  (rate limited) on roughly 1 in 50 calls. You write a bash retry loop. It works
+  until the API starts returning 500s on a bad deploy, and your retry loop hammers
+  it 200 times with no backoff, making the outage worse.
 before: |
   for i in 1 2 3 4 5; do
     curl -sf https://api.example.com && break
@@ -16,7 +19,7 @@ before: |
 after: "vrk coax --times 5 --backoff exp:200ms -- curl -sf https://api.example.com"
 group: v1
 category: pipeline
-example: vrk coax --times 5 --backoff exp:200ms -- curl -sf https://api.example.com
+example: "echo 'Summarize this' | vrk coax --times 5 --backoff exp:200ms -- vrk prompt"
 flags:
   - flag: --times
     short: ""
