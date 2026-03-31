@@ -2,20 +2,83 @@
   why: Prevents silent truncation - the model never sees a prompt it can only half-fit.
   description: Count tokens before sending to an LLM - abort if too large.
   steps:
-    - cat prompt.txt | vrk tok --check 4000 | vrk prompt --system "Summarise this."
+    - |-
+      cat prompt.txt \
+        | vrk tok --check 4000 \
+        | vrk prompt --system "Summarise this."
   tags:
     - tok
     - prompt
+  detail: |
+    ## The problem
+
+    LLMs have context windows. When your input exceeds the limit, the API either truncates silently or returns an error after you've already waited for the response and spent tokens on the request. In a pipeline, this is worse - downstream steps process garbage output without knowing the input was incomplete.
+
+    This is the most expensive bug in LLM pipelines because it looks like success. The API returns 200, the model responds, but the answer is based on a truncated document.
+
+    ## How the pipeline works
+
+    `vrk tok --check 4000` reads stdin, counts tokens, and makes a decision. If the count is 4000 or under, it passes the text through unchanged to stdout. If over, it exits 1 with empty stdout. The pipe stops. `vrk prompt` never runs.
+
+    No wasted API call. No truncated output. No silent failure.
+
+    ## When it fails
+
+    When the token count exceeds the budget, `vrk tok` exits 1 and the pipeline stops immediately. The exit code propagates - your shell script, CI job, or agent sees a non-zero exit and knows the step failed. You can catch this and handle it (chunk the document, summarize a section, or report the error) instead of processing bad output.
+
+    ## Variations
+
+    Gate before a batch job to skip oversized documents:
+
+    ```bash
+    for f in docs/*.md; do
+      cat "$f" | vrk tok --check 8000 | vrk prompt --system "Extract key points" >> output.jsonl 2>/dev/null
+    done
+    ```
+
+    Use `--json` for structured error reporting:
+
+    ```bash
+    cat prompt.txt | vrk tok --check 4000 --json
+    # Over budget: {"error":"tok: 6201 tokens exceeds budget of 4000","code":1}
+    ```
 
 - name: Fetch and summarise a page
   why: Catches oversized pages before the API call - no wasted request on a doc that won't fit in context.
   description: Grab a URL, check token count, then summarise with an LLM.
   steps:
-    - vrk grab https://example.com | vrk tok --check 8000 | vrk prompt --system "Summarise this page."
+    - |-
+      vrk grab https://example.com \
+        | vrk tok --check 8000 \
+        | vrk prompt --system "Summarise this page."
   tags:
     - grab
     - tok
     - prompt
+  detail: |
+    ## The problem
+
+    You want an LLM to summarise a web page. But web pages are messy - HTML tags, navigation chrome, cookie banners, ads. And you don't know how long the page is until you fetch it. If it's 20,000 tokens, you've wasted an API call that will either truncate or fail.
+
+    ## How the pipeline works
+
+    `vrk grab` fetches the URL and converts it to clean markdown - no HTML tags, no scripts, no navigation. `vrk tok --check 8000` counts the tokens and passes through only if the document fits in your budget. `vrk prompt` sends the cleaned, size-checked text to the LLM.
+
+    Each step can fail independently. URL unreachable? `vrk grab` exits 1. Page too long? `vrk tok` exits 1. API error? `vrk prompt` exits 1. In every case, the pipeline stops at the point of failure.
+
+    ## Variations
+
+    Fetch and extract just the links:
+
+    ```bash
+    vrk grab https://example.com | vrk links --bare
+    ```
+
+    Fetch, strip markdown formatting, then count tokens:
+
+    ```bash
+    vrk grab https://example.com | vrk plain | vrk tok
+    ```
 
 - name: Cache LLM response
   why: Avoids duplicate API calls for identical prompts - the hash keys the cache so reruns are free.
@@ -27,34 +90,155 @@
   tags:
     - prompt
     - kv
+  detail: |
+    ## The problem
+
+    LLM API calls are slow and expensive. If you're running the same prompt against the same document twice - during development, in a retry loop, or in a pipeline that restarts - you're paying for a response you already have.
+
+    ## How the pipeline works
+
+    `vrk prompt --json` returns the LLM response as a JSON envelope that includes a `request_hash` - a deterministic hash of the model, system prompt, and input. You use this hash as the cache key in `vrk kv`. On the next run, check the cache first:
+
+    ```bash
+    HASH=$(cat doc.txt | vrk tok --json | jq -r '.hash // empty')
+    CACHED=$(vrk kv get "cache:$HASH" 2>/dev/null)
+    if [ -n "$CACHED" ]; then
+      echo "$CACHED"
+    else
+      RESULT=$(cat doc.txt | vrk prompt --json)
+      HASH=$(echo "$RESULT" | jq -r '.request_hash')
+      echo "$RESULT" | jq -r '.response' | vrk kv set "cache:$HASH"
+    fi
+    ```
+
+    ## Why this works
+
+    `vrk kv` is a SQLite-backed key-value store that lives on disk. No Redis, no external service. The cache survives process restarts, script reruns, and pipeline failures. It's local and instant - a kv lookup takes microseconds compared to seconds for an API call.
 
 - name: Chunked RAG pipeline
   why: Keeps every chunk within the embedding model's token limit - no silent truncation during indexing.
   description: Split a document into chunks and store each for retrieval.
   steps:
     - DOC_ID=$(vrk uuid)
-    - cat doc.txt | vrk chunk --size 512 --overlap 64 | while read -r chunk; do idx=$(echo "$chunk" | jq -r '.index'); text=$(echo "$chunk" | jq -r '.text'); vrk kv set "doc:${DOC_ID}:chunk:${idx}" "$text"; done
+    - |-
+      cat doc.txt \
+        | vrk chunk --size 512 --overlap 64 \
+        | while read -r chunk; do
+            idx=$(echo "$chunk" | jq -r '.index')
+            text=$(echo "$chunk" | jq -r '.text')
+            vrk kv set "doc:${DOC_ID}:chunk:${idx}" "$text"
+          done
   tags:
     - uuid
     - chunk
     - kv
+  detail: |
+    ## The problem
+
+    RAG pipelines need to split documents into chunks that fit the embedding model's context window. Too large and you get truncation. Too small and you lose context. And every chunk needs a stable ID so you can retrieve it later.
+
+    Most chunking libraries are Python-only and split on character count, not token count. A 500-character chunk might be 80 tokens or 200 tokens depending on the content. Token-aware chunking gives you predictable sizes.
+
+    ## How the pipeline works
+
+    `vrk uuid` generates a unique document ID. `vrk chunk --size 512 --overlap 64` splits the input into JSONL records, each containing at most 512 tokens with a 64-token overlap between adjacent chunks. The overlap preserves context across chunk boundaries.
+
+    Each JSONL record has an `index` and `text` field. The loop reads each record, extracts the fields, and stores the chunk in `vrk kv` with a composite key: `doc:{id}:chunk:{index}`.
+
+    ## The chunk output
+
+    ```json
+    {"index":0,"text":"First section of the document...","tokens":487}
+    {"index":1,"text":"...overlap text. Second section...","tokens":502}
+    {"index":2,"text":"...overlap text. Final section...","tokens":341}
+    ```
+
+    The `--overlap` flag controls how many tokens from the end of one chunk appear at the start of the next. This matters for retrieval quality - without overlap, a query that spans a chunk boundary might miss relevant content.
 
 - name: Retry flaky API call
   why: Transient 500s don't kill the pipeline - coax retries with backoff so one bad request doesn't stop the run.
   description: Wrap an LLM prompt in coax for exponential backoff retries.
   steps:
-    - vrk coax --times 3 --backoff exp:1s --on 1 -- vrk prompt --system "Summarise this" < doc.txt
+    - |-
+      vrk coax --times 3 --backoff exp:1s --on 1 \
+        -- vrk prompt --system "Summarise this" < doc.txt
   tags:
     - coax
     - prompt
+  detail: |
+    ## The problem
+
+    API calls fail. Rate limits, transient 500s, network blips, cold starts. In a pipeline processing hundreds of documents, a single failure shouldn't kill the entire run. But without retry logic, it does - the first 429 or 503 stops everything.
+
+    The usual fix is a retry decorator in Python (tenacity, backoff). But that only works inside Python. If your pipeline is a shell script, a cron job, or an agent calling tools via subprocess, you need retry logic that wraps any command.
+
+    ## How the pipeline works
+
+    `vrk coax` runs the command after `--`. If it exits with code 1 (matching `--on 1`), coax waits and retries. The backoff is exponential starting at 1 second: first retry after 1s, second after 2s, third after 4s.
+
+    If all retries fail, `vrk coax` exits with the last command's exit code. The pipeline stops cleanly.
+
+    ## What --on means
+
+    `--on 1` tells coax to only retry on exit code 1 (runtime errors like API failures). Exit code 2 (usage errors like bad flags) is never retried - there's no point retrying a command that will always fail the same way.
+
+    ## Wrapping a full pipeline
+
+    Retry an entire multi-step pipeline by wrapping it in `sh -c`:
+
+    ```bash
+    vrk coax --times 3 --backoff exp:2s --on 1 -- \
+      sh -c 'cat doc.txt \
+        | vrk tok --check 8000 \
+        | vrk prompt --system "Summarise" \
+        | vrk validate --schema out.json'
+    ```
 
 - name: SSE stream to text
   why: Raw SSE is unusable without parsing - sse extracts the content field so downstream tools get clean text, not protocol framing.
   description: Parse an SSE stream and extract text tokens.
   steps:
-    - curl -sN $API | vrk sse --event content_block_delta --field data.delta.text | tr -d '\n'
+    - |-
+      curl -sN $API \
+        | vrk sse --event content_block_delta \
+            --field data.delta.text \
+        | tr -d '\n'
   tags:
     - sse
+  detail: |
+    ## The problem
+
+    Streaming LLM APIs (Anthropic, OpenAI) return responses as Server-Sent Events. The raw SSE stream looks like this:
+
+    ```
+    event: content_block_delta
+    data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}
+
+    event: content_block_delta
+    data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" world"}}
+    ```
+
+    You can't pipe this directly into another tool. You need to parse the SSE framing, filter by event type, and extract the text field from the JSON data.
+
+    ## How the pipeline works
+
+    `vrk sse` reads the SSE stream from stdin, parses the `event:` and `data:` lines, and emits one JSONL record per event. `--event content_block_delta` filters to only that event type. `--field data.delta.text` extracts the nested text value and prints it directly.
+
+    The `tr -d '\n'` at the end joins the text fragments into a continuous string. Without it, each token would be on its own line.
+
+    ## Variations
+
+    Capture the full stream as JSONL for debugging:
+
+    ```bash
+    curl -sN $API | vrk sse --json > stream.jsonl
+    ```
+
+    Filter for a specific event and count occurrences:
+
+    ```bash
+    curl -sN $API | vrk sse --event content_block_delta --json | wc -l
+    ```
 
 - name: JWT-based key lookup
   why: Ties storage to identity without custom parsing - the JWT carries the key, so the lookup stays stateless and auditable.
@@ -65,45 +249,228 @@
   tags:
     - jwt
     - kv
+  detail: |
+    ## The problem
+
+    Your API receives a JWT. You need to look up user data based on the token's subject claim. The usual approach is to decode the JWT in your application code, extract the claim, and query a database. That's fine inside an application, but in a shell script, a webhook handler, or an agent workflow, you need a different approach.
+
+    ## How the pipeline works
+
+    `vrk jwt --claim sub` decodes the JWT (without verification - this is for reading claims, not authentication) and prints the value of the `sub` claim. That value becomes the key for a `vrk kv get` lookup.
+
+    No JSON parsing. No base64 decoding. No splitting on dots. One command extracts exactly the field you need.
+
+    ## Variations
+
+    Check if the token is expired before using it:
+
+    ```bash
+    if vrk jwt --expired "$TOKEN"; then
+      echo "Token expired" >&2
+      exit 1
+    fi
+    SUB=$(vrk jwt --claim sub "$TOKEN")
+    vrk kv get "user:$SUB"
+    ```
+
+    Decode the full payload for debugging:
+
+    ```bash
+    vrk jwt "$TOKEN"
+    ```
 
 - name: Scrub secrets from LLM output
   why: Catches secrets the model echoes back before they reach storage - one leaked API key in kv is a breach.
   description: Mask any accidentally leaked secrets before storing a result.
   steps:
-    - vrk prompt --system "summarise this" < doc.txt | vrk mask | vrk kv set summary
+    - |-
+      vrk prompt --system "summarise this" < doc.txt \
+        | vrk mask \
+        | vrk kv set summary
   tags:
     - prompt
     - mask
     - kv
+  detail: |
+    ## The problem
+
+    LLMs echo things back. If your input contains an API key, a password, or a bearer token, the model might include it in the response. If that response goes into a key-value store, a log file, or a downstream API, you've leaked a secret.
+
+    This is not hypothetical. Models trained on code regularly reproduce credential patterns. If you feed deployment logs into an LLM for analysis, any secrets in those logs can appear in the output.
+
+    ## How the pipeline works
+
+    The LLM generates a response. `vrk mask` scans it for secrets using pattern matching (bearer tokens, passwords, API keys) and Shannon entropy analysis (high-entropy strings that look like credentials). Anything matched is replaced with `[REDACTED]`. The cleaned output goes into `vrk kv`.
+
+    ## Why mask after, not just before
+
+    You should mask before sending to the LLM too (to avoid sending secrets to an API). But masking after catches a different class of problem: secrets the model generates or reconstructs from context. The LLM might infer a key format and hallucinate a plausible one, or it might reassemble a credential from fragments. Post-LLM masking is the last line of defense before storage.
+
+    The full defensive pipeline masks both sides:
+
+    ```bash
+    cat deploy.log | vrk mask | vrk prompt --system "What errors occurred?" | vrk mask | vrk kv set analysis
+    ```
 
 - name: Batch LLM with rate limiting
   why: Prevents failure at job 847 of 10,000 - throttle paces the pipeline, tok gates each doc before the API call wastes a request.
   description: Process a large document set without hitting API rate limits. Safe to rerun.
   steps:
-    - for f in docs/*.md; do cat "$f" | vrk tok --check 8000 | vrk throttle --rate 60/m | vrk prompt --json | vrk kv set "result:$(basename $f)"; done
+    - |-
+      for f in docs/*.md; do
+        cat "$f" \
+          | vrk tok --check 8000 \
+          | vrk throttle --rate 60/m \
+          | vrk prompt --json \
+          | vrk kv set "result:$(basename $f)"
+      done
   tags:
     - tok
     - throttle
     - prompt
     - kv
+  detail: |
+    ## The problem
+
+    You have 10,000 documents to process with an LLM. Without rate limiting, you'll hit the API's requests-per-minute limit around document 60 and get 429 errors for the rest. Without token gating, oversized documents waste API calls that fail or return truncated results. Without result storage, a crash at document 5,000 means starting over.
+
+    ## How the pipeline works
+
+    The loop processes one document at a time. For each file:
+
+    1. `vrk tok --check 8000` verifies the document fits in the context window. If not, exit 1 - skip this doc.
+    2. `vrk throttle --rate 60/m` enforces a maximum of 60 requests per minute. If you're going too fast, it sleeps until the next slot opens.
+    3. `vrk prompt --json` sends the document to the LLM and returns the response as JSON.
+    4. `vrk kv set` stores the result keyed by filename.
+
+    Because results are stored in `vrk kv`, you can check which documents have already been processed and skip them on rerun. The pipeline is idempotent.
+
+    ## Making it resumable
+
+    Add a cache check at the start of each iteration:
+
+    ```bash
+    for f in docs/*.md; do
+      KEY="result:$(basename $f)"
+      vrk kv get "$KEY" >/dev/null 2>&1 && continue
+      cat "$f" | vrk tok --check 8000 \
+        | vrk throttle --rate 60/m \
+        | vrk prompt --json \
+        | vrk kv set "$KEY"
+    done
+    ```
+
+    If the script crashes at document 5,000, restart it. The first 4,999 documents are already in kv and get skipped in milliseconds.
 
 - name: Validate LLM output before it propagates
   why: Bad structured output exits 1 before reaching downstream systems - you catch schema drift at the source, not in production.
   description: Gate the pipeline on schema correctness. Exit 1 on mismatch stops the next stage from running.
   steps:
-    - cat doc.txt | vrk prompt --system "Extract entities as JSON" --json | vrk validate --schema entities.json | vrk kv set entities
+    - |-
+      cat doc.txt \
+        | vrk prompt --system "Extract entities as JSON" --json \
+        | vrk validate --schema entities.json \
+        | vrk kv set entities
   tags:
     - prompt
     - validate
     - kv
+  detail: |
+    ## The problem
+
+    You asked the LLM for structured JSON. It returned something that looks like JSON but has a missing field, an extra key, or a wrong type. Your downstream code parses it, hits an unexpected null, and fails three steps later with an error that traces back to bad LLM output.
+
+    Schema validation at the source catches this immediately. The pipeline stops at the point of failure, not somewhere downstream where the root cause is hidden.
+
+    ## How the pipeline works
+
+    `vrk prompt` calls the LLM and gets a response. `vrk validate` checks the response against `entities.json` (a JSON Schema file). If it matches, the data passes through. If not, `vrk validate` exits 1 and `vrk kv set` never runs.
+
+    No bad data reaches storage. No downstream code processes an invalid response.
+
+    ## The schema file
+
+    A simple JSON Schema that defines what you expect:
+
+    ```json
+    {
+      "type": "object",
+      "required": ["entities"],
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+    ```
+
+    ## Combining with retries
+
+    LLMs sometimes produce valid JSON that doesn't match your schema. Combine with `vrk coax` to retry:
+
+    ```bash
+    vrk coax --times 3 --backoff exp:1s --on 1 -- \
+      sh -c 'cat doc.txt \
+          | vrk prompt --system "Extract entities as JSON" \
+          | vrk validate --schema entities.json'
+    ```
+
+    If validation fails (exit 1), `vrk coax` retries the entire sub-pipeline up to 3 times with exponential backoff.
 
 - name: Agent-safe pipeline with secret masking
   why: When agents handle user data, mask before any logging or storage - secrets should never reach an LLM or a kv store unredacted.
   description: Full guard pipeline - mask secrets, gate on token budget, prompt, validate output.
   steps:
-    - cat user-input.txt | vrk mask | vrk tok --check 6000 | vrk prompt --system "Summarise" | vrk validate --schema summary.json
+    - |-
+      cat user-input.txt \
+        | vrk mask \
+        | vrk tok --check 6000 \
+        | vrk prompt --system "Summarise" \
+        | vrk validate --schema summary.json
   tags:
     - mask
     - tok
     - prompt
     - validate
+  detail: |
+    ## The problem
+
+    AI agents process user data. That data might contain API keys, passwords, tokens, or PII. If any of that reaches the LLM, it's in the provider's logs. If it reaches your storage unredacted, it's a data breach waiting to happen.
+
+    The safe approach is defense in depth: mask before the LLM sees it, gate on size, validate the output shape, and stop the pipeline if anything is wrong.
+
+    ## How the pipeline works
+
+    This is the full guard pipeline - four tools chained together, each handling one concern:
+
+    1. `vrk mask` - scans the input for secrets (API keys, bearer tokens, passwords, high-entropy strings) and replaces them with `[REDACTED]`. The LLM never sees the raw credentials.
+    2. `vrk tok --check 6000` - counts tokens and passes through only if the input fits. Prevents sending oversized documents that would be truncated.
+    3. `vrk prompt` - sends the cleaned, size-checked input to the LLM.
+    4. `vrk validate --schema summary.json` - checks that the LLM's response matches your expected schema. If not, exit 1.
+
+    If any step fails, the pipeline stops. No partial results, no bad data downstream.
+
+    ## When to use this pattern
+
+    Any time an agent handles data it didn't generate itself. User uploads, webhook payloads, log files, database exports - anything that might contain secrets. The mask-then-prompt pattern should be the default for agent pipelines, not an afterthought.
+
+    ## Adding post-LLM masking
+
+    For maximum safety, mask the output too - LLMs can hallucinate or reconstruct credentials:
+
+    ```bash
+    cat user-input.txt \
+      | vrk mask \
+      | vrk tok --check 6000 \
+      | vrk prompt --system "Summarise" \
+      | vrk mask \
+      | vrk validate --schema summary.json
+    ```

@@ -1,5 +1,6 @@
 ---
 title: "Agent Endpoints"
+meta_title: "Agent Integration - Machine-Readable Endpoints for AI Agents"
 description: "Machine-readable endpoints for AI agents - discovery, skills, and context. CLI and HTTP."
 noindex: false
 ---

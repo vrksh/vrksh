@@ -9,8 +9,8 @@
   --color-border: #2a2a2a;
   --color-text: #d4d4d4;
   --color-muted: #9a9a9a;
-  --color-accent: #5cbfa0;
-  --color-accent-dim: #3d8b6e;
+  --color-accent: #6EE7B7;
+  --color-accent-dim: #3D8B6E;
   --color-dot: #2a2a2a;
 }
 
@@ -21,7 +21,7 @@
   --color-border: #e0e0e0;
   --color-text: #1a1a1a;
   --color-muted: #6b6b6b;
-  --color-accent: #6ee7b7;
+  --color-accent: #059669;
   --color-accent-dim: #a7f3d0;
   --color-dot: #e0e0e0;
 }
@@ -143,6 +143,72 @@ body {
 .prose ul,
 .prose ol {
   margin-bottom: 1.25rem;
+  padding-left: 1.5rem;
+}
+
+.prose ul {
+  list-style-type: disc;
+}
+
+.prose ol {
+  list-style-type: decimal;
+}
+
+.prose li {
+  margin-bottom: 0.375rem;
+  line-height: 1.7;
+  color: #c4c4c4;
+}
+
+[data-theme="light"] .prose li {
+  color: var(--color-text);
+}
+
+/* FAQ / collapsible details */
+.prose details {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  margin-bottom: 0.75rem;
+  background-color: var(--color-surface);
+}
+
+.prose details summary {
+  padding: 0.875rem 1.125rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.prose details summary::-webkit-details-marker {
+  display: none;
+}
+
+.prose details summary::before {
+  content: "+";
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--color-accent);
+  flex-shrink: 0;
+  width: 1rem;
+  text-align: center;
+}
+
+.prose details[open] summary::before {
+  content: "-";
+}
+
+.prose details > :not(summary) {
+  padding: 0 1.125rem 0.875rem 2.875rem;
+}
+
+.prose details p {
+  margin-bottom: 0;
 }
 
 /* Code blocks */
@@ -194,6 +260,7 @@ th {
 a {
   color: var(--color-accent);
   text-decoration: none;
+  cursor: pointer;
 }
 
 a:hover {

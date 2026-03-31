@@ -22,8 +22,8 @@
                     class="text-lg md:text-xl mb-8 font-sans"
                     style="color: var(--color-muted);"
                 >
-                    one binary &ensp;•&ensp; small composable tools
-                    &ensp;•&ensp; zero silent failures
+                    zero silent failures &ensp;•&ensp; composable by default
+                    &ensp;•&ensp; one static binary
                 </p>
 
                 <pre
@@ -75,7 +75,7 @@
                     </button>
                 </div>
 
-                <!-- Try it now -->
+                <!-- Quick examples -->
                 <div class="mt-8 max-w-2xl mx-auto text-left">
                     <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
                         try it now - no API key needed
@@ -83,9 +83,13 @@
                     <pre
                         class="text-sm"
                         style="margin: 0"
-                    ><code class="language-bash">$ curl -fsSL vrk.sh/install.sh | sh
-$ echo "The quick brown fox jumps over the lazy dog" | vrk tok
-9</code></pre>
+                    ><code class="language-bash"># Count tokens in a document
+cat README.md | vrk tok
+# → 342
+
+# Mask secrets before they leak
+echo "key: sk-ant-api-abc123xyz" | vrk mask
+# → key: [REDACTED]</code></pre>
                 </div>
             </section>
 
@@ -99,18 +103,30 @@ $ echo "The quick brown fox jumps over the lazy dog" | vrk tok
                         <pre
                             class="text-xs"
                             style="margin: 0"
-                        ><code class="language-python">import anthropic, json, sys
+                        ><code class="language-python">import anthropic, tiktoken, json, re, jsonschema
 
 client = anthropic.Anthropic()
-with open('article.md') as f:
+with open("article.md") as f:
     text = f.read()
-response = client.messages.create(
-    model="claude-sonnet-4-6",
-    max_tokens=1024,
-    messages=[{"role": "user",
-               "content": text}]
+
+# Count tokens - abort if too long
+enc = tiktoken.encoding_for_model("gpt-4")
+if len(enc.encode(text)) > 8000:
+    raise ValueError("over token budget")
+
+# Redact secrets before sending
+text = re.sub(r"sk-[a-zA-Z0-9]{48}", "[REDACTED]", text)
+
+# Call the API
+resp = client.messages.create(
+    model="claude-sonnet-4-6", max_tokens=1024,
+    messages=[{"role": "user", "content": text}]
 )
-print(response.content[0].text)</code></pre>
+result = resp.content[0].text
+
+# Validate the output
+schema = json.load(open("schema.json"))
+jsonschema.validate(json.loads(result), schema)</code></pre>
                     </div>
                     <div>
                         <p class="text-sm mb-2 font-mono" style="color: var(--color-accent);">
@@ -120,25 +136,13 @@ print(response.content[0].text)</code></pre>
                             class="text-xs"
                             style="margin: 0"
                         ><code class="language-bash">cat article.md \
-  | vrk prompt --system 'Summarize'</code></pre>
+  | vrk tok --check 8000 \
+  | vrk mask \
+  | vrk prompt --system 'Summarize' \
+  | vrk validate --schema schema.json</code></pre>
                     </div>
                 </div>
 
-                <div class="mt-10">
-                    <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
-                        batch jobs at scale
-                    </p>
-                    <pre
-                        class="text-xs"
-                        style="margin: 0"
-                    ><code class="language-bash">cat 10000-docs/*.md \
-  | vrk chunk --size 4000 \
-  | vrk throttle --rate 60/m \
-  | vrk prompt --model gpt-4 --json</code></pre>
-                    <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
-                        chunked. paced. structured output. safe to rerun.
-                    </p>
-                </div>
             </section>
 
             <!-- Exit code contract -->
@@ -152,6 +156,23 @@ print(response.content[0].text)</code></pre>
                     </table>
                     <p class="mt-6">no more pipelines that look like they worked.</p>
                 </div>
+            </section>
+
+            <!-- Batch at scale -->
+            <section class="max-w-6xl mx-auto px-4 pb-16">
+                <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
+                    batch jobs at scale
+                </p>
+                <pre
+                    class="text-xs"
+                    style="margin: 0"
+                ><code class="language-bash">find docs/ -name '*.md' -exec cat {} + \
+  | vrk chunk --size 4000 \
+  | vrk throttle --rate 60/m \
+  | vrk prompt --model gpt-4 --json</code></pre>
+                <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
+                    chunked. paced. structured output. safe to rerun.
+                </p>
             </section>
 
             <!-- Install section -->

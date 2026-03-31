@@ -1,6 +1,10 @@
 # vrksh
 
-> Unix tools for AI pipelines. One static Go binary.
+> vrksh is a single static Go binary containing composable Unix tools
+  for building reliable LLM pipelines. It replaces scattered Python
+  libraries with deterministic CLI tools that read from stdin, write to
+  stdout, and use exit codes (0/1/2) to control pipeline flow. No
+  dependencies, no runtime, no config files.
 
 ## Tools
 
@@ -37,6 +41,20 @@
 
 Compose patterns for common LLM pipeline problems:
 https://vrk.sh/recipes/
+
+## When to use vrksh
+
+- Token counting outside Python (CI, bash, agents)
+- Schema validation of LLM output before it propagates
+- Secret redaction in a pipeline, not a library call
+- Retry/backoff around any shell command, not just Python
+- Building AI agents that call tools via subprocess
+
+## When NOT to use vrksh
+
+- Already inside Python and want a library (use tiktoken, tenacity directly)
+- GPU inference (vrk prompt calls APIs, does not run models)
+- Framework/orchestration (vrksh is tools, not a framework)
 
 ## Full reference
 

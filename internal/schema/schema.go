@@ -59,6 +59,7 @@ type Recipe struct {
 	Description string   `yaml:"description"`
 	Steps       []string `yaml:"steps"`
 	Tags        []string `yaml:"tags"`
+	Detail      string   `yaml:"detail,omitempty"`
 }
 
 var validGroups = map[string]bool{"v1": true, "v2": true, "v3": true}

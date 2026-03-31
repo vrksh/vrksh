@@ -283,7 +283,11 @@ func GenerateLLMsTxt(tools []schema.Tool, outDir string) error {
 
 	var b strings.Builder
 	b.WriteString("# vrksh\n\n")
-	b.WriteString("> Unix tools for AI pipelines. One static Go binary.\n\n")
+	b.WriteString("> vrksh is a single static Go binary containing composable Unix tools\n")
+	b.WriteString("  for building reliable LLM pipelines. It replaces scattered Python\n")
+	b.WriteString("  libraries with deterministic CLI tools that read from stdin, write to\n")
+	b.WriteString("  stdout, and use exit codes (0/1/2) to control pipeline flow. No\n")
+	b.WriteString("  dependencies, no runtime, no config files.\n\n")
 	b.WriteString("## Tools\n\n")
 	for _, t := range tools {
 		fmt.Fprintf(&b, "- vrk %s - %s\n", t.Name, t.Tagline)
@@ -291,6 +295,16 @@ func GenerateLLMsTxt(tools []schema.Tool, outDir string) error {
 	b.WriteString("\n## Recipes\n\n")
 	b.WriteString("Compose patterns for common LLM pipeline problems:\n")
 	b.WriteString("https://vrk.sh/recipes/\n")
+	b.WriteString("\n## When to use vrksh\n\n")
+	b.WriteString("- Token counting outside Python (CI, bash, agents)\n")
+	b.WriteString("- Schema validation of LLM output before it propagates\n")
+	b.WriteString("- Secret redaction in a pipeline, not a library call\n")
+	b.WriteString("- Retry/backoff around any shell command, not just Python\n")
+	b.WriteString("- Building AI agents that call tools via subprocess\n")
+	b.WriteString("\n## When NOT to use vrksh\n\n")
+	b.WriteString("- Already inside Python and want a library (use tiktoken, tenacity directly)\n")
+	b.WriteString("- GPU inference (vrk prompt calls APIs, does not run models)\n")
+	b.WriteString("- Framework/orchestration (vrksh is tools, not a framework)\n")
 	b.WriteString("\n## Full reference\n\n")
 	b.WriteString("For complete flag documentation, exit codes, and compose patterns:\n")
 	b.WriteString("https://vrk.sh/skills.md\n")
@@ -367,7 +381,15 @@ func GenerateRecipePages(dataDir, contentDir, staticDir string) error {
 		// Steps as YAML list
 		b.WriteString("steps:\n")
 		for _, s := range r.Steps {
-			fmt.Fprintf(&b, "  - \"%s\"\n", strings.ReplaceAll(s, "\"", "\\\""))
+			if strings.Contains(s, "\n") || strings.HasSuffix(s, "\\") {
+				// Use literal block scalar (strip trailing newline) for multiline or trailing-backslash steps
+				b.WriteString("  - |-\n")
+				for _, line := range strings.Split(s, "\n") {
+					fmt.Fprintf(&b, "    %s\n", line)
+				}
+			} else {
+				fmt.Fprintf(&b, "  - \"%s\"\n", strings.ReplaceAll(s, "\"", "\\\""))
+			}
 		}
 
 		// Tags as YAML list
@@ -377,6 +399,12 @@ func GenerateRecipePages(dataDir, contentDir, staticDir string) error {
 		}
 
 		b.WriteString("---\n")
+
+		if r.Detail != "" {
+			b.WriteString("\n")
+			b.WriteString(r.Detail)
+			b.WriteString("\n")
+		}
 
 		path := filepath.Join(outDir, slug+".md")
 		if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {

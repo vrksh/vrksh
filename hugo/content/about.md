@@ -1,5 +1,6 @@
 ---
 title: "About"
+meta_title: "About vrksh - Unix CLI Tools for AI Pipelines"
 description: "What vrk is, why it exists, and how the binary works."
 noindex: false
 ---
@@ -54,6 +55,21 @@ wraps any shell command, any language, any binary.
 on schema mismatch stops the next command from running. You do not write
 error-handling code around it. The Unix pipeline handles it.
 
+## When to use vrksh
+
+- You need token counting outside a Python process - in CI, bash scripts, or agents
+- You need to validate LLM output against a JSON schema before it propagates downstream
+- You need secret redaction in a pipeline, not as a library call inside one program
+- You want retry and backoff logic around any shell command, not just Python functions
+- You're building an AI agent that calls tools via subprocess
+- You want one install, zero dependencies, and the same interface on every platform
+
+## When NOT to use vrksh
+
+- You're already inside a Python process and want a library. Use tiktoken, tenacity, jsonschema directly. vrk is for callers outside your process.
+- You need GPU-accelerated inference. vrk prompt calls APIs - it does not run models locally.
+- You want a framework that manages state and orchestrates steps. vrksh is tools, not a framework. It handles one step; your pipeline handles the sequence.
+
 ## How the binary works
 
 One binary, 26 tools. vrk uses multicall dispatch - the first argument selects which tool runs:
@@ -107,3 +123,35 @@ vrk completions fish > ~/.config/fish/completions/vrk.fish
 ```
 
 After sourcing, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags. The completions are generated from the binary itself, so they always match the version you have installed.
+
+## FAQ
+
+<details>
+<summary>Why not just write a Python script?</summary>
+
+You can. But your Python script only works inside Python. It needs a virtualenv, a runtime, and an import. vrk works from bash, from Go, from a cron job, from an AI agent, from a CI step. The process boundary means any caller gets the same interface - no SDK, no client library, no language-specific wrapper.
+</details>
+
+<details>
+<summary>Why not jq + curl + shell functions?</summary>
+
+jq is great for JSON reshaping. curl is great for HTTP. But neither counts tokens, validates against a JSON schema, redacts secrets by entropy, or retries with exponential backoff. vrk fills the gaps that come up specifically when building LLM pipelines. And every vrk tool uses the same exit code contract (0/1/2), so pipeline error handling is consistent across all 26 tools.
+</details>
+
+<details>
+<summary>Does this work with local models (Ollama, vLLM)?</summary>
+
+Yes. `vrk prompt --endpoint http://localhost:11434/v1` works with any OpenAI-compatible API. Ollama, vLLM, LiteLLM, and LocalAI all work out of the box.
+</details>
+
+<details>
+<summary>Why 26 tools? Isn't that scope creep?</summary>
+
+Every tool solves a problem that comes up repeatedly when working with LLMs. The utility tools (uuid, epoch, slug, recase) are things agents need constantly - generating run IDs, converting timestamps, normalizing names. They're free because they ship in the same binary. You don't install what you don't use; you just don't call it.
+</details>
+
+<details>
+<summary>Does vrk work offline?</summary>
+
+Every tool except `vrk prompt` and `vrk grab` works fully offline with no network access. Token counting, secret masking, schema validation, encoding, hashing - all local, all instant.
+</details>
