@@ -34,6 +34,7 @@ brews:
       owner: vrksh
       name: homebrew-vrksh
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
     homepage: "https://vrk.sh"
     description: "Unix tools for building reliable AI pipelines"
     license: "MIT"
