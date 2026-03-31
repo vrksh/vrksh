@@ -33,6 +33,11 @@
 - vrk uuid - UUID generator - v4/v7, --count, --json
 - vrk validate - JSONL schema validator - --schema, --strict, --fix, --json
 
+## Recipes
+
+Compose patterns for common LLM pipeline problems:
+https://vrk.sh/recipes/
+
 ## Full reference
 
 For complete flag documentation, exit codes, and compose patterns:

@@ -43,10 +43,10 @@
                         class="text-base md:text-lg font-mono"
                         style="color: var(--color-accent);"
                     >
-                        brew install vrk
+                        curl -fsSL vrk.sh/install.sh | sh
                     </code>
                     <button
-                        class="ml-3 inline-flex items-center brew-copy-btn"
+                        class="ml-3 inline-flex items-center install-copy-btn"
                         style="color: var(--color-muted)"
                         aria-label="Copy install command"
                     >
@@ -77,7 +77,7 @@
 
                 <!-- Try it now -->
                 <div class="mt-8 max-w-2xl mx-auto text-left">
-                    <p class="text-xs mb-2 font-mono" style="color: var(--color-muted);">
+                    <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
                         try it now - no API key needed
                     </p>
                     <pre
@@ -93,7 +93,7 @@ $ echo "The quick brown fox jumps over the lazy dog" | vrk tok
             <section class="max-w-6xl mx-auto px-4 pb-16">
                 <div class="grid md:grid-cols-2 gap-8">
                     <div>
-                        <p class="text-xs mb-2 font-mono" style="color: var(--color-muted);">
+                        <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
                             before
                         </p>
                         <pre
@@ -113,7 +113,7 @@ response = client.messages.create(
 print(response.content[0].text)</code></pre>
                     </div>
                     <div>
-                        <p class="text-xs mb-2 font-mono" style="color: var(--color-accent);">
+                        <p class="text-sm mb-2 font-mono" style="color: var(--color-accent);">
                             after
                         </p>
                         <pre
@@ -125,7 +125,7 @@ print(response.content[0].text)</code></pre>
                 </div>
 
                 <div class="mt-10">
-                    <p class="text-xs mb-2 font-mono" style="color: var(--color-muted);">
+                    <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
                         batch jobs at scale
                     </p>
                     <pre
@@ -135,7 +135,7 @@ print(response.content[0].text)</code></pre>
   | vrk chunk --size 4000 \
   | vrk throttle --rate 60/m \
   | vrk prompt --model gpt-4 --json</code></pre>
-                    <p class="text-xs mt-2 font-mono" style="color: var(--color-muted);">
+                    <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
                         chunked. paced. structured output. safe to rerun.
                     </p>
                 </div>
@@ -185,7 +185,8 @@ print(response.content[0].text)</code></pre>
 
                 <!-- Tab panels -->
                 <div class="install-panel active" data-panel="homebrew">
-                    <pre><code>brew install vrk</code></pre>
+                    <pre><code>brew tap vrksh/homebrew-vrksh
+brew install vrk</code></pre>
                 </div>
                 <div class="install-panel" data-panel="go">
                     <pre><code>go install github.com/vrksh/vrksh@latest</code></pre>
@@ -199,10 +200,10 @@ print(response.content[0].text)</code></pre>
                     (function () {
                         var copyIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
                         var checkIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-                        var btn = document.querySelector(".brew-copy-btn");
+                        var btn = document.querySelector(".install-copy-btn");
                         if (btn) {
                             btn.addEventListener("click", function () {
-                                navigator.clipboard.writeText("brew install vrk").then(function () {
+                                navigator.clipboard.writeText("curl -fsSL vrk.sh/install.sh | sh").then(function () {
                                     btn.innerHTML = checkIcon;
                                     setTimeout(function () { btn.innerHTML = copyIcon; }, 1500);
                                 });

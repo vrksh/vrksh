@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body style="background-color: var(--color-bg); color: var(--color-text);">
+  {{ partial "nav.html" . }}
+
+  <main class="max-w-6xl mx-auto px-4 py-12">
+    <h1 class="text-3xl font-bold mb-8">{{ .Title }}</h1>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {{ range .Pages }}
+      <a href="{{ .RelPermalink }}" class="block rounded-lg p-5 transition-colors" style="background-color: var(--color-surface); border: 1px solid var(--color-border); text-decoration: none;">
+        <h2 class="text-base font-semibold mb-2" style="color: var(--color-text);">{{ .Title }}</h2>
+        <p class="text-sm mb-3" style="color: var(--color-muted);">{{ .Params.why }}</p>
+        <div class="flex flex-wrap gap-2">
+          {{ range .Params.tags }}
+          <span class="text-sm px-2 py-0.5 rounded badge-tool">{{ . }}</span>
+          {{ end }}
+        </div>
+      </a>
+      {{ end }}
+    </div>
+  </main>
+
+  {{ partial "footer.html" . }}
+</body>
+</html>

@@ -11,10 +11,9 @@ One static binary. No runtime. No dependencies. Pick the method that fits your s
 The fastest path if you already have Homebrew:
 
 ```bash
-brew install vrksh/homebrew-vrksh/vrk
+brew tap vrksh/homebrew-vrksh
+brew install vrk
 ```
-
-The tap is [vrksh/homebrew-vrksh](https://github.com/vrksh/homebrew-vrksh). `brew upgrade` handles updates automatically.
 
 ## go install
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/vrksh/vrksh/internal/schema"
+	"gopkg.in/yaml.v3"
 )
 
 // GenerateToolDocs writes one Hugo markdown file per tool into outDir.
@@ -31,6 +32,12 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 			desc = t.MetaDescription
 		}
 		fmt.Fprintf(&b, "description: \"%s\"\n", desc)
+		if t.MetaTitle != "" {
+			fmt.Fprintf(&b, "meta_title: \"%s\"\n", t.MetaTitle)
+		}
+		if t.MetaLead != "" {
+			fmt.Fprintf(&b, "meta_lead: \"%s\"\n", t.MetaLead)
+		}
 		if t.OGTitle != "" {
 			fmt.Fprintf(&b, "og_title: \"%s\"\n", t.OGTitle)
 		}
@@ -43,7 +50,13 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 		// Generated marker
 		b.WriteString("<!-- generated - do not edit below this line -->\n\n")
 
-		// About section (first - what this tool does)
+		// Lead sentence (visible keyword paragraph before About)
+		if t.MetaLead != "" {
+			b.WriteString(t.MetaLead)
+			b.WriteString("\n\n")
+		}
+
+		// About section
 		if t.Description != "" {
 			b.WriteString("## About\n\n")
 			b.WriteString(strings.TrimRight(t.Description, "\n"))
@@ -275,6 +288,9 @@ func GenerateLLMsTxt(tools []schema.Tool, outDir string) error {
 	for _, t := range tools {
 		fmt.Fprintf(&b, "- vrk %s - %s\n", t.Name, t.Tagline)
 	}
+	b.WriteString("\n## Recipes\n\n")
+	b.WriteString("Compose patterns for common LLM pipeline problems:\n")
+	b.WriteString("https://vrk.sh/recipes/\n")
 	b.WriteString("\n## Full reference\n\n")
 	b.WriteString("For complete flag documentation, exit codes, and compose patterns:\n")
 	b.WriteString("https://vrk.sh/skills.md\n")
@@ -308,6 +324,106 @@ func GenerateToolData(tools []schema.Tool, outDir string) error {
 	}
 
 	return nil
+}
+
+// GenerateRecipePages reads recipes.yaml from dataDir, writes one Hugo markdown
+// file per recipe into contentDir/recipes/, and copies recipes.yaml to staticDir.
+func GenerateRecipePages(dataDir, contentDir, staticDir string) error {
+	// Read recipes.yaml
+	data, err := os.ReadFile(filepath.Join(dataDir, "recipes.yaml"))
+	if err != nil {
+		return fmt.Errorf("reading recipes.yaml: %w", err)
+	}
+
+	var recipes []schema.Recipe
+	if err := yaml.Unmarshal(data, &recipes); err != nil {
+		return fmt.Errorf("parsing recipes.yaml: %w", err)
+	}
+
+	// Write recipe content files
+	outDir := filepath.Join(contentDir, "recipes")
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return err
+	}
+
+	for _, r := range recipes {
+		slug := slugify(r.Name)
+
+		// Construct meta_title
+		metaTitle := r.Name + " - vrk pipeline recipe"
+
+		// Construct description (truncated why + description for SERP/OG)
+		metaDesc := truncateWords(r.Why+" "+r.Description, 150)
+
+		var b strings.Builder
+		b.WriteString("---\n")
+		fmt.Fprintf(&b, "title: \"%s\"\n", r.Name)
+		fmt.Fprintf(&b, "meta_title: \"%s\"\n", metaTitle)
+		fmt.Fprintf(&b, "description: \"%s\"\n", strings.ReplaceAll(metaDesc, "\"", "\\\""))
+		fmt.Fprintf(&b, "why: \"%s\"\n", strings.ReplaceAll(r.Why, "\"", "\\\""))
+		fmt.Fprintf(&b, "body: \"%s\"\n", strings.ReplaceAll(r.Description, "\"", "\\\""))
+		fmt.Fprintf(&b, "slug: \"%s\"\n", slug)
+
+		// Steps as YAML list
+		b.WriteString("steps:\n")
+		for _, s := range r.Steps {
+			fmt.Fprintf(&b, "  - \"%s\"\n", strings.ReplaceAll(s, "\"", "\\\""))
+		}
+
+		// Tags as YAML list
+		b.WriteString("tags:\n")
+		for _, t := range r.Tags {
+			fmt.Fprintf(&b, "  - \"%s\"\n", t)
+		}
+
+		b.WriteString("---\n")
+
+		path := filepath.Join(outDir, slug+".md")
+		if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {
+			return fmt.Errorf("writing %s: %w", path, err)
+		}
+	}
+
+	// Copy recipes.yaml to static dir
+	if err := os.MkdirAll(staticDir, 0755); err != nil {
+		return err
+	}
+	staticPath := filepath.Join(staticDir, "recipes.yaml")
+	return os.WriteFile(staticPath, data, 0644)
+}
+
+// slugify converts a recipe name to a URL slug.
+// "Token-checked LLM call" -> "token-checked-llm-call"
+func slugify(name string) string {
+	s := strings.ToLower(name)
+	// Replace spaces with hyphens
+	s = strings.ReplaceAll(s, " ", "-")
+	// Strip characters that aren't alphanumeric or hyphens
+	var out strings.Builder
+	for _, c := range s {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' {
+			out.WriteRune(c)
+		}
+	}
+	// Collapse multiple hyphens
+	result := out.String()
+	for strings.Contains(result, "--") {
+		result = strings.ReplaceAll(result, "--", "-")
+	}
+	return strings.Trim(result, "-")
+}
+
+// truncateWords truncates s to maxLen characters on a word boundary.
+func truncateWords(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	// Find the last space before maxLen
+	cut := strings.LastIndex(s[:maxLen], " ")
+	if cut <= 0 {
+		cut = maxLen
+	}
+	return s[:cut] + " ..."
 }
 
 // manifestEntry is one tool in the manifest.

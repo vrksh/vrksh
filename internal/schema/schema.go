@@ -16,6 +16,8 @@ type Tool struct {
 	Name            string     `yaml:"name"`
 	Tagline         string     `yaml:"tagline"`
 	MetaDescription string     `yaml:"meta_description"`
+	MetaTitle       string     `yaml:"meta_title"`
+	MetaLead        string     `yaml:"meta_lead"`
 	OGTitle         string     `yaml:"og_title"`
 	Description     string     `yaml:"description"`
 	Problem         string     `yaml:"problem"`
@@ -48,6 +50,15 @@ type ExitCode struct {
 type OGImage struct {
 	Headline string `yaml:"headline"`
 	Code     string `yaml:"code"`
+}
+
+// Recipe is a compose pattern from recipes.yaml.
+type Recipe struct {
+	Name        string   `yaml:"name"`
+	Why         string   `yaml:"why"`
+	Description string   `yaml:"description"`
+	Steps       []string `yaml:"steps"`
+	Tags        []string `yaml:"tags"`
 }
 
 var validGroups = map[string]bool{"v1": true, "v2": true, "v3": true}

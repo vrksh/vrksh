@@ -1,6 +1,8 @@
 ---
 title: "vrk tok"
-description: "Count tokens. Gate pipelines before they fail."
+description: "vrk tok counts tokens from stdin and gates pipelines before they fail. Pass --check N to stop the pipeline if input exceeds your context budget. No Python runtime needed."
+meta_title: "vrk tok - Token Counter CLI for LLM Pipelines"
+meta_lead: "vrk tok is a command-line token counter for LLM pipelines."
 tool: tok
 group: v1
 mcp_callable: true
@@ -8,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk tok is a command-line token counter for LLM pipelines.
 
 ## About
 

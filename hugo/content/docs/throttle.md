@@ -1,6 +1,8 @@
 ---
 title: "vrk throttle"
-description: "Pace LLM batch jobs to respect rate limits. No more failures on job 847 of 10,000."
+description: "vrk throttle paces LLM batch jobs to stay within API rate limits. Pipe any stream through it - no more failures at job 847 of 10,000. One flag: --rate N/s or N/m."
+meta_title: "vrk throttle - Rate Limiter for LLM API Batch Jobs"
+meta_lead: "vrk throttle is a rate limiter for LLM API batch jobs - pace your pipeline to stay within API limits."
 og_title: "vrk throttle - rate-limit-aware pacing for LLM batch jobs"
 tool: throttle
 group: v1
@@ -9,6 +11,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk throttle is a rate limiter for LLM API batch jobs - pace your pipeline to stay within API limits.
 
 ## About
 

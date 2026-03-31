@@ -4,7 +4,7 @@ description: "What vrk is, why it exists, and how the binary works."
 noindex: false
 ---
 
-## Why this exists
+## Why vrksh exists
 
 You're working with LLMs. Maybe you're building pipelines in Python. Maybe your agent needs to call tools. Maybe you're debugging a prompt from the terminal at 11 PM. Wherever you are, the same problems keep showing up: How many tokens is this document? Did the model's JSON actually match the schema? Is there a secret in this log I'm about to send to an API?
 
@@ -14,9 +14,9 @@ vrk puts all of it in one place. 26 tools for the things that come up constantly
 
 ## The name
 
-vrksh (वृक्ष) is the Sanskrit word for tree. The command is `vrk`. The project is `vrksh`. The domain is `vrk.sh`.
+vrksh (वृक्ष) is the Sanskrit word for tree. The project is **vrksh**. The command is `vrk`. Use the full name when referring to the project; use the command name in code.
 
-Pronounced "vruk" - rhymes with truck.
+vrk is pronounced "vruk" and rhymes with truck.
 
 ## The contract
 
@@ -36,6 +36,23 @@ exit 2  ->  usage error (bad flags, missing input)
 This is what makes the tools composable. You don't parse stderr to check if something failed - you check the exit code. You don't guess the output format - stdout is always the data.
 
 It also means every caller gets the same interface. A developer typing in a terminal, a Python subprocess call, an agent executing a tool, a CI step in a GitHub Action - they all interact with vrk the same way. Exit 0 means continue. Exit 1 means stop. Exit 2 means the command was wrong. No SDK, no client library, no language-specific wrapper. The process boundary is the API.
+
+## What vrksh is not
+
+vrksh is not a Python library. It has no import, no runtime, no dependency
+on a virtualenv. This is the design - it means vrk works identically from a
+Python subprocess, a bash script, a Go program, an AI agent, a CI step, or
+a terminal at 2 AM on a production box.
+
+`vrk tok` is not tiktoken. tiktoken counts tokens inside a Python process.
+`vrk tok` is a shell command - any program that can run a subprocess can use it.
+
+`vrk coax` is not tenacity or backoff. Those are Python decorators. `vrk coax`
+wraps any shell command, any language, any binary.
+
+`vrk validate` is not jsonschema the library. It is a pipeline gate - exit 1
+on schema mismatch stops the next command from running. You do not write
+error-handling code around it. The Unix pipeline handles it.
 
 ## How the binary works
 

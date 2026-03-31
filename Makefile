@@ -64,12 +64,12 @@ smoke: build
 
 # Generate Hugo content, OG images, and build site.
 generate: generate-og
-	go run ./internal/docgen/cmd
+	go run ./internal/docgen/main
 	hugo --minify --source hugo
 
 # Generate OG images only. Runs before hugo in test-site.
 generate-og:
-	go run ./internal/oggen/cmd
+	go run ./internal/oggen/main
 
 # Validate all schema YAMLs and check skills.md token budget.
 validate-schemas:

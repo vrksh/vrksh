@@ -1,6 +1,8 @@
 ---
 title: "vrk validate"
-description: "Validate LLM JSON output against a schema. Exit 1 on mismatch. Pipeline stops before bad data propagates."
+description: "vrk validate checks LLM JSON output against a schema and exits 1 on mismatch. The pipeline stops before bad data reaches downstream systems. No error-handling code required."
+meta_title: "vrk validate - JSON Schema Validator for Pipelines"
+meta_lead: "vrk validate is a JSON schema validator for shell pipelines - exit 1 on mismatch stops the pipeline before bad data propagates."
 og_title: "vrk validate - schema validation for LLM JSON output"
 tool: validate
 group: v1
@@ -9,6 +11,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk validate is a JSON schema validator for shell pipelines - exit 1 on mismatch stops the pipeline before bad data propagates.
 
 ## About
 

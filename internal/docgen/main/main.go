@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/vrksh/vrksh/internal/docgen"
 	"github.com/vrksh/vrksh/internal/schema"
@@ -59,6 +60,15 @@ func main() {
 
 	if err := docgen.UpdateManifest(tools, *manifest); err != nil {
 		fmt.Fprintf(os.Stderr, "error: updating manifest: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Generate recipe pages from data/recipes.yaml
+	// Content dir is hugo/content (parent of --content which is hugo/content/docs)
+	hugoContentRoot := filepath.Dir(*hugoContent)
+	hugoDataRoot := filepath.Dir(*hugoData)
+	if err := docgen.GenerateRecipePages(hugoDataRoot, hugoContentRoot, *hugoStatic); err != nil {
+		fmt.Fprintf(os.Stderr, "error: generating recipe pages: %v\n", err)
 		os.Exit(1)
 	}
 

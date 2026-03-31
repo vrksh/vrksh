@@ -7,9 +7,9 @@
   --color-bg: #0D0D0D;
   --color-surface: #161616;
   --color-border: #2A2A2A;
-  --color-text: #E8E8E8;
-  --color-muted: #707070;
-  --color-accent: #6EE7B7;
+  --color-text: #D4D4D4;
+  --color-muted: #9A9A9A;
+  --color-accent: #5CBFA0;
   --color-accent-dim: #3D8B6E;
   --color-dot: #2A2A2A;
 }
@@ -111,6 +111,11 @@ body {
 .prose p {
   margin-bottom: 1.25rem;
   line-height: 1.8;
+  color: #C4C4C4;
+}
+
+[data-theme="light"] .prose p {
+  color: var(--color-text);
 }
 
 .prose table {
@@ -218,17 +223,19 @@ h1, h2, h3, h4, h5, h6 {
   text-transform: uppercase; /* toggle: remove this line for lowercase */
 }
 
-.badge-core { background-color: rgba(45, 212, 191, 0.15); color: #2DD4BF; }
-.badge-pipeline { background-color: rgba(192, 132, 252, 0.15); color: #C084FC; }
-.badge-utilities { background-color: rgba(251, 191, 36, 0.15); color: #FBBF24; }
-.badge-meta { background-color: rgba(168, 162, 158, 0.15); color: #A8A29E; }
-.badge-mcp { background-color: rgba(192, 132, 252, 0.15); color: #C084FC; }
+.badge-core { background-color: rgba(45, 212, 191, 0.25); color: #5EEAD4; }
+.badge-pipeline { background-color: rgba(192, 132, 252, 0.25); color: #D4AAFF; }
+.badge-utilities { background-color: rgba(251, 191, 36, 0.25); color: #FCD34D; }
+.badge-meta { background-color: rgba(168, 162, 158, 0.25); color: #C4C0BC; }
+.badge-mcp { background-color: rgba(192, 132, 252, 0.25); color: #D4AAFF; }
+.badge-tool { background-color: rgba(96, 165, 250, 0.25); color: #93C5FD; text-transform: lowercase; }
 
 [data-theme="light"] .badge-core { background-color: rgba(13, 148, 136, 0.1); color: #0D9488; }
 [data-theme="light"] .badge-pipeline { background-color: rgba(147, 51, 234, 0.1); color: #7C3AED; }
 [data-theme="light"] .badge-utilities { background-color: rgba(217, 119, 6, 0.1); color: #D97706; }
 [data-theme="light"] .badge-meta { background-color: rgba(87, 83, 78, 0.1); color: #57534E; }
 [data-theme="light"] .badge-mcp { background-color: rgba(147, 51, 234, 0.1); color: #7C3AED; }
+[data-theme="light"] .badge-tool { background-color: rgba(37, 99, 235, 0.1); color: #2563EB; }
 
 /* Anchor bar active state */
 .anchor-link.active {

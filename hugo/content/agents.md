@@ -4,6 +4,21 @@ description: "Machine-readable endpoints for AI agents - discovery, skills, and 
 noindex: false
 ---
 
+## Why give vrk to an agent
+
+Most agents have no way to count tokens, validate output, or pace API calls.
+They either approximate this in the system prompt ("keep responses under 4000 tokens")
+or skip it entirely. vrk gives agents real tools - the same ones a developer
+uses from the terminal - accessible via shell.
+
+Drop `vrk --skills` into your agent's context and it knows what every tool does
+without you explaining it. The contract is stable: stdin in, stdout out, exit 0
+means continue, exit 1 means stop. An agent that can run a subprocess can use
+any vrk tool without an SDK, without a client library, without language-specific
+wrappers.
+
+The process boundary is the API.
+
 ## Give your agent vrk
 
 Your agent needs to know three things: what tools exist, what each tool does, and how to compose them. vrk exposes this as machine-readable endpoints - both as CLI commands (for agents with shell access) and as HTTP URLs (for agents that can fetch). No HTML parsing, no scraping, no guessing.
@@ -18,6 +33,9 @@ Your agent needs to know three things: what tools exist, what each tool does, an
 | [`/agents.md`](/agents.md)         | Markdown   | Agent orientation, anti-patterns, MCP config                   | -                  |
 | [`/llms.txt`](/llms.txt)           | Plain text | LLM discovery convention, categorized tool index               | -                  |
 | [`/recipes.yaml`](/recipes.yaml)   | YAML       | Compose patterns as structured data                            | -                  |
+| [`/recipes/`](/recipes/)           | HTML       | Human and agent-readable pipeline patterns                     | -                  |
+
+For common pipeline compositions, see [vrk.sh/recipes](https://vrk.sh/recipes/) - each recipe includes the problem it solves and the tools involved.
 
 **If your agent has shell access, use the CLI.** It works offline, costs zero tokens to fetch, and always matches the installed version. The HTTP endpoints exist for agents that can only make web requests.
 

@@ -1,5 +1,6 @@
 name: tok
 tagline: Count tokens. Gate pipelines before they fail.
+meta_description: "vrk tok counts tokens from stdin and gates pipelines before they fail. Pass --check N to stop the pipeline if input exceeds your context budget. No Python runtime needed."
 description: |
   You send a 15,000-token document to a model with a 4,096-token context window. No error. The response looks plausible. Three days later a QA reviewer finds an inconsistency - the model only saw the first third of your input. Silent truncation is the most expensive bug in LLM pipelines because it looks like success.
 
@@ -41,6 +42,8 @@ exit_codes:
     meaning: --check over limit; I/O error; tokenizer error
   - code: 2
     meaning: Usage error - unknown flag, no stdin, --check without value
+meta_title: "vrk tok - Token Counter CLI for LLM Pipelines"
+meta_lead: "vrk tok is a command-line token counter for LLM pipelines."
 og_image:
   headline: "Silent truncation looks like success. vrk tok fails loudly."
   code: "cat prompt.txt | vrk tok"

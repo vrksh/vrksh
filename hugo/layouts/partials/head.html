@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ if .IsHome }}vrksh - the missing coreutils for the agent era{{ else }}{{ .Title }} - vrksh{{ end }}</title>
+<title>{{ if .IsHome }}vrksh - the missing coreutils for the agent era{{ else }}{{ with .Params.meta_title }}{{ . }} | vrksh{{ else }}{{ .Title }} - vrksh{{ end }}{{ end }}</title>
 <meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
 
 <!-- Google Fonts -->

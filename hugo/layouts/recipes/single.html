@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body style="background-color: var(--color-bg); color: var(--color-text);">
+  {{ partial "nav.html" . }}
+
+  <main class="max-w-6xl mx-auto px-4 py-12">
+    <article class="max-w-4xl">
+      <h1 class="text-3xl font-bold mb-4">{{ .Title }}</h1>
+
+      <p class="text-lg mb-6" style="color: var(--color-text); font-weight: 500;">{{ .Params.why }}</p>
+
+      <p class="mb-6" style="color: var(--color-muted);">{{ .Params.body }}</p>
+
+      <h2 class="text-xl font-bold mb-3">Pipeline</h2>
+      <pre class="rounded-lg p-4 mb-6" style="background-color: var(--color-surface); border: 1px solid var(--color-border); white-space: pre-wrap; word-wrap: break-word;"><code style="font-family: var(--font-mono); font-size: 0.875rem;">{{ range .Params.steps }}{{ . }}
+{{ end }}</code></pre>
+
+      <h2 class="text-xl font-bold mb-3">Tools used</h2>
+      <div class="flex flex-wrap gap-3">
+        {{ range .Params.tags }}
+        <a href="/docs/{{ . }}/" class="text-sm px-3 py-1 rounded transition-colors badge-tool" style="text-decoration: none; font-family: var(--font-mono);">{{ . }}</a>
+        {{ end }}
+      </div>
+    </article>
+  </main>
+
+  {{ partial "footer.html" . }}
+  {{ partial "copy-button.html" . }}
+</body>
+</html>
