@@ -1,6 +1,6 @@
 # Flag Conventions
 
-Every vrk tool follows these conventions without exception. Consistency is a feature — a developer who learns a flag on one tool knows it on all of them.
+Every vrk tool follows these conventions without exception. Consistency is a feature - a developer who learns a flag on one tool knows it on all of them.
 
 When adding a new flag to any tool, check this file first. If the flag concept already exists here, use the canonical name. If it's genuinely new, add it here before implementing it.
 
@@ -28,7 +28,7 @@ echo $TOKEN | vrk jwt --json              # {"sub": "user123", "exp": 1740000000
 
 vrk kv get mykey --json                   # {"key": "mykey", "value": "...", "ns": "default"}
 
-vrk fetch https://example.com --json      # {"url": "...", "title": "...", "content": "...",
+vrk grab https://example.com --json      # {"url": "...", "title": "...", "content": "...",
                                            #  "fetched_at": 1740000000, "token_estimate": 180}
 ```
 
@@ -42,24 +42,24 @@ vrk fetch https://example.com --json      # {"url": "...", "title": "...", "cont
 
 **Examples:**
 ```bash
-vrk fetch https://example.com             # markdown (default)
-vrk fetch https://example.com --text      # plain prose, no ## headers or **bold**
+vrk grab https://example.com             # markdown (default)
+vrk grab https://example.com --text      # plain prose, no ## headers or **bold**
 
-cat response.md | vrk strip --text        # redundant here but valid
+cat response.md | vrk plain               # redundant here but valid
 ```
 
 ---
 
 ### `--fail`
 
-**Meaning:** Exit 1 if a condition is not met. Applies to tools where measurement and guarding are separate concerns — the tool can measure something and optionally fail on it.
+**Meaning:** Exit 1 if a condition is not met. Applies to tools where measurement and guarding are separate concerns - the tool can measure something and optionally fail on it.
 
 **Rules:**
 - Must be pipeline-safe: exit 1 from `--fail` must propagate correctly through `&&` chains.
 - Stdout must still be populated on exit 1 from `--fail` (the measurement result is valid even if the condition failed). Only stderr gets the failure reason.
 - The condition being checked must be documented in `--help`.
 
-**Not all tools need `--fail`:** some tools are inherently guards. `jwt --expired` always exits 1 if expired — no `--fail` needed. `tok --budget N` is a hard guard by design — it exits 1 when the count exceeds N, no `--fail` needed. Reserve `--fail` for tools where measurement and guarding are genuinely separate.
+**Not all tools need `--fail`:** some tools are inherently guards. `jwt --expired` always exits 1 if expired - no `--fail` needed. `tok --budget N` is a hard guard by design - it exits 1 when the count exceeds N, no `--fail` needed. Reserve `--fail` for tools where measurement and guarding are genuinely separate.
 
 **Examples:**
 ```bash
@@ -75,14 +75,14 @@ cat data.txt | vrk prompt --schema s.json --fail    # exit 1 if output doesn't m
 **Distinct from `--json`:** `--json` is about format. `--schema` is about contract. A tool can produce `--json` output without enforcing any shape. `--schema` enforces a specific shape and exits 1 on mismatch.
 
 **Provider-aware on `prompt`:**
-- OpenAI: uses `response_format.json_schema` with `strict: true` — API-level guarantee, no validation step needed.
+- OpenAI: uses `response_format.json_schema` with `strict: true` - API-level guarantee, no validation step needed.
 - Anthropic/Claude: injects schema into system prompt, then validates response post-call. Exits 1 on mismatch. Use `--retry N` to retry on validation failure.
 
 **Examples:**
 ```bash
 cat data.txt | vrk prompt --schema resume.json           # output must match schema
 cat data.txt | vrk prompt --schema resume.json --retry 3 # retry up to 3x if Claude misses
-cat messy.txt | vrk cast --schema invoice.json        # extract + enforce structure
+cat messy.txt | vrk validate --schema invoice.json     # validate structure
 ```
 
 ---
@@ -125,7 +125,7 @@ vrk kv set mykey myvalue --explain
 
 **Meaning:** Preview side effects without executing them. For tools that write files, modify state, or make mutations.
 
-**Distinct from `--explain`:** `--explain` shows the equivalent shell command. `--dry-run` shows what state would change. Use `--dry-run` for stateful tools (`kv`, `vrk --bare`), `--explain` for network/API tools (`prompt`, `fetch`).
+**Distinct from `--explain`:** `--explain` shows the equivalent shell command. `--dry-run` shows what state would change. Use `--dry-run` for stateful tools (`kv`, `vrk --bare`), `--explain` for network/API tools (`prompt`).
 
 **Examples:**
 ```bash
@@ -137,7 +137,7 @@ vrk kv set mykey val --dry-run   # shows what would be written without writing
 
 ### `--model <name>`
 
-**Meaning:** Override the default model. Applies to tools that make LLM calls (`prompt`, `cast`, `slim`, `seek`).
+**Meaning:** Override the default model. Applies to tools that make LLM calls (`prompt`).
 
 **Format:** Provider-prefixed model string or bare model name. Resolution order:
 1. `--model` flag
@@ -154,22 +154,19 @@ cat prompt.txt | vrk prompt --model ollama/llama3   # local via --endpoint
 
 ---
 
-### `--budget <N>`
+### `--check <N>` (tok)
 
-**Meaning:** Token budget. Behaviour depends on tool:
-- On `tok`: `--budget N` is a hard guard. Exits 1 if stdin exceeds N tokens, with no output. No `--fail` needed — the flag itself is the guard.
-- On `prompt`: refuse to send if stdin exceeds N tokens (integrates `tok` internally).
+**Meaning:** Token budget gate. On `tok`, `--check N` passes stdin through if within N tokens, exits 1 with empty stdout if over. No `--fail` needed - the flag itself is the guard.
 
 ```bash
-cat prompt.txt | vrk tok --budget 4000              # exit 1 if over 4000 tokens
-cat prompt.txt | vrk prompt --budget 4000 --fail    # refuse to call API if over budget
+cat prompt.txt | vrk tok --check 4000    # exit 1 if over 4000 tokens, pass through if under
 ```
 
 ---
 
 ### `--retry <N>`
 
-**Meaning:** Retry the operation up to N times on failure. Not the same as `coax` — `--retry` is a flag on a tool for a specific failure mode within that tool (e.g. schema validation failure on `prompt`). `coax` wraps any external command.
+**Meaning:** Retry the operation up to N times on failure. Not the same as `coax` - `--retry` is a flag on a tool for a specific failure mode within that tool (e.g. schema validation failure on `prompt`). `coax` wraps any external command.
 
 ```bash
 cat data.txt | vrk prompt --schema s.json --retry 3   # retry if Claude's output fails schema
@@ -184,7 +181,7 @@ These single-letter shorthands are permanently reserved. **Do not use them for a
 | Short | Reserved for | Why |
 |-------|-------------|-----|
 | `-v` | `--verbose` | Universal Unix convention (`curl -v`, `ssh -v`, `git -v`). Even though `--verbose` is not implemented today, claiming `-v` for something else (e.g. `--valid`) would surprise every user who reaches for it out of muscle memory. |
-| `-i` | `--interactive` | Convention from `rm -i`, `cp -i`, `grep -i` (case-insensitive) — too ambiguous to assign. |
+| `-i` | `--interactive` | Convention from `rm -i`, `cp -i`, `grep -i` (case-insensitive) - too ambiguous to assign. |
 
 ---
 

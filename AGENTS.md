@@ -1,4 +1,4 @@
-# AGENTS.md — vrksh quick reference
+# AGENTS.md - vrksh quick reference
 
 Unix-style CLI tools for AI pipelines. One static Go binary, multicall dispatch.
 For full flag reference, gotchas, and compose patterns: `vrk --skills`
@@ -25,20 +25,20 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 | `mask` | Redact secrets by pattern matching and Shannon entropy analysis | `--pattern <regex>`, `--entropy <n>`, `--json` |
 | `emit` | Wrap text lines as structured JSONL log records with timestamps | `--level <l>`, `--tag <t>`, `--msg <m>`, `--parse-level` |
 | `links` | Extract hyperlinks from markdown, HTML, or plain text as JSONL | `--bare`, `--json` |
-| `sip` | Sample lines from stdin — first N, every Nth, reservoir, or percentage | `--first`, `--count` (`-n`), `--every`, `--sample`, `--seed`, `--json` |
+| `sip` | Sample lines from stdin - first N, every Nth, reservoir, or percentage | `--first`, `--count` (`-n`), `--every`, `--sample`, `--seed`, `--json` |
 | `throttle` | Rate-limit lines from stdin | `--rate <N/s\|N/m>`, `--burst N`, `--tokens-field <f>`, `--json` |
 | `digest` | Hash stdin or files; HMAC with --hmac --key; file comparison with --compare | `--algo <sha256\|md5\|sha512>`, `--bare`, `--file`, `--hmac`, `--key`, `--verify`, `--json` |
 | `base` | Encode and decode between base64, base64url, hex, base32 | subcommands: `encode --to`, `decode --from`; `--quiet` |
-| `recase` | Convert naming conventions — auto-detects input, converts to target | `--to <convention>`, `--json`, `--quiet` |
+| `recase` | Convert naming conventions - auto-detects input, converts to target | `--to <convention>`, `--json`, `--quiet` |
 | `slug` | Convert text to URL/filename-safe slugs, unicode normalised to ASCII | `--separator <s>`, `--max <n>`, `--json` |
 | `moniker` | Generate memorable adjective-noun names for run IDs and job labels | `--count`, `--seed`, `--separator`, `--json` |
 | `pct` | Percent-encode and decode per RFC 3986, line by line | `--encode`, `--decode`, `--form`, `--json` |
-| `urlinfo` | Parse a URL into components — no network calls | `--field <path>`, `--json` |
-| `assert` | Evaluate conditions on stdin — pass through or kill pipeline | `<condition>` (positional), `--contains`, `--matches`, `--json` |
+| `urlinfo` | Parse a URL into components - no network calls | `--field <path>`, `--json` |
+| `assert` | Evaluate conditions on stdin - pass through or kill pipeline | `<condition>` (positional), `--contains`, `--matches`, `--json` |
 
 ---
 
-## The contract — every tool follows this
+## The contract - every tool follows this
 
 - Input: positional argument **or** stdin (both always work)
 - Output: data → stdout only
@@ -50,14 +50,14 @@ For full flag reference, gotchas, and compose patterns: `vrk --skills`
 
 ```bash
 vrk jwt 'eyJ...'           # positional arg
-echo 'eyJ...' | vrk jwt    # stdin — identical result
+echo 'eyJ...' | vrk jwt    # stdin - identical result
 ```
 
 ---
 
 ## Five key patterns
 
-**1. Pipeline guard — fail fast on expired token**
+**1. Pipeline guard - fail fast on expired token**
 ```bash
 echo "$JWT" | vrk jwt --expired | vrk prompt --system "..."
 # If JWT is expired, vrk jwt exits 1 and the pipeline stops
@@ -86,7 +86,7 @@ vrk kv get run_id
 
 ---
 
-## Flag conventions — consistent across all tools
+## Flag conventions - consistent across all tools
 
 | Flag | Short | Meaning |
 |------|-------|---------|
@@ -97,8 +97,8 @@ vrk kv get run_id
 | `--schema` | `-s` | Output must match JSON schema |
 | `--model` | `-m` | Override model |
 | `--count` | `-n` | Numeric count |
-| `--explain` | — | Print what would happen, don't do it |
-| `--dry-run` | — | Preview mutations without executing |
+| `--explain` | - | Print what would happen, don't do it |
+| `--dry-run` | - | Preview mutations without executing |
 
 ---
 
@@ -125,7 +125,7 @@ vrk kv get run_id
 
 | Utility | What it does | Key flags |
 |---------|-------------|-----------|
-| `mcp` | Discovery-only MCP server — exposes all tools via JSON-RPC 2.0 over stdio | `--list` |
+| `mcp` | Discovery-only MCP server - exposes all tools via JSON-RPC 2.0 over stdio | `--list` |
 
 `mcp` is not a pipeline tool. It makes pipeline tools discoverable by MCP clients.
 Add `vrk mcp` to your Claude Code MCP config to see all tools in discovery.
