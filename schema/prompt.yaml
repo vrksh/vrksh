@@ -29,6 +29,11 @@ flags:
     short: ""
     type: string
     description: System prompt text, or @file.txt to read from file
+  - flag: --field
+    short: ""
+    type: string
+    description: Dot-path field in each JSONL line to use as prompt text
+    example: text
   - flag: --budget
     short: ""
     type: int
@@ -65,9 +70,9 @@ exit_codes:
   - code: 0
     meaning: Success
   - code: 1
-    meaning: API failure, budget exceeded, or schema mismatch
+    meaning: API failure, budget exceeded, schema mismatch, invalid JSONL, field not found
   - code: 2
-    meaning: Usage error - no input, missing flags
+    meaning: Usage error - no input, missing flags, --field with --explain
 og_image:
   headline: "Pipe text to any LLM. Validate the response."
   code: "vrk prompt -m claude-sonnet-4-6 --schema spec.json"

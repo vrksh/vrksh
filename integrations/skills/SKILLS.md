@@ -718,6 +718,7 @@ Input: positional argument or stdin.
 |------|-------|------|---------|-------------|
 | `--model` | `-m` | string | `claude-sonnet-4-6` | Model name; overridden by `VRK_DEFAULT_MODEL` env var |
 | `--endpoint <url>` | — | string | `""` | OpenAI-compatible API base URL; overrides provider detection |
+| `--field <path>` | — | string | `""` | Dot-path field in each JSONL line to use as prompt text |
 | `--budget <N>` | — | int | 0 | Exit 1 before calling the API if prompt exceeds N tokens (0 = disabled) |
 | `--fail` | `-f` | bool | false | Accepted; meaningful with `--schema` (exit 1 on mismatch) |
 | `--json` | `-j` | bool | false | Emit response as a JSON envelope with metadata |
@@ -730,9 +731,9 @@ Input: positional argument or stdin.
 
 | Code | Condition |
 |------|-----------|
-| 0 | Success — response on stdout |
-| 1 | Runtime error: no API key, HTTP error, budget exceeded, schema mismatch after all retries |
-| 2 | Usage error: no input in interactive terminal (no positional arg, no `--explain`), unknown flag |
+| 0 | Success - response on stdout |
+| 1 | Runtime error: no API key, HTTP error, budget exceeded, schema mismatch after all retries, invalid JSONL, field not found |
+| 2 | Usage error: no input in interactive terminal, unknown flag, `--field` with `--explain`, `--field` with TTY stdin |
 
 ### Provider resolution order
 
@@ -754,13 +755,17 @@ When `--endpoint` or `VRK_LLM_URL` is set, `--model` is required (exit 2 if abse
 {
   "response": "pong",
   "model": "claude-sonnet-4-6",
-  "tokens_used": 12,
-  "latency_ms": 340,
-  "request_hash": "<sha256hex>"
+  "prompt_tokens": 8,
+  "response_tokens": 4,
+  "elapsed_ms": 340
 }
 ```
 
-`request_hash` is `sha256(model + "|" + temperature + "|" + prompt)` — stable cache key for `vrk kv`.
+With `--field`, input record fields are preserved and response fields are merged in:
+
+```json
+{"index": 0, "text": "The vendor shall...", "tokens": 30, "response": "Vendor must deliver within 30 days.", "model": "claude-sonnet-4-6", "prompt_tokens": 38, "response_tokens": 11, "elapsed_ms": 412}
+```
 
 ### Examples
 
@@ -793,6 +798,15 @@ echo "hello" | vrk prompt
 # Custom endpoint (Ollama, LM Studio, vLLM, LocalAI, Jan)
 echo "hello" | vrk prompt --endpoint http://localhost:11434/v1 --model llama3.2
 VRK_LLM_URL=http://localhost:11434/v1 vrk prompt --model llama3.2
+
+# Process JSONL chunks with --field (one API call per record)
+cat docs/*.md | vrk chunk --size 4000 | vrk prompt --field text --system 'Summarize' --json
+
+# Batch with rate limiting and structured output
+cat docs/*.md \
+  | vrk chunk --size 4000 \
+  | vrk throttle --rate 60/m \
+  | vrk prompt --field text --system 'Extract key claims' --schema '{"claims":"array"}' --json
 ```
 
 ### Custom endpoints (--endpoint / VRK_LLM_URL)
@@ -847,7 +861,10 @@ vrk coax --times 3 --backoff exp:1s --on 1 -- \
 
 ### Gotchas
 
-- **`--json` means metadata envelope, not "respond in JSON".** To request JSON from the LLM, use `--schema`. `--json` wraps the response in `{response, model, tokens_used, latency_ms, request_hash}`.
+- **`--json` means metadata envelope, not "respond in JSON".** To request JSON from the LLM, use `--schema`. `--json` wraps the response in `{response, model, prompt_tokens, response_tokens, elapsed_ms}`.
+- **`--field` and `--explain` are mutually exclusive.** `--explain` is for inspecting a single call; it does not make sense for a stream. Exit 2 if both are set.
+- **`--field` exits on first error.** If line 5 has invalid JSON, lines 1-4 are already written to stdout. Callers that need atomicity should buffer output and check exit code.
+- **`--field` overwrites `response` in input records.** If the input JSONL has a field named `response`, it is overwritten and a warning is emitted to stderr.
 - **`--budget` is a hard gate.** It fires before the API call - even if no API key is set. There is no soft warning mode; use `vrk tok --check N` to gate the pipeline upstream.
 - **Temperature default is 0.** Responses are deterministic by default. `--retry` escalates temperature across attempts (0.0 → 0.1 → 0.2). Do not add a `--temperature` flag unless explicitly extending the tool.
 - **API keys are never in output.** The key value is scrubbed from all error messages and `--explain` output before writing to stdout or stderr. `--explain` uses `$ANTHROPIC_API_KEY` / `$OPENAI_API_KEY` as shell variable references.

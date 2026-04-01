@@ -1419,6 +1419,19 @@ fi
 unset VRK_KV_PATH
 
 # ---------------------------------------------------------------------------
+# prompt --field + --explain mutual exclusion
+# ---------------------------------------------------------------------------
+rc=0
+echo '{"text":"hello"}' | $VRK prompt --field text --explain 2>/dev/null || rc=$?
+if [ "$rc" -eq 2 ]; then
+  echo "PASS: prompt --field+--explain exits 2"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: prompt --field+--explain: expected exit 2, got $rc"
+  FAIL=$((FAIL + 1))
+fi
+
+# ---------------------------------------------------------------------------
 # Results
 # ---------------------------------------------------------------------------
 echo ""

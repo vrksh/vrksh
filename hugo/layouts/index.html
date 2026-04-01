@@ -169,7 +169,7 @@ jsonschema.validate(json.loads(result), schema)</code></pre>
                 ><code class="language-bash">find docs/ -name '*.md' -exec cat {} + \
   | vrk chunk --size 4000 \
   | vrk throttle --rate 60/m \
-  | vrk prompt --model gpt-4 --json</code></pre>
+  | vrk prompt --field text --model gpt-4o --json</code></pre>
                 <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
                     chunked. paced. structured output. safe to rerun.
                 </p>

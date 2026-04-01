@@ -46,11 +46,11 @@ func openaiEnv(t *testing.T) map[string]string {
 func checkJSONEnvelope(t *testing.T, stdout string) {
 	t.Helper()
 	var out struct {
-		Response    string `json:"response"`
-		Model       string `json:"model"`
-		TokensUsed  int    `json:"tokens_used"`
-		LatencyMs   int64  `json:"latency_ms"`
-		RequestHash string `json:"request_hash"`
+		Response       string `json:"response"`
+		Model          string `json:"model"`
+		PromptTokens   int    `json:"prompt_tokens"`
+		ResponseTokens int    `json:"response_tokens"`
+		ElapsedMs      int64  `json:"elapsed_ms"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\nraw: %s", err, stdout)
@@ -61,14 +61,14 @@ func checkJSONEnvelope(t *testing.T, stdout string) {
 	if out.Model == "" {
 		t.Error("model field is empty")
 	}
-	if out.TokensUsed <= 0 {
-		t.Errorf("tokens_used = %d, want > 0", out.TokensUsed)
+	if out.PromptTokens <= 0 {
+		t.Errorf("prompt_tokens = %d, want > 0", out.PromptTokens)
 	}
-	if out.LatencyMs <= 0 {
-		t.Errorf("latency_ms = %d, want > 0", out.LatencyMs)
+	if out.ResponseTokens <= 0 {
+		t.Errorf("response_tokens = %d, want > 0", out.ResponseTokens)
 	}
-	if len(out.RequestHash) != 64 {
-		t.Errorf("request_hash length = %d, want 64 (sha256 hex)", len(out.RequestHash))
+	if out.ElapsedMs <= 0 {
+		t.Errorf("elapsed_ms = %d, want > 0", out.ElapsedMs)
 	}
 }
 

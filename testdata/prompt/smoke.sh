@@ -199,6 +199,61 @@ set -e
 [ "$code" -eq 2 ] || fail "--system '': expected exit 2, got $code" ""
 pass "--system '' exits 2"
 
+# --- --field ---
+echo ""
+echo "--- --field ---"
+
+# --field + --explain mutual exclusion: exit 2
+set +e
+echo '{"text":"hello"}' | "$BIN" prompt --field text --explain 2>err.tmp; code=$?
+set -e
+[ "$code" -eq 2 ] || fail "--field+--explain: expected exit 2, got $code" ""
+grep -q "mutually exclusive" err.tmp || fail "--field+--explain: wrong error message" "$(cat err.tmp)"
+rm -f err.tmp
+pass "--field + --explain exits 2 with mutually exclusive message"
+
+# --field with empty stdin: exit 0, no output
+set +e
+out=$(printf '' | "$BIN" prompt --field text 2>/dev/null); code=$?
+set -e
+[ "$code" -eq 0 ] || fail "--field empty stdin: expected exit 0, got $code" ""
+[ -z "$out" ] || fail "--field empty stdin: expected no output" "got: $out"
+pass "--field empty stdin exits 0 with no output"
+
+# --field invalid JSON on line 1: exit 1 (no HTTP needed)
+set +e
+printf 'not json\n' | "$BIN" prompt --field text --endpoint http://localhost:1 --model test 2>err.tmp; code=$?
+set -e
+[ "$code" -eq 1 ] || fail "--field invalid JSON: expected exit 1, got $code" ""
+grep -q "line 1" err.tmp || fail "--field invalid JSON: expected line 1 in error" "$(cat err.tmp)"
+grep -q "invalid JSON" err.tmp || fail "--field invalid JSON: expected 'invalid JSON'" "$(cat err.tmp)"
+rm -f err.tmp
+pass "--field invalid JSON exits 1 with line number"
+
+# --field missing field: exit 1 (no HTTP needed)
+set +e
+printf '{"other":"hi"}\n' | "$BIN" prompt --field text --endpoint http://localhost:1 --model test 2>err.tmp; code=$?
+set -e
+[ "$code" -eq 1 ] || fail "--field missing field: expected exit 1, got $code" ""
+grep -q '"text"' err.tmp || fail "--field missing field: wrong error message" "$(cat err.tmp)"
+grep -q "not found" err.tmp || fail "--field missing field: expected 'not found'" "$(cat err.tmp)"
+rm -f err.tmp
+pass "--field missing field exits 1 with field name"
+
+# --field non-string value: exit 1 (no HTTP needed)
+set +e
+printf '{"text":42}\n' | "$BIN" prompt --field text --endpoint http://localhost:1 --model test 2>err.tmp; code=$?
+set -e
+[ "$code" -eq 1 ] || fail "--field non-string: expected exit 1, got $code" ""
+grep -q "not a string" err.tmp || fail "--field non-string: wrong error message" "$(cat err.tmp)"
+rm -f err.tmp
+pass "--field non-string value exits 1"
+
+# --help lists --field flag
+out=$("$BIN" prompt --help 2>/dev/null) || true
+echo "$out" | grep -q "field" || fail "--help: --field flag missing from output" "got: $out"
+pass "--help lists --field flag"
+
 # --- summary ---
 echo ""
 echo "All smoke tests passed."

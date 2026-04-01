@@ -3,6 +3,7 @@ package prompt
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -494,9 +495,11 @@ func TestEndpointRealCallJSON(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 	var out struct {
-		Response   string `json:"response"`
-		Model      string `json:"model"`
-		TokensUsed int    `json:"tokens_used"`
+		Response       string `json:"response"`
+		Model          string `json:"model"`
+		PromptTokens   int    `json:"prompt_tokens"`
+		ResponseTokens int    `json:"response_tokens"`
+		ElapsedMs      int64  `json:"elapsed_ms"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &out); err != nil {
 		t.Fatalf("stdout is not valid JSON: %v\ngot: %s", err, stdout)
@@ -507,8 +510,11 @@ func TestEndpointRealCallJSON(t *testing.T) {
 	if out.Model != "llama3.2" {
 		t.Errorf("model = %q, want %q", out.Model, "llama3.2")
 	}
-	if out.TokensUsed != 6 {
-		t.Errorf("tokens_used = %d, want 6", out.TokensUsed)
+	if out.PromptTokens != 5 {
+		t.Errorf("prompt_tokens = %d, want 5", out.PromptTokens)
+	}
+	if out.ResponseTokens != 1 {
+		t.Errorf("response_tokens = %d, want 1", out.ResponseTokens)
 	}
 }
 
@@ -835,5 +841,304 @@ func TestQuietDoesNotAffectStdout(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "curl") {
 		t.Errorf("stdout = %q, want --explain curl output", stdout)
+	}
+}
+
+// --- --field tests ---
+
+// newCountingMockServer returns a mock OpenAI-compatible server that returns
+// a different response content for each sequential call. Once all contents
+// are exhausted, it repeats the last one.
+func newCountingMockServer(t *testing.T, contents []string) *httptest.Server {
+	t.Helper()
+	callCount := 0
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		idx := callCount
+		if idx >= len(contents) {
+			idx = len(contents) - 1
+		}
+		callCount++
+		contentJSON, _ := json.Marshal(contents[idx])
+		resp := fmt.Sprintf(`{"choices":[{"message":{"role":"assistant","content":%s},"finish_reason":"stop"}],"model":"test","usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}`, string(contentJSON))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(resp))
+	}))
+}
+
+// TestPromptJSONFieldNames verifies that --json output uses the normalized
+// field names (prompt_tokens, response_tokens, elapsed_ms) and not the old
+// names (tokens_used, latency_ms, request_hash).
+func TestPromptJSONFieldNames(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", srv.URL, "--model", "llama3.2", "--json"}, "hello")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %s", err, stdout)
+	}
+	// New field names must be present.
+	for _, key := range []string{"response", "model", "prompt_tokens", "response_tokens", "elapsed_ms"} {
+		if _, ok := obj[key]; !ok {
+			t.Errorf("missing key %q in JSON output", key)
+		}
+	}
+	// Old field names must be absent.
+	for _, key := range []string{"tokens_used", "latency_ms", "request_hash"} {
+		if _, ok := obj[key]; ok {
+			t.Errorf("deprecated key %q still present in JSON output", key)
+		}
+	}
+}
+
+// TestFieldBasic checks that --field reads JSONL line by line and produces
+// one output line per input record.
+func TestFieldBasic(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdin := "{\"text\":\"hello\"}\n{\"text\":\"world\"}\n"
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--endpoint", srv.URL, "--model", "test"}, stdin)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d output lines, want 2:\n%s", len(lines), stdout)
+	}
+	for i, line := range lines {
+		if !strings.Contains(line, "pong") {
+			t.Errorf("line %d does not contain 'pong': %q", i+1, line)
+		}
+	}
+}
+
+// TestFieldWithJSON checks that --field --json merges input record fields
+// with response metadata fields in the output.
+func TestFieldWithJSON(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdin := "{\"index\":0,\"text\":\"hello\",\"tokens\":5}\n{\"index\":1,\"text\":\"world\",\"tokens\":5}\n"
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--json", "--endpoint", srv.URL, "--model", "test"}, stdin)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d output lines, want 2:\n%s", len(lines), stdout)
+	}
+	for i, line := range lines {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			t.Fatalf("line %d: invalid JSON: %v", i+1, err)
+		}
+		// Input fields preserved.
+		if _, ok := obj["index"]; !ok {
+			t.Errorf("line %d: missing input field 'index'", i+1)
+		}
+		if _, ok := obj["tokens"]; !ok {
+			t.Errorf("line %d: missing input field 'tokens'", i+1)
+		}
+		// Response fields added.
+		for _, key := range []string{"response", "model", "prompt_tokens", "response_tokens", "elapsed_ms"} {
+			if _, ok := obj[key]; !ok {
+				t.Errorf("line %d: missing response field %q", i+1, key)
+			}
+		}
+	}
+}
+
+// TestFieldMissingField checks that a record missing the named field exits 1
+// with an error mentioning the field name and line number.
+func TestFieldMissingField(t *testing.T) {
+	stdin := "{\"other\":\"hello\"}\n"
+	_, stderr, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--endpoint", "http://localhost:1", "--model", "test"}, stdin)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "line 1") {
+		t.Errorf("stderr does not mention line number: %q", stderr)
+	}
+	if !strings.Contains(stderr, `"text"`) {
+		t.Errorf("stderr does not mention field name: %q", stderr)
+	}
+}
+
+// TestFieldInvalidJSON checks that invalid JSON on line 2 exits 1 after
+// line 1 succeeds. Requires a mock server because line 1 makes an API call.
+func TestFieldInvalidJSON(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdin := "{\"text\":\"hello\"}\nnot json\n"
+	stdout, stderr, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--endpoint", srv.URL, "--model", "test"}, stdin)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	// Line 1 should have succeeded - stdout should have one record.
+	trimmed := strings.TrimSpace(stdout)
+	if trimmed == "" {
+		t.Error("stdout is empty, expected one record from line 1")
+	} else {
+		lines := strings.Split(trimmed, "\n")
+		if len(lines) != 1 {
+			t.Errorf("expected 1 output line from successful line 1, got %d: %q", len(lines), stdout)
+		}
+	}
+	if !strings.Contains(stderr, "line 2") {
+		t.Errorf("stderr does not mention line 2: %q", stderr)
+	}
+	if !strings.Contains(stderr, "invalid JSON") {
+		t.Errorf("stderr does not mention 'invalid JSON': %q", stderr)
+	}
+}
+
+// TestFieldNonStringValue checks that a non-string field value exits 1.
+func TestFieldNonStringValue(t *testing.T) {
+	stdin := "{\"text\":42}\n"
+	_, stderr, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--endpoint", "http://localhost:1", "--model", "test"}, stdin)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "not a string") {
+		t.Errorf("stderr does not mention 'not a string': %q", stderr)
+	}
+}
+
+// TestFieldEmptyInput checks that --field with empty stdin exits 0 with no output.
+func TestFieldEmptyInput(t *testing.T) {
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--endpoint", "http://localhost:1", "--model", "test"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty", stdout)
+	}
+}
+
+// TestFieldBudgetExceeded checks that --budget is enforced per record and
+// exits 1 before making an API call.
+func TestFieldBudgetExceeded(t *testing.T) {
+	// "hello world" is ~2 tokens (cl100k_base), budget of 1 exceeds.
+	stdin := "{\"text\":\"hello world\"}\n"
+	_, stderr, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--budget", "1", "--endpoint", "http://localhost:1", "--model", "test"}, stdin)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(strings.ToLower(stderr), "budget") {
+		t.Errorf("stderr does not mention budget: %q", stderr)
+	}
+}
+
+// TestFieldSchemaRetry checks that --schema with --retry retries on schema
+// mismatch and succeeds when the response eventually matches.
+func TestFieldSchemaRetry(t *testing.T) {
+	srv := newCountingMockServer(t, []string{
+		"not json at all",   // attempt 1: fails schema
+		`{"wrong":"field"}`, // attempt 2: fails schema (missing "name")
+		`{"name":"Alice"}`,  // attempt 3: passes schema
+	})
+	defer srv.Close()
+
+	stdin := "{\"text\":\"test\"}\n"
+	stdout, stderr, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--schema", `{"name":"string"}`, "--retry", "2",
+			"--endpoint", srv.URL, "--model", "test"}, stdin)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\nstderr: %s\nstdout: %s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "Alice") {
+		t.Errorf("stdout does not contain final successful response: %q", stdout)
+	}
+}
+
+// TestFieldWithExplain checks that --field and --explain are mutually exclusive (exit 2).
+func TestFieldWithExplain(t *testing.T) {
+	_, stderr, code := runPrompt(t, map[string]string{"ANTHROPIC_API_KEY": "fake"},
+		[]string{"--field", "text", "--explain"}, "{\"text\":\"hello\"}\n")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "mutually exclusive") {
+		t.Errorf("stderr does not mention 'mutually exclusive': %q", stderr)
+	}
+}
+
+// TestFieldTTY checks that --field with TTY stdin exits 2.
+func TestFieldTTY(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	t.Cleanup(func() { isTerminal = orig })
+
+	_, stderr, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text"}, "")
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "--field requires piped input") {
+		t.Errorf("stderr does not mention piped input: %q", stderr)
+	}
+}
+
+// TestFieldResponseOverwrite checks that when an input record already has a
+// "response" field, it is overwritten and a warning is emitted to stderr.
+func TestFieldResponseOverwrite(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+
+	stdin := "{\"text\":\"hello\",\"response\":\"old\"}\n"
+	stdout, stderr, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--json", "--endpoint", srv.URL, "--model", "test"}, stdin)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stderr, "response") {
+		t.Errorf("stderr does not warn about 'response' field overwrite: %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if obj["response"] != "pong" {
+		t.Errorf("response = %v, want 'pong'", obj["response"])
+	}
+}
+
+// TestFieldNewlineEscape checks that newlines within LLM responses are escaped
+// as literal \n in non-JSON output so each response stays on one line.
+func TestFieldNewlineEscape(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content := "line1\nline2\nline3"
+		contentJSON, _ := json.Marshal(content)
+		resp := fmt.Sprintf(`{"choices":[{"message":{"role":"assistant","content":%s},"finish_reason":"stop"}],"model":"test","usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}`, string(contentJSON))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(resp))
+	}))
+	defer srv.Close()
+
+	stdin := "{\"text\":\"hello\"}\n"
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--field", "text", "--endpoint", srv.URL, "--model", "test"}, stdin)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 output line (newlines escaped), got %d:\n%s", len(lines), stdout)
+	}
+	if !strings.Contains(lines[0], `\n`) {
+		t.Errorf("output does not contain escaped newlines: %q", lines[0])
 	}
 }

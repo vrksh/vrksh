@@ -3,7 +3,6 @@ package prompt
 import (
 	"bufio"
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,14 +28,21 @@ const (
 	providerOpenAI
 )
 
+// callResult holds the parsed response from any LLM API call.
+type callResult struct {
+	text           string
+	promptTokens   int
+	responseTokens int
+}
+
 // promptOutput is the shape emitted by --json.
 type promptOutput struct {
-	Response     string `json:"response"`
-	Model        string `json:"model"`
-	TokensUsed   int    `json:"tokens_used"`
-	LatencyMs    int64  `json:"latency_ms"`
-	RequestHash  string `json:"request_hash"`
-	SystemPrompt string `json:"system_prompt,omitempty"`
+	Response       string `json:"response"`
+	Model          string `json:"model"`
+	PromptTokens   int    `json:"prompt_tokens"`
+	ResponseTokens int    `json:"response_tokens"`
+	ElapsedMs      int64  `json:"elapsed_ms"`
+	SystemPrompt   string `json:"system_prompt,omitempty"`
 }
 
 // resolveModel returns what the user explicitly asked for via --model or
@@ -92,13 +97,6 @@ func scrubKey(s, key string) string {
 		return s
 	}
 	return strings.ReplaceAll(s, key, "[REDACTED]")
-}
-
-// requestHash returns a stable SHA-256 hex string for the given inputs.
-func requestHash(model string, temp float64, system, prompt string) string {
-	input := model + "|" + strconv.FormatFloat(temp, 'f', 1, 64) + "|" + system + "|" + prompt
-	h := sha256.Sum256([]byte(input))
-	return fmt.Sprintf("%x", h)
 }
 
 // resolveSystemPrompt resolves the --system flag value. Empty → error (exit 2).
@@ -208,7 +206,7 @@ type anthropicMessage struct {
 }
 
 // callAnthropic makes a single call to the Anthropic messages API.
-func callAnthropic(model, key, prompt, systemPrompt string, temp float64) (string, int, error) {
+func callAnthropic(model, key, prompt, systemPrompt string, temp float64) (callResult, error) {
 	req := anthropicRequest{
 		Model:     model,
 		MaxTokens: 4096,
@@ -223,12 +221,12 @@ func callAnthropic(model, key, prompt, systemPrompt string, temp float64) (strin
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return "", 0, fmt.Errorf("marshaling request: %w", err)
+		return callResult{}, fmt.Errorf("marshaling request: %w", err)
 	}
 
 	httpReq, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
 	if err != nil {
-		return "", 0, fmt.Errorf("creating request: %w", err)
+		return callResult{}, fmt.Errorf("creating request: %w", err)
 	}
 	httpReq.Header.Set("x-api-key", key)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
@@ -236,19 +234,18 @@ func callAnthropic(model, key, prompt, systemPrompt string, temp float64) (strin
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return "", 0, fmt.Errorf("HTTP request failed: %w", err)
+		return callResult{}, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", 0, fmt.Errorf("reading response body: %w", err)
+		return callResult{}, fmt.Errorf("reading response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		// Scrub key from response body before including in error.
 		safeBody := scrubKey(string(respBody), key)
-		return "", 0, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
+		return callResult{}, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
 	}
 
 	var result struct {
@@ -263,13 +260,16 @@ func callAnthropic(model, key, prompt, systemPrompt string, temp float64) (strin
 	d := json.NewDecoder(bytes.NewReader(respBody))
 	d.UseNumber()
 	if err := d.Decode(&result); err != nil {
-		return "", 0, fmt.Errorf("decoding response: %w", err)
+		return callResult{}, fmt.Errorf("decoding response: %w", err)
 	}
 	if len(result.Content) == 0 {
-		return "", 0, fmt.Errorf("empty content in response")
+		return callResult{}, fmt.Errorf("empty content in response")
 	}
-	tokensUsed := result.Usage.InputTokens + result.Usage.OutputTokens
-	return result.Content[0].Text, tokensUsed, nil
+	return callResult{
+		text:           result.Content[0].Text,
+		promptTokens:   result.Usage.InputTokens,
+		responseTokens: result.Usage.OutputTokens,
+	}, nil
 }
 
 // openAIRequest is the JSON body sent to the OpenAI chat completions API.
@@ -298,7 +298,7 @@ type openAIJSONSchema struct {
 }
 
 // callOpenAI makes a single call to the OpenAI chat completions API.
-func callOpenAI(model, key, prompt string, temp float64, schema map[string]string, systemPrompt string) (string, int, error) {
+func callOpenAI(model, key, prompt string, temp float64, schema map[string]string, systemPrompt string) (callResult, error) {
 	var msgs []openAIMessage
 	if systemPrompt != "" {
 		msgs = append(msgs, openAIMessage{Role: "system", Content: systemPrompt})
@@ -328,30 +328,30 @@ func callOpenAI(model, key, prompt string, temp float64, schema map[string]strin
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return "", 0, fmt.Errorf("marshaling request: %w", err)
+		return callResult{}, fmt.Errorf("marshaling request: %w", err)
 	}
 
 	httpReq, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", 0, fmt.Errorf("creating request: %w", err)
+		return callResult{}, fmt.Errorf("creating request: %w", err)
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+key)
 	httpReq.Header.Set("content-type", "application/json")
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return "", 0, fmt.Errorf("HTTP request failed: %w", err)
+		return callResult{}, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", 0, fmt.Errorf("reading response body: %w", err)
+		return callResult{}, fmt.Errorf("reading response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		safeBody := scrubKey(string(respBody), key)
-		return "", 0, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
+		return callResult{}, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
 	}
 
 	var result struct {
@@ -361,18 +361,23 @@ func callOpenAI(model, key, prompt string, temp float64, schema map[string]strin
 			} `json:"message"`
 		} `json:"choices"`
 		Usage struct {
-			TotalTokens int `json:"total_tokens"`
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
 		} `json:"usage"`
 	}
 	d := json.NewDecoder(bytes.NewReader(respBody))
 	d.UseNumber()
 	if err := d.Decode(&result); err != nil {
-		return "", 0, fmt.Errorf("decoding response: %w", err)
+		return callResult{}, fmt.Errorf("decoding response: %w", err)
 	}
 	if len(result.Choices) == 0 {
-		return "", 0, fmt.Errorf("empty choices in response")
+		return callResult{}, fmt.Errorf("empty choices in response")
 	}
-	return result.Choices[0].Message.Content, result.Usage.TotalTokens, nil
+	return callResult{
+		text:           result.Choices[0].Message.Content,
+		promptTokens:   result.Usage.PromptTokens,
+		responseTokens: result.Usage.CompletionTokens,
+	}, nil
 }
 
 // printExplain writes a curl equivalent command to stdout and returns 0.
@@ -481,10 +486,10 @@ type openAICompatRequest struct {
 }
 
 // callOpenAICompatible sends a request to an OpenAI-compatible endpoint and returns
-// the assistant reply text, total token count, and any error.
+// a callResult with the assistant reply and token counts.
 // Auth: reads VRK_LLM_KEY and sets Authorization: Bearer only if non-empty.
 // Never uses OPENAI_API_KEY or ANTHROPIC_API_KEY.
-func callOpenAICompatible(endpointURL, model, prompt string, schema map[string]string, systemPrompt string) (string, int, error) {
+func callOpenAICompatible(endpointURL, model, prompt string, temp float64, schema map[string]string, systemPrompt string) (callResult, error) {
 	var msgs []openAIMessage
 	if systemPrompt != "" {
 		msgs = append(msgs, openAIMessage{Role: "system", Content: systemPrompt})
@@ -494,7 +499,7 @@ func callOpenAICompatible(endpointURL, model, prompt string, schema map[string]s
 	req := openAICompatRequest{
 		Model:     model,
 		MaxTokens: 4096,
-		Temp:      0,
+		Temp:      temp,
 		Stream:    false,
 		Messages:  msgs,
 	}
@@ -504,12 +509,12 @@ func callOpenAICompatible(endpointURL, model, prompt string, schema map[string]s
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return "", 0, fmt.Errorf("marshaling request: %w", err)
+		return callResult{}, fmt.Errorf("marshaling request: %w", err)
 	}
 
 	httpReq, err := http.NewRequest("POST", endpointURL, bytes.NewReader(body))
 	if err != nil {
-		return "", 0, fmt.Errorf("creating request: %w", err)
+		return callResult{}, fmt.Errorf("creating request: %w", err)
 	}
 	httpReq.Header.Set("content-type", "application/json")
 	if key := os.Getenv("VRK_LLM_KEY"); key != "" {
@@ -518,18 +523,18 @@ func callOpenAICompatible(endpointURL, model, prompt string, schema map[string]s
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return "", 0, fmt.Errorf("request failed: %w", err)
+		return callResult{}, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", 0, fmt.Errorf("reading response body: %w", err)
+		return callResult{}, fmt.Errorf("reading response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		safeBody := scrubKey(string(respBody), os.Getenv("VRK_LLM_KEY"))
-		return "", 0, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
+		return callResult{}, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
 	}
 
 	var result struct {
@@ -539,18 +544,23 @@ func callOpenAICompatible(endpointURL, model, prompt string, schema map[string]s
 			} `json:"message"`
 		} `json:"choices"`
 		Usage struct {
-			TotalTokens int `json:"total_tokens"`
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
 		} `json:"usage"`
 	}
 	d := json.NewDecoder(bytes.NewReader(respBody))
 	d.UseNumber()
 	if err := d.Decode(&result); err != nil {
-		return "", 0, fmt.Errorf("decoding response: %w", err)
+		return callResult{}, fmt.Errorf("decoding response: %w", err)
 	}
 	if len(result.Choices) == 0 {
-		return "", 0, fmt.Errorf("empty choices in response")
+		return callResult{}, fmt.Errorf("empty choices in response")
 	}
-	return result.Choices[0].Message.Content, result.Usage.TotalTokens, nil
+	return callResult{
+		text:           result.Choices[0].Message.Content,
+		promptTokens:   result.Usage.PromptTokens,
+		responseTokens: result.Usage.CompletionTokens,
+	}, nil
 }
 
 // printExplainEndpoint writes a curl command for a custom endpoint to w.
@@ -590,12 +600,31 @@ func printExplainEndpoint(w io.Writer, endpointURL, model, prompt string, schema
 	return 0
 }
 
+// dotGet extracts a value from a nested map using a dot-separated path.
+// Same pattern as cmd/throttle/throttle.go:dotGet.
+func dotGet(obj map[string]any, path string) (any, error) {
+	parts := strings.SplitN(path, ".", 2)
+	val, ok := obj[parts[0]]
+	if !ok {
+		return nil, fmt.Errorf("key not found: %s", parts[0])
+	}
+	if len(parts) == 1 {
+		return val, nil
+	}
+	nested, ok := val.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("not an object at: %s", parts[0])
+	}
+	return dotGet(nested, parts[1])
+}
+
 func init() {
 	shared.Register(shared.ToolMeta{
 		Name:  "prompt",
 		Short: "Send a prompt to an LLM and print the response",
 		Flags: []shared.FlagMeta{
 			{Name: "model", Shorthand: "m", Usage: "LLM model (default: claude-sonnet-4-6 or VRK_DEFAULT_MODEL)"},
+			{Name: "field", Usage: "dot-path field in each JSONL line to use as prompt text"},
 			{Name: "budget", Usage: "exit 1 if prompt exceeds N tokens (0 = disabled)"},
 			{Name: "fail", Shorthand: "f", Usage: "fail on non-2xx API response or schema mismatch"},
 			{Name: "json", Shorthand: "j", Usage: "emit response as JSON envelope with metadata"},
@@ -616,6 +645,7 @@ func Run() int {
 
 	var (
 		modelFlag   string
+		fieldFlag   string
 		budget      int
 		failFlag    bool
 		jsonFlag    bool
@@ -628,6 +658,7 @@ func Run() int {
 	)
 
 	fs.StringVarP(&modelFlag, "model", "m", "", "LLM model (default: claude-sonnet-4-6 or VRK_DEFAULT_MODEL)")
+	fs.StringVar(&fieldFlag, "field", "", "dot-path field in each JSONL line to use as prompt text")
 	fs.IntVar(&budget, "budget", 0, "exit 1 if prompt exceeds N tokens (0 = disabled)")
 	fs.BoolVarP(&failFlag, "fail", "f", false, "fail on non-2xx API response or schema mismatch")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit response as JSON envelope with metadata")
@@ -697,8 +728,30 @@ func Run() int {
 
 	model := resolveModel(modelFlag)
 
+	// --field + --explain mutual exclusion.
+	if fieldFlag != "" && explainFlag {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{
+				"error": "prompt: --field and --explain are mutually exclusive",
+				"code":  2,
+			})
+		}
+		return shared.UsageErrorf("prompt: --field and --explain are mutually exclusive")
+	}
+
+	// --field TTY guard: streaming mode requires piped input.
+	if fieldFlag != "" && isTerminal(int(os.Stdin.Fd())) {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{
+				"error": "prompt: --field requires piped input",
+				"code":  2,
+			})
+		}
+		return shared.UsageErrorf("prompt: --field requires piped input")
+	}
+
 	// TTY detection: if stdin is a terminal and no positional arg and no --explain,
-	// there is no input — that is a usage error.
+	// there is no input - that is a usage error.
 	args := fs.Args()
 	if isTerminal(int(os.Stdin.Fd())) && len(args) == 0 && !explainFlag {
 		if jsonFlag {
@@ -715,6 +768,11 @@ func Run() int {
 		if err != nil {
 			return shared.Errorf("%v", err)
 		}
+	}
+
+	// --field mode: JSONL streaming. Handles everything and returns.
+	if fieldFlag != "" {
+		return runFieldMode(fieldFlag, model, endpoint, budget, jsonFlag, quietFlag, schema, schemaArg, retryCount, systemPrompt, systemSet)
 	}
 
 	// Read input: positional arg wins over stdin.
@@ -763,7 +821,7 @@ func Run() int {
 		}
 
 		start := time.Now()
-		responseText, tokensUsed, callErr := callOpenAICompatible(endpoint, model, promptText, schema, systemPrompt)
+		cr, callErr := callOpenAICompatible(endpoint, model, promptText, 0, schema, systemPrompt)
 		if callErr != nil {
 			safeErr := scrubKey(callErr.Error(), os.Getenv("VRK_LLM_KEY"))
 			if jsonFlag {
@@ -774,16 +832,16 @@ func Run() int {
 			}
 			return shared.Errorf("prompt: %s", safeErr)
 		}
-		latencyMs := time.Since(start).Milliseconds()
+		elapsedMs := time.Since(start).Milliseconds()
 
 		bw := bufio.NewWriter(os.Stdout)
 		if jsonFlag {
 			out := promptOutput{
-				Response:    responseText,
-				Model:       model,
-				TokensUsed:  tokensUsed,
-				LatencyMs:   latencyMs,
-				RequestHash: requestHash(model, 0, systemPrompt, promptText),
+				Response:       cr.text,
+				Model:          model,
+				PromptTokens:   cr.promptTokens,
+				ResponseTokens: cr.responseTokens,
+				ElapsedMs:      elapsedMs,
 			}
 			if systemSet {
 				out.SystemPrompt = systemPrompt
@@ -794,11 +852,11 @@ func Run() int {
 				return shared.Errorf("prompt: encoding JSON output: %v", encErr)
 			}
 		} else {
-			if _, writeErr := fmt.Fprint(bw, responseText); writeErr != nil {
+			if _, writeErr := fmt.Fprint(bw, cr.text); writeErr != nil {
 				_ = bw.Flush()
 				return shared.Errorf("prompt: writing output: %v", writeErr)
 			}
-			if len(responseText) == 0 || responseText[len(responseText)-1] != '\n' {
+			if len(cr.text) == 0 || cr.text[len(cr.text)-1] != '\n' {
 				_, _ = fmt.Fprintln(bw)
 			}
 		}
@@ -864,10 +922,8 @@ func Run() int {
 	temps := []float64{0.0, 0.1, 0.2}
 
 	var (
-		responseText string
-		tokensUsed   int
-		finalTemp    float64
-		startTime    = time.Now()
+		cr        callResult
+		startTime = time.Now()
 	)
 
 	for attempt := 0; attempt <= retryCount; attempt++ {
@@ -877,7 +933,6 @@ func Run() int {
 		} else {
 			temp = temps[len(temps)-1]
 		}
-		finalTemp = temp
 
 		// Combine user system prompt with schema instructions for Anthropic.
 		apiSystem := systemPrompt
@@ -893,13 +948,13 @@ func Run() int {
 		var callErr error
 		switch prov {
 		case providerAnthropic:
-			responseText, tokensUsed, callErr = callAnthropic(model, apiKey, promptText, apiSystem, temp)
+			cr, callErr = callAnthropic(model, apiKey, promptText, apiSystem, temp)
 		case providerOpenAI:
 			var schemaForOpenAI map[string]string
 			if schema != nil {
 				schemaForOpenAI = schema
 			}
-			responseText, tokensUsed, callErr = callOpenAI(model, apiKey, promptText, temp, schemaForOpenAI, systemPrompt)
+			cr, callErr = callOpenAI(model, apiKey, promptText, temp, schemaForOpenAI, systemPrompt)
 		}
 
 		if callErr != nil {
@@ -913,9 +968,9 @@ func Run() int {
 			return shared.Errorf("prompt: %s", safeErr)
 		}
 
-		// Schema validation (Anthropic only — OpenAI uses response_format).
+		// Schema validation (Anthropic only - OpenAI uses response_format).
 		if schema != nil && prov == providerAnthropic {
-			if validateSchema(responseText, schema) {
+			if validateSchema(cr.text, schema) {
 				break
 			}
 			if attempt < retryCount {
@@ -934,18 +989,18 @@ func Run() int {
 		break
 	}
 
-	latencyMs := time.Since(startTime).Milliseconds()
+	elapsedMs := time.Since(startTime).Milliseconds()
 
 	// Output.
 	bw := bufio.NewWriter(os.Stdout)
 
 	if jsonFlag {
 		out := promptOutput{
-			Response:    responseText,
-			Model:       model,
-			TokensUsed:  tokensUsed,
-			LatencyMs:   latencyMs,
-			RequestHash: requestHash(model, finalTemp, systemPrompt, promptText),
+			Response:       cr.text,
+			Model:          model,
+			PromptTokens:   cr.promptTokens,
+			ResponseTokens: cr.responseTokens,
+			ElapsedMs:      elapsedMs,
 		}
 		if systemSet {
 			out.SystemPrompt = systemPrompt
@@ -956,12 +1011,11 @@ func Run() int {
 			return shared.Errorf("prompt: encoding JSON output: %v", err)
 		}
 	} else {
-		if _, err := fmt.Fprint(bw, responseText); err != nil {
+		if _, err := fmt.Fprint(bw, cr.text); err != nil {
 			_ = bw.Flush()
 			return shared.Errorf("prompt: writing output: %v", err)
 		}
-		// Ensure output ends with a newline.
-		if len(responseText) == 0 || responseText[len(responseText)-1] != '\n' {
+		if len(cr.text) == 0 || cr.text[len(cr.text)-1] != '\n' {
 			_, _ = fmt.Fprintln(bw)
 		}
 	}
@@ -972,12 +1026,255 @@ func Run() int {
 	return 0
 }
 
+// runFieldMode processes JSONL stdin line by line, extracting the named field
+// from each record as prompt text and making one API call per line.
+func runFieldMode(fieldPath, model, endpoint string, budget int, jsonFlag, quietFlag bool, schema map[string]string, schemaArg string, retryCount int, systemPrompt string, systemSet bool) int {
+	// Set up scanner early so we can exit 0 on empty stdin before provider resolution.
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max line
+
+	// Peek: if there's no first line, exit 0 immediately (empty stdin).
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return shared.Errorf("prompt: reading stdin: %v", err)
+		}
+		return 0
+	}
+	firstLine := scanner.Text()
+
+	// Resolve provider once before the loop.
+	anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
+	openaiKey := os.Getenv("OPENAI_API_KEY")
+
+	var prov provider
+	var apiKey string
+
+	if endpoint == "" {
+		var err error
+		prov, apiKey, err = selectProvider(model, anthropicKey, openaiKey)
+		if err != nil {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: %v", err),
+					"code":  1,
+				})
+			}
+			return shared.Errorf("prompt: %v", err)
+		}
+		if model == "" {
+			model = defaultModel(prov)
+		}
+	} else {
+		// Endpoint path requires explicit model.
+		if model == "" {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": "prompt: --model is required when using --endpoint",
+					"code":  2,
+				})
+			}
+			return shared.UsageErrorf("prompt: --model is required when using --endpoint")
+		}
+	}
+
+	temps := []float64{0.0, 0.1, 0.2}
+
+	bw := bufio.NewWriter(os.Stdout)
+
+	// Process firstLine (already scanned above), then continue with remaining lines.
+	lineNum := 0
+	line := firstLine
+	for {
+		lineNum++
+
+		// Parse JSONL record.
+		var record map[string]any
+		d := json.NewDecoder(strings.NewReader(line))
+		d.UseNumber()
+		if err := d.Decode(&record); err != nil {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: line %d: invalid JSON", lineNum),
+					"code":  1,
+				})
+			}
+			return shared.Errorf("prompt: line %d: invalid JSON", lineNum)
+		}
+
+		// Extract field value.
+		val, err := dotGet(record, fieldPath)
+		if err != nil {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: line %d: field %q not found", lineNum, fieldPath),
+					"code":  1,
+				})
+			}
+			return shared.Errorf("prompt: line %d: field %q not found", lineNum, fieldPath)
+		}
+		promptText, ok := val.(string)
+		if !ok {
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: line %d: field %q is not a string", lineNum, fieldPath),
+					"code":  1,
+				})
+			}
+			return shared.Errorf("prompt: line %d: field %q is not a string", lineNum, fieldPath)
+		}
+
+		// Per-record budget check.
+		if budget > 0 {
+			count, err := tokcount.CountTokens(promptText)
+			if err != nil {
+				return shared.Errorf("prompt: line %d: counting tokens: %v", lineNum, err)
+			}
+			if count > budget {
+				if jsonFlag {
+					return shared.PrintJSONError(map[string]any{
+						"error": fmt.Sprintf("prompt: line %d: %d tokens exceeds budget %d", lineNum, count, budget),
+						"code":  1,
+					})
+				}
+				return shared.Errorf("prompt: line %d: %d tokens exceeds budget %d", lineNum, count, budget)
+			}
+		}
+
+		// Make API call with retry logic.
+		var cr callResult
+		start := time.Now()
+
+		for attempt := 0; attempt <= retryCount; attempt++ {
+			temp := 0.0
+			if attempt < len(temps) {
+				temp = temps[attempt]
+			} else {
+				temp = temps[len(temps)-1]
+			}
+
+			var callErr error
+			if endpoint != "" {
+				// Combine schema instructions into system prompt for endpoint path.
+				apiSystem := systemPrompt
+				if schema != nil {
+					schemaInstr := buildSystemPrompt(schema)
+					if apiSystem != "" {
+						apiSystem = apiSystem + "\n\n" + schemaInstr
+					} else {
+						apiSystem = schemaInstr
+					}
+				}
+				cr, callErr = callOpenAICompatible(endpoint, model, promptText, temp, schema, apiSystem)
+			} else {
+				switch prov {
+				case providerAnthropic:
+					apiSystem := systemPrompt
+					if schema != nil {
+						schemaInstr := buildSystemPrompt(schema)
+						if apiSystem != "" {
+							apiSystem = apiSystem + "\n\n" + schemaInstr
+						} else {
+							apiSystem = schemaInstr
+						}
+					}
+					cr, callErr = callAnthropic(model, apiKey, promptText, apiSystem, temp)
+				case providerOpenAI:
+					var schemaForOpenAI map[string]string
+					if schema != nil {
+						schemaForOpenAI = schema
+					}
+					cr, callErr = callOpenAI(model, apiKey, promptText, temp, schemaForOpenAI, systemPrompt)
+				}
+			}
+
+			if callErr != nil {
+				safeErr := scrubKey(callErr.Error(), apiKey)
+				safeErr = scrubKey(safeErr, os.Getenv("VRK_LLM_KEY"))
+				if jsonFlag {
+					return shared.PrintJSONError(map[string]any{
+						"error": fmt.Sprintf("prompt: line %d: %s", lineNum, safeErr),
+						"code":  1,
+					})
+				}
+				return shared.Errorf("prompt: line %d: %s", lineNum, safeErr)
+			}
+
+			// Schema validation for all providers in field mode.
+			if schema != nil {
+				if validateSchema(cr.text, schema) {
+					break
+				}
+				if attempt < retryCount {
+					fmt.Fprintf(os.Stderr, "prompt: line %d: attempt %d failed schema validation, retrying...\n", lineNum, attempt+1)
+					continue
+				}
+				if jsonFlag {
+					return shared.PrintJSONError(map[string]any{
+						"error": fmt.Sprintf("prompt: line %d: response does not match schema", lineNum),
+						"code":  1,
+					})
+				}
+				return shared.Errorf("prompt: line %d: response does not match schema", lineNum)
+			}
+
+			break
+		}
+
+		elapsedMs := time.Since(start).Milliseconds()
+
+		// Output.
+		if jsonFlag {
+			// Warn if input record has a "response" field that will be overwritten.
+			if _, exists := record["response"]; exists && !quietFlag {
+				fmt.Fprintf(os.Stderr, "prompt: line %d: warning: input field \"response\" will be overwritten\n", lineNum)
+			}
+
+			// Merge: start from input record, add response fields.
+			record["response"] = cr.text
+			record["model"] = model
+			record["prompt_tokens"] = cr.promptTokens
+			record["response_tokens"] = cr.responseTokens
+			record["elapsed_ms"] = elapsedMs
+
+			enc := json.NewEncoder(bw)
+			if err := enc.Encode(record); err != nil {
+				_ = bw.Flush()
+				return shared.Errorf("prompt: line %d: encoding JSON: %v", lineNum, err)
+			}
+		} else {
+			// Escape newlines so each response stays on one output line.
+			escaped := strings.ReplaceAll(cr.text, "\n", `\n`)
+			if _, err := fmt.Fprintln(bw, escaped); err != nil {
+				_ = bw.Flush()
+				return shared.Errorf("prompt: line %d: writing output: %v", lineNum, err)
+			}
+		}
+
+		if err := bw.Flush(); err != nil {
+			return shared.Errorf("prompt: flushing output: %v", err)
+		}
+
+		// Advance to next line, or break if done.
+		if !scanner.Scan() {
+			break
+		}
+		line = scanner.Text()
+	}
+
+	if err := scanner.Err(); err != nil {
+		return shared.Errorf("prompt: reading stdin: %v", err)
+	}
+
+	return 0
+}
+
 // Flags returns flag metadata for MCP schema generation.
 // This FlagSet is never used for parsing — Run() creates its own.
 func Flags() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("prompt", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringP("model", "m", "", "LLM model (default: claude-sonnet-4-6 or VRK_DEFAULT_MODEL)")
+	fs.String("field", "", "dot-path field in each JSONL line to use as prompt text")
 	fs.Int("budget", 0, "exit 1 if prompt exceeds N tokens (0 = disabled)")
 	fs.BoolP("fail", "f", false, "fail on non-2xx API response or schema mismatch")
 	fs.BoolP("json", "j", false, "emit response as JSON envelope with metadata")
@@ -996,9 +1293,13 @@ func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
 		"usage: prompt [flags] [text]",
 		"       echo <text> | prompt [flags]",
+		"       cat docs.jsonl | prompt --field text [flags]",
 		"",
 		"Send a prompt to an LLM and print the response. Reads from stdin or",
 		"a positional argument. Defaults to claude-sonnet-4-6 via Anthropic.",
+		"",
+		"With --field, reads JSONL from stdin line by line and makes one API",
+		"call per record using the named field as the prompt text.",
 		"",
 		"  --system <text>      system prompt as literal text",
 		"  --system @file.txt   system prompt read from file",
