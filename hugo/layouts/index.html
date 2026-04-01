@@ -243,12 +243,13 @@ brew install vrk</code></pre>
                 </script>
             </section>
 
-            <!-- Core tools -->
+            <!-- Core tools (fixed order: tok, prompt, chunk) -->
             <section class="max-w-6xl mx-auto px-4 pb-12">
                 <h2 class="text-2xl font-semibold mb-6">Core</h2>
                 <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {{ range $name, $tool := hugo.Data.schema }} {{ if eq
-                    $tool.category "core" }}
+                    {{ $coreOrder := slice "tok" "prompt" "chunk" }}
+                    {{ range $coreOrder }}
+                    {{ $tool := index hugo.Data.schema . }}
                     <div
                         class="rounded-lg p-5"
                         style="
@@ -289,7 +290,7 @@ brew install vrk</code></pre>
                             "
                         ><code>{{ $tool.example }}</code></pre>
                     </div>
-                    {{ end }} {{ end }}
+                    {{ end }}
                 </div>
             </section>
 
