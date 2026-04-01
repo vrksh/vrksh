@@ -45,11 +45,11 @@ cat article.md | vrk prompt --system 'Summarize the key findings in 3 bullet poi
 
 ## Exit codes
 
-| Code | Meaning                                          |
-|------|--------------------------------------------------|
-| 0    | Success                                          |
-| 1    | API failure, budget exceeded, or schema mismatch |
-| 2    | Usage error - no input, missing flags            |
+| Code | Meaning                                                                       |
+|------|-------------------------------------------------------------------------------|
+| 0    | Success                                                                       |
+| 1    | API failure, budget exceeded, schema mismatch, invalid JSONL, field not found |
+| 2    | Usage error - no input, missing flags, --field with --explain                 |
 
 ## Flags
 
@@ -57,6 +57,7 @@ cat article.md | vrk prompt --system 'Summarize the key findings in 3 bullet poi
 |--------------|-------|--------|-----------------------------------------------------------------|
 | `--model`    | -m    | string | LLM model (default from VRK_DEFAULT_MODEL or claude-sonnet-4-6) |
 | `--system`   |       | string | System prompt text, or @file.txt to read from file              |
+| `--field`    |       | string | Dot-path field in each JSONL line to use as prompt text         |
 | `--budget`   |       | int    | Exit 1 if prompt exceeds N tokens                               |
 | `--fail`     | -f    | bool   | Fail on non-2xx API response or schema mismatch                 |
 | `--json`     | -j    | bool   | Emit response as JSON envelope with metadata                    |

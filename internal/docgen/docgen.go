@@ -191,7 +191,6 @@ func GenerateSkillsMD(tools []schema.Tool, outDir string) error {
 
 	for _, t := range sorted {
 		fmt.Fprintf(&b, "## %s - %s\n\n", t.Name, t.Tagline)
-		fmt.Fprintf(&b, "Group: %s\n\n", t.Group)
 
 		// Flags table (aligned)
 		sflagW, sshortW, sdescW := len("Flag"), len("Short"), len("Description")

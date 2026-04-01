@@ -58,23 +58,30 @@ cat article.md | vrk chunk --size 4000 --by paragraph
 
 Use `--by paragraph` when your content has natural paragraph structure and you want each chunk to contain complete paragraphs. If a single paragraph exceeds `--size`, it falls back to token-level splitting for that paragraph.
 
-## Processing chunks in a loop
+## Processing chunks through an LLM
 
-The standard pattern for processing each chunk through an LLM:
+Use `vrk prompt --field text` to process each chunk. One API call per record, no loop needed:
 
 ```bash
 cat long-document.md | vrk chunk --size 4000 --overlap 200 | \
-  while IFS= read -r record; do
-    echo "$record" | jq -r '.text' | \
-      vrk prompt --system 'Extract all named entities as a JSON array'
-  done
+  vrk prompt --field text --system 'Extract all named entities as a JSON array' --json
 ```
 
-Breaking this down:
+The `--field text` flag reads each JSONL line, extracts the `text` field, and sends it as the prompt. With `--json`, the output merges input fields (index, tokens) with response metadata.
 
-- `while IFS= read -r record` reads one JSONL line at a time. `IFS=` prevents word splitting. `-r` prevents backslash interpretation.
-- `jq -r '.text'` extracts the text field from the JSONL record as raw text (no JSON quotes).
-- The loop runs once per chunk, so each LLM call stays within the context window.
+> **Advanced: shell loop pattern**
+>
+> If you need per-record shell logic beyond what `--field` provides (e.g. conditional processing, writing to different files), use a `while` loop:
+>
+> ```bash
+> cat long-document.md | vrk chunk --size 4000 --overlap 200 | \
+>   while IFS= read -r record; do
+>     echo "$record" | jq -r '.text' | \
+>       vrk prompt --system 'Extract all named entities as a JSON array'
+>   done
+> ```
+>
+> `IFS=` prevents word splitting. `-r` prevents backslash interpretation. Prefer `--field` for straightforward pipelines.
 
 ## Pipeline integration
 
@@ -84,13 +91,12 @@ Breaking this down:
 # Convert a PDF to text, chunk it, extract entities from each piece
 pdftotext contract.pdf - | \
   vrk chunk --size 4000 --overlap 200 | \
-  while IFS= read -r record; do
-    echo "$record" | jq -r '.text' | \
-      vrk prompt \
-        --schema '{"entities":"array","summary":"string"}' \
-        --retry 2 \
-        --system 'Extract named entities and a one-sentence summary'
-  done | vrk validate --schema '{"entities":"array","summary":"string"}' --strict
+  vrk prompt --field text \
+    --schema '{"entities":"array","summary":"string"}' \
+    --retry 2 \
+    --system 'Extract named entities and a one-sentence summary' \
+    --json | \
+  vrk validate --schema '{"entities":"array","summary":"string"}' --strict
 ```
 
 ### Measure before chunking
@@ -102,9 +108,7 @@ if [ "$TOKENS" -le 8000 ]; then
   cat report.md | vrk prompt --system 'Summarize this report'
 else
   cat report.md | vrk chunk --size 4000 --overlap 200 | \
-    while IFS= read -r record; do
-      echo "$record" | jq -r '.text' | vrk prompt --system 'Summarize this section'
-    done
+    vrk prompt --field text --system 'Summarize this section'
 fi
 ```
 
@@ -114,10 +118,7 @@ fi
 # Grab a long article, chunk it, summarize each section
 vrk grab https://example.com/long-article | \
   vrk chunk --size 4000 --by paragraph | \
-  while IFS= read -r record; do
-    echo "$record" | jq -r '.text' | \
-      vrk prompt --system 'Summarize this section in one paragraph'
-  done
+  vrk prompt --field text --system 'Summarize this section in one paragraph'
 ```
 
 ## When it fails

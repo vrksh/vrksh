@@ -136,13 +136,12 @@ cat deploy.log | vrk mask | \
 ```bash
 # Extract entities from each chunk, validate the schema, log results
 cat long-document.md | vrk chunk --size 4000 | \
-  while IFS= read -r record; do
-    echo "$record" | jq -r '.text' | \
-      vrk prompt \
-        --schema '{"entities":"array","summary":"string"}' \
-        --retry 2 \
-        --system 'Extract named entities and a one-line summary'
-  done | vrk validate --schema '{"entities":"array","summary":"string"}' --strict
+  vrk prompt --field text \
+    --schema '{"entities":"array","summary":"string"}' \
+    --retry 2 \
+    --system 'Extract named entities and a one-line summary' \
+    --json | \
+  vrk validate --schema '{"entities":"array","summary":"string"}' --strict
 ```
 
 ### Nightly batch with retry and state tracking

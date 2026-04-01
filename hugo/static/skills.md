@@ -4,8 +4,6 @@ Machine-readable tool reference. One section per tool.
 
 ## assert - pipeline condition check - jq conditions, --contains, --matches
 
-Group: v1
-
 | Flag         | Short | Description                                  |
 |--------------|-------|----------------------------------------------|
 | `--contains` |       | Assert stdin contains this literal substring |
@@ -24,8 +22,6 @@ echo '{"status":"ok","count":42}' | vrk assert '.count > 0'
 
 ## bare - symlink creator - use vrksh tools without the vrk prefix
 
-Group: v1
-
 | Flag        | Short | Description                                       |
 |-------------|-------|---------------------------------------------------|
 | `--force`   |       | Overwrite existing files at symlink paths         |
@@ -43,8 +39,6 @@ vrk --bare --dry-run
 
 ## base - encoding converter - base64, base64url, hex, base32
 
-Group: v1
-
 | Flag      | Short | Description                                                         |
 |-----------|-------|---------------------------------------------------------------------|
 | `--to`    |       | Target encoding: base64, base64url, hex, base32 (encode subcommand) |
@@ -60,8 +54,6 @@ echo 'hello' | vrk base encode --to base64
 ```
 
 ## chunk - token-aware text splitter - JSONL chunks within a token budget
-
-Group: v1
 
 | Flag        | Short | Description                           |
 |-------------|-------|---------------------------------------|
@@ -79,8 +71,6 @@ cat contract.pdf.txt | vrk chunk --size 4000 --overlap 200
 ```
 
 ## coax - retry wrapper - --times, --backoff, --on, --until
-
-Group: v1
 
 | Flag            | Short | Description                                                       |
 |-----------------|-------|-------------------------------------------------------------------|
@@ -102,8 +92,6 @@ echo 'Summarize this' | vrk coax --times 5 --backoff exp:200ms -- vrk prompt
 
 ## completions - shell completion script generator - bash, zsh, fish
 
-Group: v1
-
 | Flag     | Short | Description         |
 |----------|-------|---------------------|
 | `--json` | -j    | Emit errors as JSON |
@@ -117,8 +105,6 @@ vrk completions bash > ~/.bash_completion.d/vrk
 ```
 
 ## digest - universal hasher - sha256/md5/sha512, --hmac, --compare
-
-Group: v1
 
 | Flag        | Short | Description                                |
 |-------------|-------|--------------------------------------------|
@@ -142,8 +128,6 @@ vrk digest --file release.tar.gz --compare
 
 ## emit - structured logger - wraps stdin lines as JSONL log records
 
-Group: v1
-
 | Flag            | Short | Description                                                   |
 |-----------------|-------|---------------------------------------------------------------|
 | `--level`       | -l    | Log level: debug, info, warn, error                           |
@@ -160,8 +144,6 @@ run-pipeline 2>&1 | vrk emit --tag deploy --parse-level
 ```
 
 ## epoch - timestamp converter - unix/ISO, relative time
-
-Group: v1
 
 | Flag      | Short | Description                                                          |
 |-----------|-------|----------------------------------------------------------------------|
@@ -182,8 +164,6 @@ vrk epoch '+3d' --iso
 
 ## grab - URL fetcher - clean markdown, plain text, or raw HTML.
 
-Group: v1
-
 | Flag      | Short | Description                            |
 |-----------|-------|----------------------------------------|
 | `--text`  | -t    | Plain prose output, no markdown syntax |
@@ -201,8 +181,6 @@ vrk grab https://blog.example.com/llm-best-practices | vrk tok
 
 ## jsonl - JSON array to JSONL converter - --collect, --json
 
-Group: v1
-
 | Flag        | Short | Description                                                 |
 |-------------|-------|-------------------------------------------------------------|
 | `--collect` | -c    | Collect JSONL lines into a JSON array                       |
@@ -217,8 +195,6 @@ cat api-response.json | vrk jsonl | vrk validate --schema '{"name":"string"}'
 ```
 
 ## jwt - JWT inspector - decode, --claim, --expired, --valid.
-
-Group: v1
 
 | Flag        | Short | Description                                               |
 |-------------|-------|-----------------------------------------------------------|
@@ -237,8 +213,6 @@ echo $TOKEN | vrk jwt --claim sub
 ```
 
 ## kv - key-value store - SQLite-backed, namespaces, TTL, atomic counters.
-
-Group: v1
 
 | Flag        | Short | Description                               |
 |-------------|-------|-------------------------------------------|
@@ -259,8 +233,6 @@ vrk kv set --ns nightly-pipeline last_run "$(vrk epoch --now)" --ttl 24h
 
 ## links - hyperlink extractor - markdown, HTML, bare URLs to JSONL
 
-Group: v1
-
 | Flag      | Short | Description                               |
 |-----------|-------|-------------------------------------------|
 | `--bare`  | -b    | Output URLs only, one per line            |
@@ -276,8 +248,6 @@ vrk grab https://example.com/docs | vrk links --bare
 ```
 
 ## mask - secret redactor - entropy + pattern-based, streaming
-
-Group: v1
 
 | Flag        | Short | Description                                          |
 |-------------|-------|------------------------------------------------------|
@@ -295,8 +265,6 @@ cat deploy.log | vrk mask | vrk prompt --system 'What errors occurred?'
 ```
 
 ## moniker - memorable name generator - run IDs, job labels, temp dirs
-
-Group: v1
 
 | Flag          | Short | Description                          |
 |---------------|-------|--------------------------------------|
@@ -317,8 +285,6 @@ vrk moniker --count 5 --seed 42
 
 ## pct - percent encoder/decoder - RFC 3986, --encode, --decode, --form
 
-Group: v1
-
 | Flag       | Short | Description                                              |
 |------------|-------|----------------------------------------------------------|
 | `--encode` |       | Percent-encode input (RFC 3986 unless --form)            |
@@ -337,8 +303,6 @@ echo 'hello world&foo=bar' | vrk pct --encode
 
 ## plain - markdown stripper - removes syntax, keeps prose
 
-Group: v1
-
 | Flag      | Short | Description                                    |
 |-----------|-------|------------------------------------------------|
 | `--json`  | -j    | Emit JSON with text, input_bytes, output_bytes |
@@ -354,12 +318,11 @@ vrk grab https://example.com/docs | vrk plain | vrk tok
 
 ## prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
 
-Group: v1
-
 | Flag         | Short | Description                                                     |
 |--------------|-------|-----------------------------------------------------------------|
 | `--model`    | -m    | LLM model (default from VRK_DEFAULT_MODEL or claude-sonnet-4-6) |
 | `--system`   |       | System prompt text, or @file.txt to read from file              |
+| `--field`    |       | Dot-path field in each JSONL line to use as prompt text         |
 | `--budget`   |       | Exit 1 if prompt exceeds N tokens                               |
 | `--fail`     | -f    | Fail on non-2xx API response or schema mismatch                 |
 | `--json`     | -j    | Emit response as JSON envelope with metadata                    |
@@ -370,16 +333,14 @@ Group: v1
 | `--endpoint` |       | OpenAI-compatible API base URL                                  |
 
 Exit 0: Success
-Exit 1: API failure, budget exceeded, or schema mismatch
-Exit 2: Usage error - no input, missing flags
+Exit 1: API failure, budget exceeded, schema mismatch, invalid JSONL, field not found
+Exit 2: Usage error - no input, missing flags, --field with --explain
 
 ```bash
 cat article.md | vrk prompt --system 'Summarize the key findings in 3 bullet points'
 ```
 
 ## recase - naming convention converter - snake, camel, kebab, pascal, title
-
-Group: v1
 
 | Flag      | Short | Description                                                                    |
 |-----------|-------|--------------------------------------------------------------------------------|
@@ -396,8 +357,6 @@ echo 'user_first_name' | vrk recase --to camel
 ```
 
 ## sip - stream sampler - --first, --count, --every, --sample
-
-Group: v1
 
 | Flag       | Short | Description                                   |
 |------------|-------|-----------------------------------------------|
@@ -419,8 +378,6 @@ cat access.log | vrk sip --count 1000 --seed 42
 
 ## slug - URL/filename slug generator - --separator, --max, --json
 
-Group: v1
-
 | Flag          | Short | Description                                                   |
 |---------------|-------|---------------------------------------------------------------|
 | `--separator` |       | Word separator character or string                            |
@@ -438,8 +395,6 @@ echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
 
 ## sse - SSE stream parser - text/event-stream to JSONL
 
-Group: v1
-
 | Flag      | Short | Description                                      |
 |-----------|-------|--------------------------------------------------|
 | `--event` | -e    | Only emit events of this type                    |
@@ -454,8 +409,6 @@ curl -sN $API_URL | vrk sse --field data.delta.text
 ```
 
 ## throttle - rate limiter for pipes - --rate N/s or N/m
-
-Group: v1
 
 | Flag             | Short | Description                                               |
 |------------------|-------|-----------------------------------------------------------|
@@ -475,8 +428,6 @@ cat records.jsonl | vrk throttle --rate 10/s --burst 5
 
 ## tok - Count tokens. Gate pipelines before they fail.
 
-Group: v1
-
 | Flag      | Short | Description                                                              |
 |-----------|-------|--------------------------------------------------------------------------|
 | `--check` |       | Pass input through if ≤N tokens; exit 1 with empty stdout if over        |
@@ -494,8 +445,6 @@ cat system-prompt.txt | vrk tok --check 8000 | vrk prompt --system 'Summarize'
 
 ## urlinfo - URL parser - scheme, host, port, path, query, --field
 
-Group: v1
-
 | Flag      | Short | Description                                                               |
 |-----------|-------|---------------------------------------------------------------------------|
 | `--field` | -F    | Extract a single field as plain text (supports dot-path for query params) |
@@ -511,8 +460,6 @@ vrk urlinfo 'https://api.example.com:8080/v1/search?q=llm+tools&limit=10'
 ```
 
 ## uuid - UUID generator - v4/v7, --count, --json
-
-Group: v1
 
 | Flag      | Short | Description                                     |
 |-----------|-------|-------------------------------------------------|
@@ -530,8 +477,6 @@ vrk uuid --v7 --count 5
 ```
 
 ## validate - JSONL schema validator - --schema, --strict, --fix, --json
-
-Group: v1
 
 | Flag       | Short | Description                                         |
 |------------|-------|-----------------------------------------------------|
