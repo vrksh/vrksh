@@ -38,7 +38,7 @@ Your agent needs to know three things: what tools exist, what each tool does, an
 
 For common pipeline compositions, see [vrk.sh/recipes](https://vrk.sh/recipes/) - each recipe includes the problem it solves and the tools involved.
 
-**If your agent has shell access, use the CLI.** It works offline, costs zero tokens to fetch, and always matches the installed version. The HTTP endpoints exist for agents that can only make web requests.
+**If your agent has shell access, use the CLI.** It works offline, costs zero tokens to fetch, and always matches the installed version.
 
 ```bash
 # What tools are available?
