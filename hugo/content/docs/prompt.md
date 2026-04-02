@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You want to call an LLM from a shell script. So you write a curl command: escape the JSON, set the headers, parse the response, handle errors. The prompt has a newline in it and your JSON breaks. The API returns a 429 and your jq pipeline prints `null`. You've spent more time on HTTP plumbing than on the actual task.
-
-`vrk prompt` pipes text to Claude or GPT from your terminal and prints the response to stdout. Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, pipe in content, and get back plain text. No curl. No JSON escaping. No response parsing. Temperature defaults to 0 for deterministic, reproducible output. Add `--schema` and the response is validated against a JSON schema. Add `--retry` and failed validations are retried with escalating temperature.
-
 ## The problem
 
-You need to summarize 200 documents nightly. Each one needs a curl command with proper JSON escaping, content-type headers, API key management, response extraction, and error handling. One document has a backtick in it. Your JSON breaks. The pipeline keeps running. You get 47 empty summaries before anyone notices.
+Calling an LLM from a shell script means a curl command with JSON escaping, content-type headers, API key management, and response extraction. A backtick in the input breaks the JSON. A 429 response makes the jq pipeline print `null`. You spend more time on HTTP plumbing than on the actual task.
+
+## The solution
+
+`vrk prompt` pipes text to Claude or GPT and prints the response to stdout. Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, pipe in content, get back plain text. No curl, no JSON escaping, no response parsing. Temperature defaults to 0 for deterministic output. `--schema` validates the response against a JSON schema. `--retry` retries failed validations with escalating temperature.
 
 ## Before and after
 

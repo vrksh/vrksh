@@ -3,14 +3,12 @@ tagline: structured logger - wraps stdin lines as JSONL log records
 meta_description: "Turn plain text into structured JSONL log records. Add timestamps, levels, and fields to any pipeline output."
 og_title: "vrk emit - structured JSONL logging for shell pipelines"
 description: |
-  Your pipeline prints unstructured text to stdout. Errors, warnings, and info messages all look the same. When something breaks at 3 AM, you grep through a flat text file trying to find the ERROR lines mixed in with thousands of INFO lines. No timestamps. No log levels. No structure.
-
-  `vrk emit` wraps plain text lines into structured JSONL log records with ISO timestamps, log levels, and optional tags. Pipe any command's output through emit and get machine-parseable logs. Use `--parse-level` to auto-detect ERROR/WARN/INFO prefixes from existing output. Use `--tag` to label records by pipeline stage.
+  `vrk emit` wraps plain text lines into structured JSONL log records with ISO timestamps, log levels, and tags. Pipe any command's output through it and get machine-parseable logs. `--parse-level` auto-detects ERROR/WARN/INFO prefixes from existing output. `--tag` labels records by pipeline stage so you can filter later.
 problem: >
-  Your nightly pipeline runs 5 stages. Each one prints to stdout. When stage 3
-  fails, you have 10,000 lines of unstructured text with no timestamps and no way
-  to tell which stage produced which line. You add echo statements with dates,
-  but the format is inconsistent and grep-hostile.
+  A five-stage pipeline prints 10,000 lines of unstructured text. Stage 3 fails.
+  There are no timestamps and no way to tell which stage produced which line.
+  `echo "[$(date)] ERROR: ..."` adds inconsistent formatting that is hard to grep
+  and impossible to aggregate.
 before: |
   echo "[$(date)] INFO: Processing started"
   echo "[$(date)] ERROR: Connection failed"

@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-Your pipeline calls an LLM and pipes the result to a database. But sometimes the LLM returns `{"error":"rate limited"}` instead of real data. It's valid JSON, it passes through jq, and it ends up in your database. You don't find out until a user reports garbage results.
-
-`vrk assert` checks conditions on pipeline data and stops the pipeline if the check fails. In JSON mode, it evaluates gojq expressions like `.status == "ok"` or `.items | length > 0`. In text mode, it checks for substrings with `--contains` or regex patterns with `--matches`. Data passes through on success (exit 0) and the pipeline halts on failure (exit 1).
-
 ## The problem
 
-Your pipeline extracts structured data from an LLM, validates the schema, and stores it. The schema is valid but the content is wrong - the LLM returned {"status":"error","message":"rate limited"} and it matched the schema because status is a string. You need to check values, not just types.
+Schema validation catches missing fields and wrong types. It does not catch wrong values. An LLM returns {"status":"error","message":"rate limited"} and the schema passes because status is a string. The garbage ends up in your database. You find out when a user reports it.
+
+## The solution
+
+`vrk assert` evaluates conditions on pipeline data and stops the flow if a check fails. In JSON mode it runs gojq expressions. In text mode it checks substrings or regex patterns. Data passes through on success, so you can insert it between any two pipeline stages as a gate without breaking the data flow.
 
 ## Before and after
 

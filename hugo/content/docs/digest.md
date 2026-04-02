@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You need to hash a file and compare it against a known checksum. `sha256sum` exists on Linux but not macOS. `shasum -a 256` exists on macOS but the output format differs. You end up with `if [ "$(shasum -a 256 < file | cut -d' ' -f1)" = "$EXPECTED" ]` and it works until someone passes a filename with spaces.
-
-`vrk digest` hashes with SHA-256 (default), MD5, or SHA-512. It reads from stdin, positional arguments, or files with `--file`. Compare hashes with `--compare`, compute HMACs with `--hmac`, and verify them with `--verify`. Uses constant-time comparison to resist timing attacks.
-
 ## The problem
 
-You download a binary and want to verify its SHA-256 checksum. On macOS you use shasum -a 256. On Linux you use sha256sum. The output formats differ. You write a verification script and it breaks when someone runs it on the other OS. For HMAC verification, you reach for openssl and the flag syntax is even worse.
+`sha256sum` exists on Linux but not macOS. `shasum -a 256` exists on macOS but the output format differs. A verification script that works locally breaks on the other OS. For HMAC, `openssl dgst` exists but the flag syntax is hostile and differs across versions.
+
+## The solution
+
+`vrk digest` hashes with SHA-256 (default), MD5, or SHA-512. Works the same on macOS and Linux. Compare file hashes with `--compare`, compute HMACs with `--hmac`, and verify them with `--verify`. Uses constant-time comparison for verification to resist timing attacks.
 
 ## Before and after
 

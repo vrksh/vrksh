@@ -56,13 +56,6 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 			b.WriteString("\n\n")
 		}
 
-		// About section
-		if t.Description != "" {
-			b.WriteString("## About\n\n")
-			b.WriteString(strings.TrimRight(t.Description, "\n"))
-			b.WriteString("\n\n")
-		}
-
 		// Problem statement
 		if t.Problem != "" {
 			b.WriteString("## The problem\n\n")
@@ -70,6 +63,13 @@ func GenerateToolDocs(tools []schema.Tool, notesDir, outDir string) error {
 			b.WriteString("\n\n")
 		} else {
 			fmt.Fprintf(os.Stderr, "warning: %s: missing problem field\n", t.Name)
+		}
+
+		// Solution section
+		if t.Description != "" {
+			b.WriteString("## The solution\n\n")
+			b.WriteString(strings.TrimRight(t.Description, "\n"))
+			b.WriteString("\n\n")
 		}
 
 		// Before / After section

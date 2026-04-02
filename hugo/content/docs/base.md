@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-`base64` behaves differently on macOS and Linux. On macOS it wraps at 76 characters. On Linux it doesn't. `base64 -d` on macOS is `base64 --decode` on Linux. You write a script that works on your Mac and it breaks in CI.
-
-`vrk base` encodes and decodes base64, base64url, hex, and base32 with identical behavior on every platform. Two subcommands: `encode` and `decode`. Strips one trailing newline from stdin so `echo` input works correctly.
-
 ## The problem
 
-You base64-encode a value in a script. On macOS, base64 wraps output at 76 characters. Your downstream parser chokes on the line breaks. You add -w0 but that flag doesn't exist on macOS. You're now maintaining platform-specific branches for a one-line encoding operation.
+`base64` behaves differently on macOS and Linux. macOS wraps output at 76 characters. `-w0` disables wrapping on Linux but does not exist on macOS. `-d` means decode on macOS, `--decode` on Linux. A script that works locally breaks in CI on a different OS.
+
+## The solution
+
+`vrk base` encodes and decodes base64, base64url, hex, and base32 with identical behavior on every platform. Two subcommands: `encode` and `decode`. Strips one trailing newline from stdin so `echo` input works correctly. No platform-specific flags to remember.
 
 ## Before and after
 

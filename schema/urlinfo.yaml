@@ -3,14 +3,12 @@ tagline: URL parser - scheme, host, port, path, query, --field
 meta_description: "Parse URLs and extract components. Get scheme, host, path, query params, or any field individually."
 og_title: "vrk urlinfo - URL parser and component extractor"
 description: |
-  You need to extract the hostname from a URL in a shell script. You reach for `cut -d'/' -f3` and it works until someone passes a URL with a port number or a username. You try sed with a regex and it handles 90% of cases. The other 10% break your pipeline when real URLs arrive.
-
-  `vrk urlinfo` parses URLs into structured JSON components: scheme, host, port, path, query parameters, fragment, and user. Use `--field` with dot-path syntax to extract a single component. Handles edge cases that regex approaches miss. No network calls - pure parsing.
+  `vrk urlinfo` parses URLs into structured JSON components: scheme, host, port, path, query parameters, fragment, and user. `--field` with dot-path syntax extracts a single component. Handles edge cases that regex approaches miss. No network calls, pure parsing.
 problem: >
-  You're processing a list of URLs and need to group them by domain. You extract
-  the hostname with cut -d'/' -f3. A URL has a port number: https://api.example.com:8080/path.
-  Cut returns "api.example.com:8080" including the port. Your grouping breaks.
-  Another URL has basic auth in it. Your regex didn't account for @ symbols.
+  `cut -d'/' -f3` extracts a hostname until a URL has a port number or basic auth.
+  `https://api.example.com:8080/path` returns "api.example.com:8080" including
+  the port. A URL with `user:pass@host` breaks the regex entirely. The 10% of
+  URLs that don't fit a simple pattern break the pipeline.
 before: |
   echo 'https://api.example.com:8080/path?q=test' | cut -d'/' -f3
   # Returns "api.example.com:8080" - includes port

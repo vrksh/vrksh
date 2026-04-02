@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You need a unique ID for a database row, a batch run, or a file name. `uuidgen` exists on macOS but not everywhere. It only generates v4. You need v7 (time-ordered) for database primary keys that sort by creation time, and `uuidgen` can't do that.
-
-`vrk uuid` generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across macOS and Linux. Use `--v7` for database keys that sort chronologically. Use `--count` to generate multiple UUIDs in one call.
-
 ## The problem
 
-You generate UUIDs for database rows with uuidgen. Your queries are slow because B-tree indexes fragment on random v4 UUIDs. You read about v7 UUIDs that sort by creation time. Your system uuidgen doesn't support v7. You pull in a Python dependency for one function.
+`uuidgen` generates v4 UUIDs, which fragment B-tree indexes because they are random. v7 UUIDs sort by creation time and fix this, but `uuidgen` does not support v7. It also does not exist on all platforms and has no batch mode.
+
+## The solution
+
+`vrk uuid` generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across macOS and Linux. v7 UUIDs sort by creation time, which keeps B-tree indexes compact. `--count` generates batches in one call.
 
 ## Before and after
 

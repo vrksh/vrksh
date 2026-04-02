@@ -3,15 +3,12 @@ tagline: token-aware text splitter - JSONL chunks within a token budget
 meta_description: "Split text into token-aware chunks that fit LLM context windows. JSONL output, respects sentence boundaries."
 og_title: "vrk chunk - token-aware text splitter for LLM context windows"
 description: |
-  You have a 50-page contract and you need an LLM to extract every obligation. The document is 38,000 tokens. Your model's context window is 8,192. You split on line count - 100 lines per file. Some chunks are 800 tokens, some are 3,200. One chunk ends mid-sentence. The obligation "Vendor shall deliver... within 30 days" gets split across two chunks. Both chunks miss it.
-
-  `vrk chunk` splits long documents into token-aware pieces that fit within an LLM's context window. Each chunk is emitted as a JSONL record with its index, text, and exact token count. Splitting respects token boundaries and supports configurable overlap so context is preserved at the edges. No more guessing whether `split -l 100` maps to tokens.
+  `vrk chunk` splits text into token-counted pieces that fit within an LLM context window. Each chunk is emitted as a JSONL record with its index, text, and exact token count. Configurable overlap preserves context at boundaries so entities that span a split point appear in both adjacent chunks.
 problem: >
-  You need to process a long document through an LLM but it exceeds the context
-  window. `split -l` splits by line count, which has no relationship to token count.
-  `fold -w` splits by characters, which is worse. You write a Python script to split
-  by tokens and it takes longer to debug than the actual task. Meanwhile, every entity
-  that spans a split boundary is silently lost.
+  A 38,000-token document needs to go through a model with an 8,192-token window.
+  `split -l 100` divides by line count, which has no relationship to tokens. One
+  chunk is 800 tokens, the next is 4,900. An obligation clause that spans a split
+  boundary gets lost because neither chunk has the full sentence.
 before: |
   split -l 100 document.txt chunk_
   # chunk_aa: 312 tokens (wasted context space)

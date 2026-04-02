@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-Your API returns `snake_case` field names but your frontend expects `camelCase`. You write a sed command to convert and it breaks on acronyms - `http_api_url` becomes `httpApiUrl` instead of handling the abbreviation correctly.
-
-`vrk recase` converts between naming conventions: snake_case, camelCase, PascalCase, kebab-case, SCREAMING_SNAKE, Title Case, and more. Auto-detects the input convention. Handles acronyms correctly. Processes line by line so you can convert a list of names in one pass.
-
 ## The problem
 
-You're migrating an API and need to convert 200 field names from snake_case to camelCase. You write a Python script. It takes 30 lines to handle edge cases: leading underscores, consecutive capitals, numeric suffixes. You test it on http_api_url and get httpApiUrl. Close enough? Not for a public API.
+Converting 200 field names from snake_case to camelCase takes 30 lines of Python to handle edge cases: leading underscores, consecutive capitals, numeric suffixes. `sed 's/_\(.\)/\U\1/g'` handles simple cases but breaks on acronyms like `http_api_url`.
+
+## The solution
+
+`vrk recase` converts between naming conventions: snake_case, camelCase, PascalCase, kebab-case, SCREAMING_SNAKE, Title Case, and more. Auto-detects the input convention and handles acronyms correctly. Processes line by line for batch conversion.
 
 ## Before and after
 

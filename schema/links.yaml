@@ -3,13 +3,11 @@ tagline: hyperlink extractor - markdown, HTML, bare URLs to JSONL
 meta_description: "Extract every hyperlink from markdown, HTML, or plain text. JSONL output with text, URL, and line number."
 og_title: "vrk links - extract hyperlinks from markdown and HTML"
 description: |
-  You need to find every URL in a document - markdown links, HTML anchors, and bare URLs scattered through prose. You write a regex and it misses reference-style markdown links. You add another regex and it matches URLs inside code blocks that aren't real links.
-
-  `vrk links` extracts hyperlinks from markdown, HTML, or plain text and outputs one JSONL record per link with the link text, URL, and line number. Handles inline links, reference-style links, HTML anchor tags, and bare URLs. Use `--bare` for just the URLs, one per line.
+  `vrk links` extracts hyperlinks from markdown, HTML, or plain text and outputs one JSONL record per link with the link text, URL, and line number. Handles inline links, reference-style links, HTML anchor tags, and bare URLs. `--bare` outputs just the URLs, one per line.
 problem: >
-  You need to extract all links from a markdown file. grep finds bare URLs but misses
-  markdown links. A Python script with regex handles inline links but misses reference-style
-  links. You end up with partial results and no line numbers.
+  `grep -oE 'https?://[^ ]+'` finds bare URLs but misses `[text](url)` markdown
+  links. A regex that handles inline links misses reference-style `[text][ref]`
+  links. Neither approach gives you line numbers or link text.
 before: |
   grep -oE 'https?://[^ ]+' README.md
   # misses [text](url) markdown links

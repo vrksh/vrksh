@@ -10,13 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-Lets you call any vrksh tool by name without the vrk prefix. Instead of vrk tok, vrk jwt, vrk epoch, you just type tok, jwt, epoch. It creates symlinks in the same directory as the binary - nothing is copied, nothing is installed elsewhere.
-
 ## The problem
 
-Every vrksh command requires the vrk prefix. In interactive sessions you type vrk tok, vrk jwt, vrk epoch dozens of times a day. The prefix adds friction without adding clarity.
+A multicall binary means typing the prefix on every invocation. In an interactive session where you run 30 commands in a row, the prefix is pure friction.
+
+## The solution
+
+`vrk --bare` creates symlinks so you can call any tool by name directly: `tok`, `jwt`, `epoch` instead of `vrk tok`, `vrk jwt`, `vrk epoch`. Symlinks point back to the same binary. Nothing is copied. Remove them with `--remove`.
 
 ## Before and after
 

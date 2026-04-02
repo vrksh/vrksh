@@ -3,15 +3,12 @@ tagline: secret redactor - entropy + pattern-based, streaming
 meta_description: "Redact secrets from pipeline output before logging. Detects API keys, tokens, and high-entropy strings automatically."
 og_title: "vrk mask - automatic secret redaction for pipeline output"
 description: |
-  You pipe log output to an LLM for analysis and accidentally send API keys, Bearer tokens, and passwords in the prompt. The LLM provider now has your production credentials. You don't find out until a security audit three months later flags the API call in the provider's logs.
-
-  `vrk mask` redacts secrets from text before it reaches an LLM or a log file. It catches Bearer tokens, passwords, API keys, and other credentials using built-in pattern matching. It also flags high-entropy strings that look like secrets but don't match a known pattern. Add `--pattern` for custom regexes to catch internal identifiers. Streams input line-by-line, so it handles any file size safely.
+  `vrk mask` redacts secrets from text using built-in pattern matching for Bearer tokens, API keys, passwords, and connection strings. It also flags high-entropy strings that look like secrets but don't match a known pattern. Streams line-by-line, so it handles any file size. Add `--pattern` for custom regexes.
 problem: >
-  You're debugging a production issue. You pipe the last 500 lines of your
-  application log to an LLM and ask it what went wrong. The logs contain database
-  connection strings with passwords, API keys in HTTP headers, and Bearer tokens.
-  All of it just went to a third-party API. Your security team asks why production
-  credentials appeared in an external service's request logs.
+  You pipe 500 lines of application logs to an LLM to diagnose an outage. The
+  logs contain database connection strings, API keys in HTTP headers, and Bearer
+  tokens. All of it goes to a third-party API. Three months later a security audit
+  finds production credentials in the provider's request logs.
 before: |
   cat output.log | sed 's/Bearer [^ ]*/Bearer ***/g' | \
     sed 's/password=[^ ]*/password=***/g'

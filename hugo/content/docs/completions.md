@@ -10,13 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-Generates tab-completion scripts for your shell. After installing, vrk <tab> completes tool names and vrk tok --<tab> completes flags. The completions are generated from the binary itself, so they always match the version you have installed.
-
 ## The problem
 
-You install vrksh but tab-completion does not work. You cannot remember all 28 tool names or their flags. You type vrk and hit tab and nothing happens.
+A multicall binary has 26 tool names and hundreds of flags. Without tab completion you are guessing names and checking `--help` constantly.
+
+## The solution
+
+`vrk completions` generates tab-completion scripts for bash, zsh, and fish. After installing, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags. The completions are generated from the binary itself, so they always match the installed version.
 
 ## Before and after
 

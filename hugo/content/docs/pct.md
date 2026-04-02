@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You need to percent-encode a URL parameter. `curl --data-urlencode` encodes the whole value but you just need the encoded string. You reach for Python's urllib.parse.quote and it encodes spaces as `+` in some modes and `%20` in others. The difference between path encoding and form encoding matters, and most tools don't let you choose.
-
-`vrk pct` percent-encodes and decodes text per RFC 3986. Use `--encode` for path-safe encoding (spaces become `%20`). Add `--form` for HTML form encoding (spaces become `+`). Processes line by line for batch conversion.
-
 ## The problem
 
-You're building a URL with query parameters in a shell script. A parameter value contains spaces and ampersands. You use Python's quote() but forget the difference between quote() and quote_plus(). Spaces become + instead of %20. The API rejects the request because it expects path encoding, not form encoding.
+A URL parameter contains spaces and ampersands. Python's `quote()` encodes spaces as `%20`, `quote_plus()` encodes them as `+`. The difference matters: the API expects path encoding, not form encoding. `curl --data-urlencode` encodes the whole value but you just need the encoded string by itself.
+
+## The solution
+
+`vrk pct` percent-encodes and decodes text per RFC 3986. `--encode` gives path-safe encoding (spaces become `%20`). `--form` switches to HTML form encoding (spaces become `+`). Processes line by line for batch conversion.
 
 ## Before and after
 

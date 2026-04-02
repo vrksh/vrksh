@@ -2,13 +2,15 @@
 
 LLMs are probabilistic. The tools around them shouldn't be.
 
-vrksh (वृक्ष) is the Sanskrit word for tree. The project is **vrksh**. The command is `vrk`.
-
 [![CI](https://github.com/vrksh/vrksh/actions/workflows/ci.yml/badge.svg)](https://github.com/vrksh/vrksh/actions/workflows/ci.yml)
 ![Go](https://img.shields.io/badge/go-1.25-blue)
 ![Release](https://img.shields.io/github/v/release/vrksh/vrksh)
 
 One binary. Small composable tools. Zero silent failures.
+
+## Name
+
+vrksh (वृक्ष) is the Sanskrit word for tree. The project is **vrksh**. The command is `vrk`.
 
 ## Why
 
@@ -39,34 +41,34 @@ go install github.com/vrksh/vrksh@latest
 
 ## Tools
 
-| Tool | What it does | Key flags |
-|------|-------------|-----------|
-| `tok` | Count tokens, gate pipelines by token budget | `--check N`, `--json` |
-| `prompt` | Send a prompt to an LLM (Anthropic/OpenAI) | `--model`, `--system`, `--schema`, `--json` |
-| `chunk` | Split text into token-bounded chunks | `--size N`, `--overlap N`, `--by` |
-| `jwt` | Decode and inspect JWTs | `--claim`, `--expired`, `--valid`, `--json` |
-| `epoch` | Convert between Unix timestamps and ISO 8601 | `--iso`, `--tz`, `--now`, `--at` |
-| `uuid` | Generate UUIDs (v4/v7) | `--v7`, `--count N`, `--json` |
-| `sse` | Parse Server-Sent Events stream to JSONL | `--event`, `--field` |
-| `coax` | Retry a command until it succeeds | `--times N`, `--backoff`, `--on`, `--until` |
-| `kv` | Persistent key-value store (SQLite) | `set`, `get`, `del`, `incr`, `list` |
-| `grab` | Fetch a URL as clean markdown or plain text | `--text`, `--raw`, `--json` |
-| `links` | Extract hyperlinks from text as JSONL | `--bare`, `--json` |
-| `plain` | Strip markdown syntax, keep prose | `--json` |
-| `jsonl` | Convert JSON arrays to JSONL or collect back | `--collect`, `--json` |
-| `validate` | Validate JSONL against a schema, optionally repair via LLM | `--schema`, `--strict`, `--fix` |
-| `mask` | Redact secrets by entropy and pattern matching | `--pattern`, `--entropy`, `--json` |
-| `emit` | Wrap lines as structured JSONL log records | `--level`, `--tag`, `--parse-level` |
-| `assert` | Check conditions mid-pipeline, halt on failure | `<expr>`, `--contains`, `--matches` |
-| `sip` | Sample lines from stdin | `--first`, `--count`, `--every`, `--sample` |
-| `throttle` | Rate-limit lines from stdin | `--rate N/s`, `--burst N` |
-| `digest` | Hash stdin (sha256/md5/sha512), HMAC, compare | `--algo`, `--hmac`, `--key`, `--compare` |
-| `base` | Encode/decode base64, base64url, hex, base32 | `encode --to`, `decode --from` |
-| `recase` | Convert naming conventions (snake, camel, kebab) | `--to`, `--json` |
-| `slug` | Convert text to URL-safe slugs | `--separator`, `--max`, `--json` |
-| `moniker` | Generate memorable adjective-noun names | `--count`, `--seed`, `--json` |
-| `pct` | Percent-encode/decode per RFC 3986 | `--encode`, `--decode`, `--form` |
-| `urlinfo` | Parse a URL into components, no network calls | `--field`, `--json` |
+| Tool       | What it does                                               | Key flags                                   |
+| ---------- | ---------------------------------------------------------- | ------------------------------------------- |
+| `tok`      | Count tokens, gate pipelines by token budget               | `--check N`, `--json`                       |
+| `prompt`   | Send a prompt to an LLM (Anthropic/OpenAI)                 | `--model`, `--system`, `--schema`, `--json` |
+| `chunk`    | Split text into token-bounded chunks                       | `--size N`, `--overlap N`, `--by`           |
+| `jwt`      | Decode and inspect JWTs                                    | `--claim`, `--expired`, `--valid`, `--json` |
+| `epoch`    | Convert between Unix timestamps and ISO 8601               | `--iso`, `--tz`, `--now`, `--at`            |
+| `uuid`     | Generate UUIDs (v4/v7)                                     | `--v7`, `--count N`, `--json`               |
+| `sse`      | Parse Server-Sent Events stream to JSONL                   | `--event`, `--field`                        |
+| `coax`     | Retry a command until it succeeds                          | `--times N`, `--backoff`, `--on`, `--until` |
+| `kv`       | Persistent key-value store (SQLite)                        | `set`, `get`, `del`, `incr`, `list`         |
+| `grab`     | Fetch a URL as clean markdown or plain text                | `--text`, `--raw`, `--json`                 |
+| `links`    | Extract hyperlinks from text as JSONL                      | `--bare`, `--json`                          |
+| `plain`    | Strip markdown syntax, keep prose                          | `--json`                                    |
+| `jsonl`    | Convert JSON arrays to JSONL or collect back               | `--collect`, `--json`                       |
+| `validate` | Validate JSONL against a schema, optionally repair via LLM | `--schema`, `--strict`, `--fix`             |
+| `mask`     | Redact secrets by entropy and pattern matching             | `--pattern`, `--entropy`, `--json`          |
+| `emit`     | Wrap lines as structured JSONL log records                 | `--level`, `--tag`, `--parse-level`         |
+| `assert`   | Check conditions mid-pipeline, halt on failure             | `<expr>`, `--contains`, `--matches`         |
+| `sip`      | Sample lines from stdin                                    | `--first`, `--count`, `--every`, `--sample` |
+| `throttle` | Rate-limit lines from stdin                                | `--rate N/s`, `--burst N`                   |
+| `digest`   | Hash stdin (sha256/md5/sha512), HMAC, compare              | `--algo`, `--hmac`, `--key`, `--compare`    |
+| `base`     | Encode/decode base64, base64url, hex, base32               | `encode --to`, `decode --from`              |
+| `recase`   | Convert naming conventions (snake, camel, kebab)           | `--to`, `--json`                            |
+| `slug`     | Convert text to URL-safe slugs                             | `--separator`, `--max`, `--json`            |
+| `moniker`  | Generate memorable adjective-noun names                    | `--count`, `--seed`, `--json`               |
+| `pct`      | Percent-encode/decode per RFC 3986                         | `--encode`, `--decode`, `--form`            |
+| `urlinfo`  | Parse a URL into components, no network calls              | `--field`, `--json`                         |
 
 Every tool accepts input as a positional argument or via stdin:
 

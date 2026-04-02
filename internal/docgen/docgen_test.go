@@ -144,26 +144,26 @@ func TestGenerateToolDoc(t *testing.T) {
 		t.Error("missing After label")
 	}
 
-	// Check about section
-	if !strings.Contains(s, "## About") {
-		t.Error("missing About section")
+	// Check solution section
+	if !strings.Contains(s, "## The solution") {
+		t.Error("missing solution section")
 	}
 	if !strings.Contains(s, "The tok tool description.") {
-		t.Error("missing description in About section")
+		t.Error("missing description in solution section")
 	}
 
-	// Check section order: about → problem → before/after → example → exit codes → flags
-	posAbout := strings.Index(s, "## About")
+	// Check section order: problem -> solution -> before/after -> example -> exit codes -> flags
 	posProblem := strings.Index(s, "## The problem")
+	posAbout := strings.Index(s, "## The solution")
 	posBeforeAfter := strings.Index(s, "## Before and after")
 	posExample := strings.Index(s, "## Example")
 	posExit := strings.Index(s, "## Exit codes")
 	posFlags := strings.Index(s, "## Flags")
-	if posAbout >= posProblem {
-		t.Error("about must come before problem")
+	if posProblem >= posAbout {
+		t.Error("problem must come before solution")
 	}
-	if posProblem >= posBeforeAfter {
-		t.Error("problem must come before before/after")
+	if posAbout >= posBeforeAfter {
+		t.Error("solution must come before before/after")
 	}
 	if posBeforeAfter >= posExample {
 		t.Error("before/after must come before example")

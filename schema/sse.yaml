@@ -3,14 +3,11 @@ tagline: SSE stream parser - text/event-stream to JSONL
 meta_description: "Parse Server-Sent Event streams into JSONL. Turns text/event-stream into structured records you can pipe."
 og_title: "vrk sse - parse SSE streams into structured JSONL"
 description: |
-  You curl an LLM streaming endpoint and get back a wall of raw Server-Sent Events. Lines prefixed with `data:`, blank lines as delimiters, `[DONE]` sentinels, multi-line data fields. You need structured JSON records you can pipe to the next stage. You write a `grep '^data:' | sed 's/^data: //'` pipeline and it breaks the moment a data field spans two lines.
-
-  `vrk sse` parses `text/event-stream` format into clean JSONL records. It handles `data:` prefixes, blank-line event delimiters, multi-line data concatenation, and `[DONE]` sentinel detection (used by both Anthropic and OpenAI). Use `--field` with dot-path syntax to drill into nested JSON and extract just the text you need.
+  `vrk sse` parses `text/event-stream` into clean JSONL records. It handles `data:` prefixes, blank-line event delimiters, multi-line data concatenation, and `[DONE]` sentinel detection used by both Anthropic and OpenAI. `--field` with dot-path syntax drills into nested JSON to extract just the text fragments.
 problem: >
-  You're streaming a response from Claude's API. The raw output is data: prefixes,
-  blank-line delimiters, and [DONE] sentinels. You need just the text fragments.
-  You write grep + sed + jq and it works until a response contains a JSON object
-  that spans multiple data: lines. Your sed breaks. You miss events. The streamed
+  A streaming LLM endpoint returns raw Server-Sent Events: `data:` prefixes, blank
+  lines as delimiters, `[DONE]` sentinels. `grep '^data:' | sed 's/^data: //'`
+  works until a data field spans multiple lines. The sed breaks and the streamed
   response has gaps.
 before: |
   curl -sN https://api.example.com/stream | \

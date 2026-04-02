@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You need to check if a JWT is expired before making an API call. You paste it into jwt.io - a third-party website - and realize you just sent a production token to someone else's server. Or you base64-decode it manually and get the padding wrong.
-
-`vrk jwt` decodes JWT tokens locally, without sending them anywhere. It prints the payload as JSON, extracts individual claims with `--claim`, and checks expiry with `--expired` or full time validity with `--valid`. No signature verification - this is an inspection tool, not an auth library.
-
 ## The problem
 
-Your CI pipeline gets a 401 from an API. The token looks valid - it's a long base64 string. You paste it into jwt.io to debug. That token just went to a third-party server. You decode it manually with base64 and get the padding wrong. You add = characters until it works. Twenty minutes to find out the token expired two hours ago.
+A CI pipeline gets a 401. The token looks valid. You paste it into jwt.io to inspect it, which sends a production token to a third-party server. Or you base64-decode it manually and fight padding errors for twenty minutes. The answer was that the token expired two hours ago.
+
+## The solution
+
+`vrk jwt` decodes JWT tokens locally, without sending them anywhere. It prints the payload as JSON, extracts individual claims with `--claim`, and checks expiry with `--expired`. No signature verification. This is an inspection tool, not an auth library.
 
 ## Before and after
 

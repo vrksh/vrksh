@@ -3,14 +3,12 @@ tagline: URL fetcher - clean markdown, plain text, or raw HTML.
 meta_description: "Fetch any URL and get clean markdown back. No BeautifulSoup, no parsing scripts."
 og_title: "vrk grab - fetch any URL as clean markdown"
 description: |
-  You need the text of a web page for an LLM pipeline. You curl the URL and get 47KB of HTML - navigation bars, ad scripts, cookie banners, tracking pixels, and somewhere buried in the middle, the 2KB article you actually wanted. You write a Python script with BeautifulSoup. It works on one site. The next site uses different class names.
-
-  `vrk grab` fetches any URL and returns clean, readable markdown. It applies Readability-style content extraction to strip navigation, ads, scripts, and boilerplate. Use `--text` for plain prose with no formatting, or `--raw` for the unprocessed HTML. One command replaces curl + BeautifulSoup + custom extraction logic.
+  `vrk grab` fetches a URL and returns clean, readable markdown. Readability-style content extraction strips navigation, ads, scripts, and boilerplate. Use `--text` for plain prose or `--raw` for the unprocessed HTML. One command replaces curl + BeautifulSoup + custom extraction logic.
 problem: >
-  You curl a documentation page to feed to an LLM for summarization. The HTML
-  is 52KB. The actual article content is 3KB. The other 49KB is navigation,
-  JavaScript, CSS, footers, and cookie consent dialogs. Your LLM wastes most
-  of its context window on boilerplate and returns a summary of the navigation menu.
+  `curl` returns the full HTML of a page. A 52KB response contains 3KB of article
+  content and 49KB of navigation, JavaScript, cookie banners, and ads. Feeding
+  the raw HTML to an LLM wastes most of the context window on boilerplate.
+  BeautifulSoup extracts content, but the selectors differ for every site.
 before: |
   curl -s https://example.com/article | \
     python3 -c "

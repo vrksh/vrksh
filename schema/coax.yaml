@@ -3,14 +3,12 @@ tagline: retry wrapper - --times, --backoff, --on, --until
 meta_description: "Retry flaky commands with exponential backoff. Wrap any pipeline stage to handle transient API failures."
 og_title: "vrk coax - retry wrapper with backoff for flaky commands"
 description: |
-  Your LLM call fails at step 3 of a 10-step pipeline. The whole pipeline restarts from zero. You lose 9 API calls of work because one HTTP request hit a rate limit. You add a retry loop with `sleep` in bash, but you hardcode the delay at 2 seconds, forget to cap the retry count, and stdin was consumed on the first attempt so every retry sends empty input.
-
-  `vrk coax` retries flaky commands with configurable backoff. It buffers stdin so each retry gets the same input. You set the retry count, choose fixed or exponential backoff, cap the maximum delay, and optionally restrict retries to specific exit codes. It handles the three things bash retry loops always get wrong: stdin replay, backoff strategy, and retry limits.
+  `vrk coax` retries a command with configurable backoff. It buffers stdin so each attempt gets the same input. Fixed or exponential backoff, retry count caps, and exit-code filtering are all built in. It solves the three things bash retry loops always get wrong: stdin replay, backoff strategy, and retry limits.
 problem: >
-  You have a nightly pipeline that calls an LLM API 200 times. The API returns 429
-  (rate limited) on roughly 1 in 50 calls. You write a bash retry loop. It works
-  until the API starts returning 500s on a bad deploy, and your retry loop hammers
-  it 200 times with no backoff, making the outage worse.
+  A bash retry loop around a flaky API call works until the API starts returning
+  500s. The loop hammers it with no backoff, making the outage worse. Stdin was
+  consumed on the first attempt, so every retry sends empty input. The hardcoded
+  `sleep 2` is either too aggressive or too conservative.
 before: |
   for i in 1 2 3 4 5; do
     curl -sf https://api.example.com && break

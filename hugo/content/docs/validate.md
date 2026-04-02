@@ -14,15 +14,13 @@ noindex: false
 
 vrk validate is a JSON schema validator for shell pipelines - exit 1 on mismatch stops the pipeline before bad data propagates.
 
-## About
-
-Your LLM returns JSON that looks right but isn't. The `sentiment` field is sometimes a string, sometimes a number. The `confidence` key is missing on 3% of responses. You don't catch it until a downstream aggregation script crashes at 2 AM on 847 records that slipped through without the required fields.
-
-`vrk validate` checks every JSON record in a JSONL stream against a type schema. Valid records pass through to stdout. Invalid records are dropped with a warning to stderr. Use `--strict` to halt the pipeline on the first bad record. Use `--fix` to send invalid records to an LLM for repair.
-
 ## The problem
 
-You ask an LLM to return {"sentiment":"string","confidence":"number"} for 500 product reviews. 487 responses are perfect. 13 return confidence as a string instead of a number. Your Python analysis script crashes on float("high"). You re-run the entire pipeline because you didn't validate between the LLM and the database.
+An LLM returns {"sentiment":"string","confidence":"number"} for 500 product reviews. 487 are correct. 13 return confidence as a string instead of a number. The analysis script crashes on `float("high")`. The entire pipeline reruns because there was no validation between the LLM and the database.
+
+## The solution
+
+`vrk validate` checks every JSON record in a JSONL stream against a type schema. Valid records pass through to stdout. Invalid records are dropped with a warning to stderr. `--strict` halts the pipeline on the first bad record. `--fix` sends invalid records to an LLM for repair.
 
 ## Before and after
 

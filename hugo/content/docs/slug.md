@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You need URL-safe slugs from user-provided titles. You lowercase, replace spaces with hyphens, strip special characters. Then a user submits a title with Unicode characters, curly quotes, or unusual punctuation. Your regex misses them. The slug breaks the URL.
-
-`vrk slug` converts any text to a URL-safe, filename-safe slug. Normalizes Unicode to ASCII, lowercases everything, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. Use `--max` to truncate at word boundaries for length-limited contexts.
-
 ## The problem
 
-You generate filenames from document titles. A title contains "Uber's $3.1B Q4 Revenue" and your slugify function produces "uber-s--3-1b-q4-revenue" with a double hyphen. Another title has Unicode characters that pass through unchanged and break a downstream system that expects ASCII-only paths.
+A slugify function turns "Uber's $3.1B Q4 Revenue" into "uber-s--3-1b-q4-revenue" with a double hyphen. Another title has Unicode characters that pass through unchanged and break a downstream system expecting ASCII-only paths. `tr` and `sed` handle simple cases but miss edge cases consistently.
+
+## The solution
+
+`vrk slug` converts any text to a URL-safe, filename-safe slug. Normalizes Unicode to ASCII, lowercases, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` truncates at word boundaries for length-limited contexts.
 
 ## Before and after
 

@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You have a 10-million-line JSONL file and you need a random sample of 1,000 lines for testing. `shuf -n 1000` loads the entire file into memory. `head -1000` only gives you the first 1,000 lines, which isn't random. You write a Python script with reservoir sampling and it takes 20 lines for something that should be one command.
-
-`vrk sip` samples lines from stdin using one of four strategies: `--first N` (first N lines), `--count N` (uniform random sample via reservoir sampling, O(N) memory), `--every N` (every Nth line), or `--sample N` (each line with N% probability). Use `--seed` for reproducible samples.
-
 ## The problem
 
-You need to test a pipeline on a subset of data. head -1000 gives you the first 1000 lines but they're not representative. shuf -n 1000 gives you a random sample but loads the entire file into memory. On a 10GB log file, shuf gets OOM-killed. You need reservoir sampling but don't want to write it.
+`head -1000` gives you the first 1,000 lines, not a representative sample. `shuf -n 1000` gives a random sample but loads the entire file into memory. On a 10GB log file, `shuf` gets OOM-killed. Reservoir sampling in Python is 20 lines for something that should be one command.
+
+## The solution
+
+`vrk sip` samples lines from stdin using four strategies: `--first N` (first N lines), `--count N` (reservoir sampling, O(N) memory), `--every N` (every Nth line), or `--sample N` (each line with N% probability). `--seed` makes samples reproducible.
 
 ## Before and after
 

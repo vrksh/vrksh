@@ -3,14 +3,11 @@ tagline: UUID generator - v4/v7, --count, --json
 meta_description: "Generate UUIDs from the command line. v4 random or v7 time-sorted. Batch with --count."
 og_title: "vrk uuid - UUID v4 and v7 generator"
 description: |
-  You need a unique ID for a database row, a batch run, or a file name. `uuidgen` exists on macOS but not everywhere. It only generates v4. You need v7 (time-ordered) for database primary keys that sort by creation time, and `uuidgen` can't do that.
-
-  `vrk uuid` generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across macOS and Linux. Use `--v7` for database keys that sort chronologically. Use `--count` to generate multiple UUIDs in one call.
+  `vrk uuid` generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across macOS and Linux. v7 UUIDs sort by creation time, which keeps B-tree indexes compact. `--count` generates batches in one call.
 problem: >
-  You generate UUIDs for database rows with uuidgen. Your queries are slow because
-  B-tree indexes fragment on random v4 UUIDs. You read about v7 UUIDs that sort
-  by creation time. Your system uuidgen doesn't support v7. You pull in a Python
-  dependency for one function.
+  `uuidgen` generates v4 UUIDs, which fragment B-tree indexes because they are
+  random. v7 UUIDs sort by creation time and fix this, but `uuidgen` does not
+  support v7. It also does not exist on all platforms and has no batch mode.
 before: |
   uuidgen  # v4 only, macOS only, no batch mode
   # Need v7? Install Python + uuid7 package

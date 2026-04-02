@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-Your pipeline needs to remember state between runs - a cursor position, a count of processed items, a last-seen timestamp. You write to a flat file, but concurrent runs corrupt it. You add flock, but that doesn't work on NFS. You reach for Redis, but that's a whole server for one key.
-
-`vrk kv` is a persistent key-value store backed by SQLite. It stores strings, supports namespaces to isolate different pipelines, TTL for automatic expiry, and atomic increment/decrement for safe concurrent use. The database lives at `~/.vrk.db` (override with `VRK_KV_PATH`). No server. No config. Just set and get.
-
 ## The problem
 
-Your nightly pipeline processes items from a queue. It needs to track how many items it processed, store the timestamp of the last run, and resume from where it left off if it crashes. You write cursor state to /tmp/last_cursor.txt. A second cron job starts before the first finishes. Both read the same cursor. Both process the same 200 items. Your downstream database has duplicates.
+A pipeline needs to remember state between runs: a cursor position, a processed count, a last-run timestamp. Writing to a flat file works until two cron jobs overlap. Both read the same cursor. Both process the same 200 items. Redis solves concurrency but is a whole server for one key.
+
+## The solution
+
+`vrk kv` is a persistent key-value store backed by SQLite. Namespaces isolate different pipelines. TTL handles automatic expiry. Atomic `incr`/`decr` is safe under concurrent access. The database lives at `~/.vrk.db` (override with `VRK_KV_PATH`). No server, no config.
 
 ## Before and after
 

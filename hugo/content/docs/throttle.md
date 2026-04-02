@@ -14,15 +14,13 @@ noindex: false
 
 vrk throttle is a rate limiter for LLM API batch jobs - pace your pipeline to stay within API limits.
 
-## About
-
-You're calling an LLM API in a loop and hitting rate limits. The API allows 10 requests per second. Your loop fires as fast as stdin delivers lines. You add `sleep 0.1` but that's per iteration, not per second, and doesn't account for processing time. The API still rate-limits you.
-
-`vrk throttle` paces pipeline flow to a specified rate. Set `--rate 10/s` or `--rate 100/m` and lines are delayed to match. Use `--burst` to let the first N lines through immediately. Use `--tokens-field` for token-aware rate limiting when different records consume different API quotas.
-
 ## The problem
 
-Your pipeline processes 10,000 JSONL records through an LLM API. The API allows 60 requests per minute. Your pipeline fires requests as fast as it reads lines and gets rate-limited after the first 60. You add sleep 1 between requests but that turns a 3-minute pipeline into a 3-hour pipeline because sleep 1 is way too conservative.
+A pipeline sends 10,000 requests to an LLM API that allows 60 per minute. It fires as fast as stdin delivers and gets rate-limited after the first 60. Adding `sleep 1` between requests is too conservative and turns a 3-minute job into a 3-hour one. `sleep` is per-iteration, not per-second, and ignores processing time.
+
+## The solution
+
+`vrk throttle` paces pipeline flow to a specified rate. `--rate 10/s` or `--rate 100/m` delays lines to match. `--burst` lets the first N lines through immediately. `--tokens-field` enables token-aware rate limiting when records consume different API quotas.
 
 ## Before and after
 

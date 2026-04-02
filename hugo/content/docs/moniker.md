@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You need human-readable identifiers for pipeline runs, batch jobs, or temporary directories. UUIDs work but nobody can say "check run 98d06ca5-e747-4a63-8fc9-045f0e02f8d4" in a standup. You want something like Docker's container names - "bold-falcon" - but you don't want to pull in a dependency for it.
-
-`vrk moniker` generates memorable adjective-noun names from embedded wordlists. Deterministic with `--seed` for reproducible names. Use `--count` for batches and `--words` for longer names when you need more uniqueness. No duplicates within a single batch.
-
 ## The problem
 
-You label pipeline runs with timestamps like run-20260330-174856. Three runs fail in the same minute. The labels are identical. You switch to UUIDs and now nobody can tell "run 98d06ca5" from "run c4fd6dd9" during an incident call. You need names that are unique AND human-friendly.
+Timestamp labels like `run-20260330-174856` collide when three runs start in the same minute. UUIDs are unique but nobody can say "check run 98d06ca5" in an incident call. You need identifiers that are both unique and pronounceable.
+
+## The solution
+
+`vrk moniker` generates memorable adjective-noun names from embedded wordlists. Deterministic with `--seed` for reproducible names. `--count` for batches, `--words` for longer names when you need more uniqueness. No duplicates within a single batch.
 
 ## Before and after
 

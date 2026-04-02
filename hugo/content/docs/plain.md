@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You fetch a markdown document and send it to an LLM. The markdown syntax - headers, link URLs, code fences, bullet markers - consumes tokens but adds no information for the model. A 2,000-token document might be 1,400 tokens as plain text. Over hundreds of documents, that's real money.
-
-`vrk plain` strips markdown formatting and keeps only the prose. Headers become text, links keep their label but drop the URL, code blocks keep their content but lose the fences. The output is clean plain text ready for token-efficient LLM processing.
-
 ## The problem
 
-You process 500 markdown files through an LLM nightly. Each file has headers, links with long URLs, code fences, and bullet markers. All of that formatting is tokens the model reads but gains nothing from. You're paying for 30% more tokens than the actual content.
+Markdown syntax (headers, link URLs, code fences, bullet markers) consumes tokens but adds no information for an LLM. A 2,000-token document is 1,400 tokens as plain text. Over hundreds of documents nightly, that is 30% wasted context and real money. `sed` regex strips some formatting but misses nested structures.
+
+## The solution
+
+`vrk plain` strips markdown formatting and keeps the prose. Headers become text, links keep their label but drop the URL, code blocks keep their content but lose the fences. The output is clean plain text ready for token-efficient LLM processing.
 
 ## Before and after
 

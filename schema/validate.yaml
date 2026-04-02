@@ -3,14 +3,12 @@ tagline: JSONL schema validator - --schema, --strict, --fix, --json
 meta_description: "vrk validate checks LLM JSON output against a schema and exits 1 on mismatch. The pipeline stops before bad data reaches downstream systems. No error-handling code required."
 og_title: "vrk validate - schema validation for LLM JSON output"
 description: |
-  Your LLM returns JSON that looks right but isn't. The `sentiment` field is sometimes a string, sometimes a number. The `confidence` key is missing on 3% of responses. You don't catch it until a downstream aggregation script crashes at 2 AM on 847 records that slipped through without the required fields.
-
-  `vrk validate` checks every JSON record in a JSONL stream against a type schema. Valid records pass through to stdout. Invalid records are dropped with a warning to stderr. Use `--strict` to halt the pipeline on the first bad record. Use `--fix` to send invalid records to an LLM for repair.
+  `vrk validate` checks every JSON record in a JSONL stream against a type schema. Valid records pass through to stdout. Invalid records are dropped with a warning to stderr. `--strict` halts the pipeline on the first bad record. `--fix` sends invalid records to an LLM for repair.
 problem: >
-  You ask an LLM to return {"sentiment":"string","confidence":"number"} for
-  500 product reviews. 487 responses are perfect. 13 return confidence as a string
-  instead of a number. Your Python analysis script crashes on float("high"). You
-  re-run the entire pipeline because you didn't validate between the LLM and the database.
+  An LLM returns {"sentiment":"string","confidence":"number"} for 500 product
+  reviews. 487 are correct. 13 return confidence as a string instead of a number.
+  The analysis script crashes on `float("high")`. The entire pipeline reruns
+  because there was no validation between the LLM and the database.
 before: |
   cat records.jsonl | while read line; do
     echo "$line" | jq -e '.name | type == "string"' > /dev/null && \

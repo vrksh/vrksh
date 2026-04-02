@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You have a JSON array with 50,000 objects. You need to process each one through a pipeline. `jq '.[]'` works but loads the entire array into memory. On a 2GB JSON file, your process gets OOM-killed.
-
-`vrk jsonl` converts between JSON arrays and JSONL (one JSON object per line). The default mode splits an array into individual lines for pipeline processing. Use `--collect` to go the other direction - gather JSONL lines back into a JSON array. The streaming decoder handles files larger than available memory.
-
 ## The problem
 
-Your API returns a JSON array of 50,000 records. You need to validate each one and pipe invalid records to an LLM for repair. jq '.[]' loads the entire array into memory. On a large response, the process is killed. You need line-by-line JSONL but the API only speaks JSON arrays.
+An API returns a JSON array of 50,000 records. `jq '.[]'` flattens it but loads the entire array into memory first. On a 2GB response the process gets OOM-killed. Line-by-line processing requires JSONL, but the API only returns arrays.
+
+## The solution
+
+`vrk jsonl` converts JSON arrays to JSONL (one object per line) and back. The default mode splits arrays for line-by-line pipeline processing. `--collect` gathers JSONL lines back into a JSON array. The streaming decoder handles files larger than available memory.
 
 ## Before and after
 

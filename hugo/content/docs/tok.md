@@ -1,6 +1,8 @@
 ---
 title: "vrk tok"
 description: "vrk tok counts tokens from stdin and gates pipelines before they fail. Pass --check N to stop the pipeline if input exceeds your context budget. No Python runtime needed."
+meta_title: "vrk tok - Token Counter CLI for LLM Pipelines"
+meta_lead: "vrk tok is a command-line token counter for LLM pipelines."
 og_title: "vrk tok - token counter and pipeline gate for LLM context budgets"
 tool: tok
 group: v1
@@ -12,15 +14,13 @@ noindex: false
 
 vrk tok is a command-line token counter for LLM pipelines.
 
-## About
-
-You send a 15,000-token document to a model with a 4,096-token context window. No error. The response looks plausible. Three days later a QA reviewer finds an inconsistency - the model only saw the first third of your input. Silent truncation is the most expensive bug in LLM pipelines because it looks like success.
-
-`vrk tok` is a token counter and pipeline gate that catches this in 5ms. It uses the cl100k_base tokenizer, which gives exact counts for GPT-4 and roughly 95% accuracy for Claude. Without `--check` it measures and prints the count. With `--check N` it passes the input through untouched if within budget, or exits 1 with empty stdout if over - killing the pipeline before it wastes an API call.
-
 ## The problem
 
-Your system prompt is 6,000 tokens. You don't know that because you've been estimating by word count. You concatenate it with user input and send it to a model with an 8,192-token limit. The model truncates silently. The summary it returns is confident, complete-looking, and wrong. You find out in production.
+A 15,000-token document goes to a model with a 4,096-token window. No error. The response looks plausible. Three days later a QA reviewer finds inconsistencies. The model only saw the first third of the input. Silent truncation is the most expensive bug in LLM pipelines because it looks like success.
+
+## The solution
+
+`vrk tok` counts tokens and gates pipelines in 5ms. Uses cl100k_base (exact for GPT-4, ~95% for Claude). Without `--check` it prints the count. With `--check N` it passes input through if within budget, or exits 1 with empty stdout if over, killing the pipeline before it wastes an API call.
 
 ## Before and after
 

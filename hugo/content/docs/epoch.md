@@ -10,15 +10,13 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-## About
-
-You need a Unix timestamp for "3 days from now" in a shell script. You reach for `date`, but the flags are different on macOS and Linux. `date -d '+3 days'` works on Linux. On macOS it means something else entirely. You search Stack Overflow and find five different answers, all platform-specific.
-
-`vrk epoch` converts between Unix timestamps and ISO 8601 dates, and handles relative time offsets like `+3d` or `-1h`. Works identically on macOS and Linux. No more `date` flag confusion. Use `--iso` for human-readable output, `--json` for structured output, and `--tz` for timezone conversion.
-
 ## The problem
 
-Your pipeline stores timestamps as Unix integers. A developer needs to know when 1740009600 was. They try `date -d @1740009600` on macOS and get an error. They try `date -r 1740009600` and get the right answer - but that flag doesn't exist on Linux. Every timestamp conversion turns into a platform compatibility puzzle.
+`date -d @1740009600` works on Linux. On macOS, `-d` means something different and you need `date -r 1740009600` instead. Relative times are worse: `date -d '+3 days'` is Linux-only. Every timestamp conversion in a cross-platform script becomes a compatibility puzzle.
+
+## The solution
+
+`vrk epoch` converts between Unix timestamps and ISO 8601, and handles relative offsets like `+3d` or `-1h`. Works identically on macOS and Linux. Use `--at` to pin the reference time for deterministic pipeline output.
 
 ## Before and after
 
