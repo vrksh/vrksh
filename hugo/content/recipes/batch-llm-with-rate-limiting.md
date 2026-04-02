@@ -1,19 +1,19 @@
 ---
 title: "Batch LLM with rate limiting"
 meta_title: "Batch LLM with rate limiting - vrk pipeline recipe"
-description: "Prevents failure at job 847 of 10,000 - throttle paces the pipeline, tok gates each doc before the API call wastes a request. Process a large ..."
-why: "Prevents failure at job 847 of 10,000 - throttle paces the pipeline, tok gates each doc before the API call wastes a request."
+description: "Prevents failure at job 847 of 10,000 - throttle paces filenames so each API call respects the rate limit. Process a large document set without ..."
+why: "Prevents failure at job 847 of 10,000 - throttle paces filenames so each API call respects the rate limit."
 body: "Process a large document set without hitting API rate limits. Safe to rerun."
 slug: "batch-llm-with-rate-limiting"
 steps:
   - |-
-    for f in docs/*.md; do
-      cat "$f" \
-        | vrk tok --check 8000 \
-        | vrk throttle --rate 60/m \
-        | vrk prompt --json \
-        | vrk kv set "result:$(basename $f)"
-    done
+    ls docs/*.md | vrk throttle --rate 60/m \
+      | while read -r f; do
+          cat "$f" \
+            | vrk tok --check 8000 \
+            | vrk prompt \
+            | vrk kv set "result:$(basename "$f")"
+        done
 tags:
   - "tok"
   - "throttle"
@@ -27,28 +27,27 @@ You have 10,000 documents to process with an LLM. Without rate limiting, you'll 
 
 ## How the pipeline works
 
-The loop processes one document at a time. For each file:
+`ls` emits one filename per line. `vrk throttle --rate 60/m` releases filenames at 60 per minute. The `while` loop reads each filename as it arrives and processes it:
 
-1. `vrk tok --check 8000` verifies the document fits in the context window. If not, exit 1 - skip this doc.
-2. `vrk throttle --rate 60/m` enforces a maximum of 60 requests per minute. If you're going too fast, it sleeps until the next slot opens.
-3. `vrk prompt --json` sends the document to the LLM and returns the response as JSON.
-4. `vrk kv set` stores the result keyed by filename.
+1. `vrk tok --check 8000` verifies the document fits in the context window. If not, exit 1 and the loop continues to the next file.
+2. `vrk prompt` sends the document to the LLM and prints the response.
+3. `vrk kv set` stores the result keyed by filename.
 
-Because results are stored in `vrk kv`, you can check which documents have already been processed and skip them on rerun. The pipeline is idempotent.
+Because throttle controls the rate at which filenames enter the loop, each API call is paced. Because results are stored in `vrk kv`, you can check which documents have already been processed and skip them on rerun.
 
 ## Making it resumable
 
 Add a cache check at the start of each iteration:
 
 ```bash
-for f in docs/*.md; do
-  KEY="result:$(basename $f)"
-  vrk kv get "$KEY" >/dev/null 2>&1 && continue
-  cat "$f" | vrk tok --check 8000 \
-    | vrk throttle --rate 60/m \
-    | vrk prompt --json \
-    | vrk kv set "$KEY"
-done
+ls docs/*.md | vrk throttle --rate 60/m \
+  | while read -r f; do
+      KEY="result:$(basename "$f")"
+      vrk kv get "$KEY" >/dev/null 2>&1 && continue
+      cat "$f" | vrk tok --check 8000 \
+        | vrk prompt \
+        | vrk kv set "$KEY"
+    done
 ```
 
 If the script crashes at document 5,000, restart it. The first 4,999 documents are already in kv and get skipped in milliseconds.

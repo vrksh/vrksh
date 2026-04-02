@@ -440,7 +440,7 @@ Exit 1: --check over limit; I/O error; tokenizer error
 Exit 2: Usage error - unknown flag, no stdin, --check without value
 
 ```bash
-cat system-prompt.txt | vrk tok --check 8000 | vrk prompt --system 'Summarize'
+cat system-prompt.txt | vrk tok --check 8000
 ```
 
 ## urlinfo - URL parser - scheme, host, port, path, query, --field

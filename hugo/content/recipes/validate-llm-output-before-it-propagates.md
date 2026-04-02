@@ -8,7 +8,7 @@ slug: "validate-llm-output-before-it-propagates"
 steps:
   - |-
     cat doc.txt \
-      | vrk prompt --system "Extract entities as JSON" --json \
+      | vrk prompt --system "Extract entities as JSON" \
       | vrk validate --schema entities.json \
       | vrk kv set entities
 tags:
@@ -25,7 +25,7 @@ Schema validation at the source catches this immediately. The pipeline stops at 
 
 ## How the pipeline works
 
-`vrk prompt` calls the LLM and gets a response. `vrk validate` checks the response against `entities.json` (a JSON Schema file). If it matches, the data passes through. If not, `vrk validate` exits 1 and `vrk kv set` never runs.
+`vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against `entities.json` (a JSON Schema file). If it matches, the data passes through. If not, `vrk validate` exits 1 and `vrk kv set` never runs.
 
 No bad data reaches storage. No downstream code processes an invalid response.
 

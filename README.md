@@ -6,7 +6,7 @@ LLMs are probabilistic. The tools around them shouldn't be.
 ![Go](https://img.shields.io/badge/go-1.25-blue)
 ![Release](https://img.shields.io/github/v/release/vrksh/vrksh)
 
-One binary. Small composable tools. Zero silent failures.
+One CLI binary. Small composable tools. Zero silent failures.
 
 ## Name
 
@@ -16,7 +16,7 @@ vrksh (वृक्ष) is the Sanskrit word for tree. The project is **vrksh**.
 
 Shell pipelines that call LLMs break in quiet ways. A prompt exceeds the context window and the model silently truncates. A retry loop swallows errors. An API key leaks into logs. `jq` and `awk` were not designed for this failure mode.
 
-vrksh is 26 Unix-style tools in a single static binary. Each tool reads stdin, writes stdout, and uses exit codes that pipelines can trust: 0 for success, 1 for runtime errors, 2 for usage errors. JSONL is the native interchange format. Large inputs stream through `bufio.Scanner`, not `io.ReadAll`, so a 10GB log file won't OOM your agent.
+vrksh is 26 Unix-style CLI tools in a single static binary. Each tool reads stdin, writes stdout, and uses exit codes that pipelines can trust: 0 for success, 1 for runtime errors, 2 for usage errors. JSONL is the native interchange format. Large inputs stream through `bufio.Scanner`, not `io.ReadAll`, so a 10GB log file won't OOM your agent.
 
 ## Install
 
@@ -166,8 +166,11 @@ vrk completions fish > ~/.config/fish/completions/vrk.fish
 - You need signature verification on JWTs. `vrk jwt` is an inspector, not a validator.
 - You want a chat interface. `vrk prompt` is a pipeline tool with temperature 0 by default.
 - You need exact token counts for Claude. `tok` uses cl100k_base, which is exact for GPT-4 and ~95% accurate for Claude.
-- You want a framework. vrksh is filters and pipes, not an SDK.
+- You want a framework. vrksh is CLI filters and pipes, not an SDK.
 
 ## Docs
 
-Full tool reference, examples, and compose patterns: **[vrk.sh](https://vrk.sh)**
+- **[Quickstart](https://vrk.sh/quickstart/)** - zero to working pipeline in five minutes
+- **[Tool reference](https://vrk.sh/docs/)** - flags, exit codes, examples for all 26 tools
+- **[Recipes](https://vrk.sh/recipes/)** - multi-tool pipeline patterns
+- **[Environment variables](https://vrk.sh/env/)** - API keys and runtime config

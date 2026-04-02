@@ -6,7 +6,7 @@ title = "vrksh"
 uglyURLs = false
 
 [params]
-  description = "The missing coreutils for the agent era. One binary. No dependencies."
+  description = "CLI tools for building reliable AI pipelines. One binary. No dependencies."
   tagline = "The missing coreutils for the agent era."
   version = "0.1.0"
   github = "https://github.com/vrksh/vrksh"

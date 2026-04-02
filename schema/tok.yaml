@@ -15,7 +15,7 @@ before: |
 after: "cat system-prompt.txt | vrk tok"
 group: v1
 category: core
-example: cat system-prompt.txt | vrk tok --check 8000 | vrk prompt --system 'Summarize'
+example: cat system-prompt.txt | vrk tok --check 8000
 flags:
   - flag: --check
     short: ""

@@ -28,7 +28,7 @@ No JSON parsing. No base64 decoding. No splitting on dots. One command extracts 
 Check if the token is expired before using it:
 
 ```bash
-if vrk jwt --expired "$TOKEN"; then
+if ! vrk jwt --expired "$TOKEN"; then
   echo "Token expired" >&2
   exit 1
 fi

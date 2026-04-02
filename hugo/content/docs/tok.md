@@ -41,7 +41,7 @@ cat system-prompt.txt | vrk tok
 ## Example
 
 ```bash
-cat system-prompt.txt | vrk tok --check 8000 | vrk prompt --system 'Summarize'
+cat system-prompt.txt | vrk tok --check 8000
 ```
 
 ## Exit codes

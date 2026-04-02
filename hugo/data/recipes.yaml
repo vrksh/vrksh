@@ -80,40 +80,7 @@
     vrk grab https://example.com | vrk plain | vrk tok
     ```
 
-- name: Cache LLM response
-  why: Avoids duplicate API calls for identical prompts - the hash keys the cache so reruns are free.
-  description: Send a prompt, get the request hash, and store the response in kv.
-  steps:
-    - RESULT=$(cat doc.txt | vrk prompt --json)
-    - HASH=$(echo "$RESULT" | jq -r '.request_hash')
-    - echo "$RESULT" | jq -r '.response' | vrk kv set "cache:$HASH"
-  tags:
-    - prompt
-    - kv
-  detail: |
-    ## The problem
-
-    LLM API calls are slow and expensive. If you're running the same prompt against the same document twice - during development, in a retry loop, or in a pipeline that restarts - you're paying for a response you already have.
-
-    ## How the pipeline works
-
-    `vrk prompt --json` returns the LLM response as a JSON envelope that includes a `request_hash` - a deterministic hash of the model, system prompt, and input. You use this hash as the cache key in `vrk kv`. On the next run, check the cache first:
-
-    ```bash
-    HASH=$(cat doc.txt | vrk tok --json | jq -r '.hash // empty')
-    CACHED=$(vrk kv get "cache:$HASH" 2>/dev/null)
-    if [ -n "$CACHED" ]; then
-      echo "$CACHED"
-    else
-      RESULT=$(cat doc.txt | vrk prompt --json)
-      HASH=$(echo "$RESULT" | jq -r '.request_hash')
-      echo "$RESULT" | jq -r '.response' | vrk kv set "cache:$HASH"
-    fi
-    ```
-
-    ## Why this works
-
-    `vrk kv` is a SQLite-backed key-value store that lives on disk. No Redis, no external service. The cache survives process restarts, script reruns, and pipeline failures. It's local and instant - a kv lookup takes microseconds compared to seconds for an API call.
+# removed: Cache LLM response - request_hash field does not exist in prompt --json output
 
 - name: Chunked RAG pipeline
   why: Keeps every chunk within the embedding model's token limit - no silent truncation during indexing.
@@ -265,7 +232,7 @@
     Check if the token is expired before using it:
 
     ```bash
-    if vrk jwt --expired "$TOKEN"; then
+    if ! vrk jwt --expired "$TOKEN"; then
       echo "Token expired" >&2
       exit 1
     fi
@@ -313,17 +280,17 @@
     ```
 
 - name: Batch LLM with rate limiting
-  why: Prevents failure at job 847 of 10,000 - throttle paces the pipeline, tok gates each doc before the API call wastes a request.
+  why: Prevents failure at job 847 of 10,000 - throttle paces filenames so each API call respects the rate limit.
   description: Process a large document set without hitting API rate limits. Safe to rerun.
   steps:
     - |-
-      for f in docs/*.md; do
-        cat "$f" \
-          | vrk tok --check 8000 \
-          | vrk throttle --rate 60/m \
-          | vrk prompt --json \
-          | vrk kv set "result:$(basename $f)"
-      done
+      ls docs/*.md | vrk throttle --rate 60/m \
+        | while read -r f; do
+            cat "$f" \
+              | vrk tok --check 8000 \
+              | vrk prompt \
+              | vrk kv set "result:$(basename "$f")"
+          done
   tags:
     - tok
     - throttle
@@ -336,28 +303,27 @@
 
     ## How the pipeline works
 
-    The loop processes one document at a time. For each file:
+    `ls` emits one filename per line. `vrk throttle --rate 60/m` releases filenames at 60 per minute. The `while` loop reads each filename as it arrives and processes it:
 
-    1. `vrk tok --check 8000` verifies the document fits in the context window. If not, exit 1 - skip this doc.
-    2. `vrk throttle --rate 60/m` enforces a maximum of 60 requests per minute. If you're going too fast, it sleeps until the next slot opens.
-    3. `vrk prompt --json` sends the document to the LLM and returns the response as JSON.
-    4. `vrk kv set` stores the result keyed by filename.
+    1. `vrk tok --check 8000` verifies the document fits in the context window. If not, exit 1 and the loop continues to the next file.
+    2. `vrk prompt` sends the document to the LLM and prints the response.
+    3. `vrk kv set` stores the result keyed by filename.
 
-    Because results are stored in `vrk kv`, you can check which documents have already been processed and skip them on rerun. The pipeline is idempotent.
+    Because throttle controls the rate at which filenames enter the loop, each API call is paced. Because results are stored in `vrk kv`, you can check which documents have already been processed and skip them on rerun.
 
     ## Making it resumable
 
     Add a cache check at the start of each iteration:
 
     ```bash
-    for f in docs/*.md; do
-      KEY="result:$(basename $f)"
-      vrk kv get "$KEY" >/dev/null 2>&1 && continue
-      cat "$f" | vrk tok --check 8000 \
-        | vrk throttle --rate 60/m \
-        | vrk prompt --json \
-        | vrk kv set "$KEY"
-    done
+    ls docs/*.md | vrk throttle --rate 60/m \
+      | while read -r f; do
+          KEY="result:$(basename "$f")"
+          vrk kv get "$KEY" >/dev/null 2>&1 && continue
+          cat "$f" | vrk tok --check 8000 \
+            | vrk prompt \
+            | vrk kv set "$KEY"
+        done
     ```
 
     If the script crashes at document 5,000, restart it. The first 4,999 documents are already in kv and get skipped in milliseconds.
@@ -368,7 +334,7 @@
   steps:
     - |-
       cat doc.txt \
-        | vrk prompt --system "Extract entities as JSON" --json \
+        | vrk prompt --system "Extract entities as JSON" \
         | vrk validate --schema entities.json \
         | vrk kv set entities
   tags:
@@ -384,7 +350,7 @@
 
     ## How the pipeline works
 
-    `vrk prompt` calls the LLM and gets a response. `vrk validate` checks the response against `entities.json` (a JSON Schema file). If it matches, the data passes through. If not, `vrk validate` exits 1 and `vrk kv set` never runs.
+    `vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against `entities.json` (a JSON Schema file). If it matches, the data passes through. If not, `vrk validate` exits 1 and `vrk kv set` never runs.
 
     No bad data reaches storage. No downstream code processes an invalid response.
 
