@@ -1,6 +1,7 @@
 name: coax
 tagline: retry wrapper - --times, --backoff, --on, --until
 meta_description: "Retry flaky commands with exponential backoff. Wrap any pipeline stage to handle transient API failures."
+meta_lead: "vrk coax retries a command with configurable backoff, buffering stdin so each attempt gets the same input."
 og_title: "vrk coax - retry wrapper with backoff for flaky commands"
 description: |
   `vrk coax` retries a command with configurable backoff. It buffers stdin so each attempt gets the same input. Fixed or exponential backoff, retry count caps, and exit-code filtering are all built in. It solves the three things bash retry loops always get wrong: stdin replay, backoff strategy, and retry limits.

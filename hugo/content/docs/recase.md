@@ -1,6 +1,7 @@
 ---
 title: "vrk recase"
 description: "Convert between naming conventions. snake_case, camelCase, kebab-case, PascalCase, and Title Case."
+meta_lead: "vrk recase converts between naming conventions - snake_case, camelCase, kebab-case, PascalCase, and more."
 og_title: "vrk recase - convert between snake, camel, kebab, and more"
 tool: recase
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk recase converts between naming conventions - snake_case, camelCase, kebab-case, PascalCase, and more.
 
 ## The problem
 

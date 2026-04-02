@@ -1,6 +1,7 @@
 ---
 title: "vrk bare"
 description: "Create symlinks for any vrk tool. Use tok, grab, prompt directly without the vrk prefix."
+meta_lead: "vrk --bare creates symlinks so you can call any tool by name without the vrk prefix."
 og_title: "vrk bare - use vrksh tools without the vrk prefix"
 tool: bare
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk --bare creates symlinks so you can call any tool by name without the vrk prefix.
 
 ## The problem
 

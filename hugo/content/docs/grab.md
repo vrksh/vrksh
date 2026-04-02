@@ -1,6 +1,7 @@
 ---
 title: "vrk grab"
 description: "Fetch any URL and get clean markdown back. No BeautifulSoup, no parsing scripts."
+meta_lead: "vrk grab fetches a URL and returns clean, readable markdown with automatic content extraction."
 og_title: "vrk grab - fetch any URL as clean markdown"
 tool: grab
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk grab fetches a URL and returns clean, readable markdown with automatic content extraction.
 
 ## The problem
 

@@ -1,6 +1,7 @@
 ---
 title: "vrk chunk"
 description: "Split text into token-aware chunks that fit LLM context windows. JSONL output, respects sentence boundaries."
+meta_lead: "vrk chunk splits text into token-counted pieces that fit within an LLM context window."
 og_title: "vrk chunk - token-aware text splitter for LLM context windows"
 tool: chunk
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk chunk splits text into token-counted pieces that fit within an LLM context window.
 
 ## The problem
 

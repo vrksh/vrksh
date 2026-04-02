@@ -1,6 +1,7 @@
 name: sse
 tagline: SSE stream parser - text/event-stream to JSONL
 meta_description: "Parse Server-Sent Event streams into JSONL. Turns text/event-stream into structured records you can pipe."
+meta_lead: "vrk sse parses Server-Sent Event streams into clean JSONL records for pipeline processing."
 og_title: "vrk sse - parse SSE streams into structured JSONL"
 description: |
   `vrk sse` parses `text/event-stream` into clean JSONL records. It handles `data:` prefixes, blank-line event delimiters, multi-line data concatenation, and `[DONE]` sentinel detection used by both Anthropic and OpenAI. `--field` with dot-path syntax drills into nested JSON to extract just the text fragments.

@@ -1,6 +1,7 @@
 ---
 title: "vrk jwt"
 description: "Decode JWTs and extract claims from the command line. Check expiry, validate structure, pull fields."
+meta_lead: "vrk jwt decodes JWT tokens locally without sending them anywhere, and checks expiry and claims."
 og_title: "vrk jwt - JWT decoder and claim inspector"
 tool: jwt
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk jwt decodes JWT tokens locally without sending them anywhere, and checks expiry and claims.
 
 ## The problem
 

@@ -1,6 +1,7 @@
 ---
 title: "vrk sse"
 description: "Parse Server-Sent Event streams into JSONL. Turns text/event-stream into structured records you can pipe."
+meta_lead: "vrk sse parses Server-Sent Event streams into clean JSONL records for pipeline processing."
 og_title: "vrk sse - parse SSE streams into structured JSONL"
 tool: sse
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk sse parses Server-Sent Event streams into clean JSONL records for pipeline processing.
 
 ## The problem
 

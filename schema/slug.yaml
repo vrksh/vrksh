@@ -1,6 +1,7 @@
 name: slug
 tagline: URL/filename slug generator - --separator, --max, --json
 meta_description: "Generate URL-safe slugs from any text. Handles unicode, custom separators, and length limits."
+meta_lead: "vrk slug converts any text to a URL-safe, filename-safe slug with Unicode normalization."
 og_title: "vrk slug - URL and filename slug generator"
 description: |
   `vrk slug` converts any text to a URL-safe, filename-safe slug. Normalizes Unicode to ASCII, lowercases, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` truncates at word boundaries for length-limited contexts.

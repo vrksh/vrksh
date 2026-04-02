@@ -1,6 +1,7 @@
 ---
 title: "vrk base"
 description: "Encode and decode base64, base64url, hex, and base32 from the command line. No more openssl flags."
+meta_lead: "vrk base encodes and decodes base64, base64url, hex, and base32 with identical behavior on every platform."
 og_title: "vrk base - base64, hex, and base32 encoding in one tool"
 tool: base
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk base encodes and decodes base64, base64url, hex, and base32 with identical behavior on every platform.
 
 ## The problem
 

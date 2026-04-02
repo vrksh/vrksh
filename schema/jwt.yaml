@@ -1,6 +1,7 @@
 name: jwt
 tagline: JWT inspector - decode, --claim, --expired, --valid.
 meta_description: "Decode JWTs and extract claims from the command line. Check expiry, validate structure, pull fields."
+meta_lead: "vrk jwt decodes JWT tokens locally without sending them anywhere, and checks expiry and claims."
 og_title: "vrk jwt - JWT decoder and claim inspector"
 description: |
   `vrk jwt` decodes JWT tokens locally, without sending them anywhere. It prints the payload as JSON, extracts individual claims with `--claim`, and checks expiry with `--expired`. No signature verification. This is an inspection tool, not an auth library.

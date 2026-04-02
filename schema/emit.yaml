@@ -1,6 +1,7 @@
 name: emit
 tagline: structured logger - wraps stdin lines as JSONL log records
 meta_description: "Turn plain text into structured JSONL log records. Add timestamps, levels, and fields to any pipeline output."
+meta_lead: "vrk emit wraps plain text lines into structured JSONL log records with ISO timestamps and log levels."
 og_title: "vrk emit - structured JSONL logging for shell pipelines"
 description: |
   `vrk emit` wraps plain text lines into structured JSONL log records with ISO timestamps, log levels, and tags. Pipe any command's output through it and get machine-parseable logs. `--parse-level` auto-detects ERROR/WARN/INFO prefixes from existing output. `--tag` labels records by pipeline stage so you can filter later.

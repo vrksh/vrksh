@@ -1,6 +1,7 @@
 name: mask
 tagline: secret redactor - entropy + pattern-based, streaming
 meta_description: "Redact secrets from pipeline output before logging. Detects API keys, tokens, and high-entropy strings automatically."
+meta_lead: "vrk mask redacts secrets from text using pattern matching and entropy analysis, streaming line by line."
 og_title: "vrk mask - automatic secret redaction for pipeline output"
 description: |
   `vrk mask` redacts secrets from text using built-in pattern matching for Bearer tokens, API keys, passwords, and connection strings. It also flags high-entropy strings that look like secrets but don't match a known pattern. Streams line-by-line, so it handles any file size. Add `--pattern` for custom regexes.

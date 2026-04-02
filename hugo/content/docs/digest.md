@@ -1,6 +1,7 @@
 ---
 title: "vrk digest"
 description: "Hash anything with sha256, md5, or sha512. Verify with --compare. Sign with --hmac. One tool, no flags to memorize."
+meta_lead: "vrk digest hashes stdin with SHA-256, MD5, or SHA-512, with HMAC support and cross-platform consistency."
 og_title: "vrk digest - hash, verify, and HMAC from the command line"
 tool: digest
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk digest hashes stdin with SHA-256, MD5, or SHA-512, with HMAC support and cross-platform consistency.
 
 ## The problem
 

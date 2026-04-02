@@ -1,6 +1,7 @@
 name: chunk
 tagline: token-aware text splitter - JSONL chunks within a token budget
 meta_description: "Split text into token-aware chunks that fit LLM context windows. JSONL output, respects sentence boundaries."
+meta_lead: "vrk chunk splits text into token-counted pieces that fit within an LLM context window."
 og_title: "vrk chunk - token-aware text splitter for LLM context windows"
 description: |
   `vrk chunk` splits text into token-counted pieces that fit within an LLM context window. Each chunk is emitted as a JSONL record with its index, text, and exact token count. Configurable overlap preserves context at boundaries so entities that span a split point appear in both adjacent chunks.

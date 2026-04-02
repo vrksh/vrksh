@@ -1,6 +1,7 @@
 ---
 title: "vrk jsonl"
 description: "Convert between JSON arrays and JSONL. Flatten arrays for streaming, collect lines back into arrays."
+meta_lead: "vrk jsonl converts JSON arrays to JSONL and back for line-by-line pipeline processing."
 og_title: "vrk jsonl - convert between JSON arrays and JSONL"
 tool: jsonl
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk jsonl converts JSON arrays to JSONL and back for line-by-line pipeline processing.
 
 ## The problem
 

@@ -1,6 +1,7 @@
 ---
 title: "vrk kv"
 description: "Persistent key-value store for pipelines. SQLite-backed, with namespaces, TTL, and atomic counters."
+meta_lead: "vrk kv is a persistent key-value store backed by SQLite with namespaces, TTL, and atomic counters."
 og_title: "vrk kv - SQLite key-value store for shell pipelines"
 tool: kv
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk kv is a persistent key-value store backed by SQLite with namespaces, TTL, and atomic counters.
 
 ## The problem
 

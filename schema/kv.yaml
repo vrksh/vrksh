@@ -1,6 +1,7 @@
 name: kv
 tagline: key-value store - SQLite-backed, namespaces, TTL, atomic counters.
 meta_description: "Persistent key-value store for pipelines. SQLite-backed, with namespaces, TTL, and atomic counters."
+meta_lead: "vrk kv is a persistent key-value store backed by SQLite with namespaces, TTL, and atomic counters."
 og_title: "vrk kv - SQLite key-value store for shell pipelines"
 description: |
   `vrk kv` is a persistent key-value store backed by SQLite. Namespaces isolate different pipelines. TTL handles automatic expiry. Atomic `incr`/`decr` is safe under concurrent access. The database lives at `~/.vrk.db` (override with `VRK_KV_PATH`). No server, no config.

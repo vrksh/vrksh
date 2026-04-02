@@ -1,6 +1,7 @@
 ---
 title: "vrk pct"
 description: "Percent-encode and decode strings per RFC 3986. Handles URL components and form data correctly."
+meta_lead: "vrk pct percent-encodes and decodes text per RFC 3986 for URL-safe strings."
 og_title: "vrk pct - RFC 3986 percent encoding and decoding"
 tool: pct
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk pct percent-encodes and decodes text per RFC 3986 for URL-safe strings.
 
 ## The problem
 

@@ -1,6 +1,7 @@
 ---
 title: "vrk plain"
 description: "Strip markdown syntax and keep the prose. Clean input for token counting or plain-text pipelines."
+meta_lead: "vrk plain strips markdown formatting and keeps the prose - clean plain text from any markdown input."
 og_title: "vrk plain - strip markdown to plain text"
 tool: plain
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk plain strips markdown formatting and keeps the prose - clean plain text from any markdown input.
 
 ## The problem
 

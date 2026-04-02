@@ -1,6 +1,7 @@
 ---
 title: "vrk coax"
 description: "Retry flaky commands with exponential backoff. Wrap any pipeline stage to handle transient API failures."
+meta_lead: "vrk coax retries a command with configurable backoff, buffering stdin so each attempt gets the same input."
 og_title: "vrk coax - retry wrapper with backoff for flaky commands"
 tool: coax
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk coax retries a command with configurable backoff, buffering stdin so each attempt gets the same input.
 
 ## The problem
 

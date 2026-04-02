@@ -1,6 +1,7 @@
 ---
 title: "vrk prompt"
 description: "Pipe text to Claude or GPT from your terminal. Schema validation, retries, deterministic output."
+meta_lead: "vrk prompt pipes text to Claude or GPT and prints the response to stdout with zero boilerplate."
 og_title: "vrk prompt - pipe text to any LLM from your terminal"
 tool: prompt
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk prompt pipes text to Claude or GPT and prints the response to stdout with zero boilerplate.
 
 ## The problem
 

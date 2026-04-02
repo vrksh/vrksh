@@ -1,6 +1,7 @@
 ---
 title: "vrk assert"
 description: "Assert conditions mid-pipeline. Exit 1 if a check fails. Catches bad data before it reaches the next stage."
+meta_lead: "vrk assert evaluates conditions mid-pipeline and stops the flow if a check fails."
 og_title: "vrk assert - pipeline condition checks that halt on failure"
 tool: assert
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk assert evaluates conditions mid-pipeline and stops the flow if a check fails.
 
 ## The problem
 

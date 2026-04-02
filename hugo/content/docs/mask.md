@@ -1,6 +1,7 @@
 ---
 title: "vrk mask"
 description: "Redact secrets from pipeline output before logging. Detects API keys, tokens, and high-entropy strings automatically."
+meta_lead: "vrk mask redacts secrets from text using pattern matching and entropy analysis, streaming line by line."
 og_title: "vrk mask - automatic secret redaction for pipeline output"
 tool: mask
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk mask redacts secrets from text using pattern matching and entropy analysis, streaming line by line.
 
 ## The problem
 

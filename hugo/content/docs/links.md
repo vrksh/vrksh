@@ -1,6 +1,7 @@
 ---
 title: "vrk links"
 description: "Extract every hyperlink from markdown, HTML, or plain text. JSONL output with text, URL, and line number."
+meta_lead: "vrk links extracts hyperlinks from markdown, HTML, or plain text and outputs one JSONL record per link."
 og_title: "vrk links - extract hyperlinks from markdown and HTML"
 tool: links
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk links extracts hyperlinks from markdown, HTML, or plain text and outputs one JSONL record per link.
 
 ## The problem
 

@@ -1,6 +1,7 @@
 ---
 title: "vrk urlinfo"
 description: "Parse URLs and extract components. Get scheme, host, path, query params, or any field individually."
+meta_lead: "vrk urlinfo parses URLs into structured JSON components with dot-path field extraction."
 og_title: "vrk urlinfo - URL parser and component extractor"
 tool: urlinfo
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk urlinfo parses URLs into structured JSON components with dot-path field extraction.
 
 ## The problem
 

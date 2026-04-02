@@ -1,6 +1,7 @@
 name: epoch
 tagline: timestamp converter - unix/ISO, relative time
 meta_description: "Convert between Unix timestamps and ISO dates. Supports relative time like +3d or -1h."
+meta_lead: "vrk epoch converts between Unix timestamps and ISO 8601, and handles relative offsets like +3d or -1h."
 og_title: "vrk epoch - Unix timestamp and ISO date converter"
 description: |
   `vrk epoch` converts between Unix timestamps and ISO 8601, and handles relative offsets like `+3d` or `-1h`. Works identically on macOS and Linux. Use `--at` to pin the reference time for deterministic pipeline output.

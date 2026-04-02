@@ -1,6 +1,7 @@
 name: pct
 tagline: percent encoder/decoder - RFC 3986, --encode, --decode, --form
 meta_description: "Percent-encode and decode strings per RFC 3986. Handles URL components and form data correctly."
+meta_lead: "vrk pct percent-encodes and decodes text per RFC 3986 for URL-safe strings."
 og_title: "vrk pct - RFC 3986 percent encoding and decoding"
 description: |
   `vrk pct` percent-encodes and decodes text per RFC 3986. `--encode` gives path-safe encoding (spaces become `%20`). `--form` switches to HTML form encoding (spaces become `+`). Processes line by line for batch conversion.

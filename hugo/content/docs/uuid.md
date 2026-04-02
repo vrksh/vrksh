@@ -1,6 +1,7 @@
 ---
 title: "vrk uuid"
 description: "Generate UUIDs from the command line. v4 random or v7 time-sorted. Batch with --count."
+meta_lead: "vrk uuid generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across platforms."
 og_title: "vrk uuid - UUID v4 and v7 generator"
 tool: uuid
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk uuid generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across platforms.
 
 ## The problem
 

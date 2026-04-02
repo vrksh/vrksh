@@ -1,6 +1,7 @@
 ---
 title: "vrk sip"
 description: "Sample lines from a stream. Take the first N, every Nth, or a random percentage. Works on unbounded input."
+meta_lead: "vrk sip samples lines from stdin using first-N, reservoir sampling, every-Nth, or percentage strategies."
 og_title: "vrk sip - sample lines from streams and large files"
 tool: sip
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk sip samples lines from stdin using first-N, reservoir sampling, every-Nth, or percentage strategies.
 
 ## The problem
 

@@ -1,6 +1,7 @@
 name: recase
 tagline: naming convention converter - snake, camel, kebab, pascal, title
 meta_description: "Convert between naming conventions. snake_case, camelCase, kebab-case, PascalCase, and Title Case."
+meta_lead: "vrk recase converts between naming conventions - snake_case, camelCase, kebab-case, PascalCase, and more."
 og_title: "vrk recase - convert between snake, camel, kebab, and more"
 description: |
   `vrk recase` converts between naming conventions: snake_case, camelCase, PascalCase, kebab-case, SCREAMING_SNAKE, Title Case, and more. Auto-detects the input convention and handles acronyms correctly. Processes line by line for batch conversion.

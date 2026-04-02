@@ -1,6 +1,7 @@
 name: plain
 tagline: markdown stripper - removes syntax, keeps prose
 meta_description: "Strip markdown syntax and keep the prose. Clean input for token counting or plain-text pipelines."
+meta_lead: "vrk plain strips markdown formatting and keeps the prose - clean plain text from any markdown input."
 og_title: "vrk plain - strip markdown to plain text"
 description: |
   `vrk plain` strips markdown formatting and keeps the prose. Headers become text, links keep their label but drop the URL, code blocks keep their content but lose the fences. The output is clean plain text ready for token-efficient LLM processing.

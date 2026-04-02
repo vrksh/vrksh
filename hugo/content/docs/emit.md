@@ -1,6 +1,7 @@
 ---
 title: "vrk emit"
 description: "Turn plain text into structured JSONL log records. Add timestamps, levels, and fields to any pipeline output."
+meta_lead: "vrk emit wraps plain text lines into structured JSONL log records with ISO timestamps and log levels."
 og_title: "vrk emit - structured JSONL logging for shell pipelines"
 tool: emit
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk emit wraps plain text lines into structured JSONL log records with ISO timestamps and log levels.
 
 ## The problem
 

@@ -1,6 +1,7 @@
 ---
 title: "vrk moniker"
 description: "Generate memorable names for run IDs, job labels, and temp dirs. No more UUIDs in log output."
+meta_lead: "vrk moniker generates memorable adjective-noun names for run IDs, job labels, and temp directories."
 og_title: "vrk moniker - memorable name generator for run IDs and labels"
 tool: moniker
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk moniker generates memorable adjective-noun names for run IDs, job labels, and temp directories.
 
 ## The problem
 

@@ -1,6 +1,7 @@
 ---
 title: "vrk slug"
 description: "Generate URL-safe slugs from any text. Handles unicode, custom separators, and length limits."
+meta_lead: "vrk slug converts any text to a URL-safe, filename-safe slug with Unicode normalization."
 og_title: "vrk slug - URL and filename slug generator"
 tool: slug
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk slug converts any text to a URL-safe, filename-safe slug with Unicode normalization.
 
 ## The problem
 

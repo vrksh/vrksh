@@ -1,6 +1,7 @@
 ---
 title: "vrk epoch"
 description: "Convert between Unix timestamps and ISO dates. Supports relative time like +3d or -1h."
+meta_lead: "vrk epoch converts between Unix timestamps and ISO 8601, and handles relative offsets like +3d or -1h."
 og_title: "vrk epoch - Unix timestamp and ISO date converter"
 tool: epoch
 group: v1
@@ -9,6 +10,8 @@ noindex: false
 ---
 
 <!-- generated - do not edit below this line -->
+
+vrk epoch converts between Unix timestamps and ISO 8601, and handles relative offsets like +3d or -1h.
 
 ## The problem
 

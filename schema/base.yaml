@@ -1,6 +1,7 @@
 name: base
 tagline: encoding converter - base64, base64url, hex, base32
 meta_description: "Encode and decode base64, base64url, hex, and base32 from the command line. No more openssl flags."
+meta_lead: "vrk base encodes and decodes base64, base64url, hex, and base32 with identical behavior on every platform."
 og_title: "vrk base - base64, hex, and base32 encoding in one tool"
 description: |
   `vrk base` encodes and decodes base64, base64url, hex, and base32 with identical behavior on every platform. Two subcommands: `encode` and `decode`. Strips one trailing newline from stdin so `echo` input works correctly. No platform-specific flags to remember.
