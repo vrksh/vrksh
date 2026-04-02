@@ -2,11 +2,13 @@ package grab
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,6 +32,62 @@ const userAgent = "vrk/0 (https://vrk.sh)"
 
 // errTooManyRedirects is the sentinel returned by CheckRedirect after 5 hops.
 var errTooManyRedirects = errors.New("too many redirects (> 5)")
+
+// errInternalAddress is returned by the SSRF-safe dialer when the resolved
+// address falls within a private, loopback, or link-local range.
+var errInternalAddress = errors.New("grab: request to internal network address is blocked (use --allow-internal to override)")
+
+// defaultMaxSize is the default response body size limit (10MB).
+const defaultMaxSize = 10 * 1024 * 1024
+
+// isInternalIP returns true if ip is loopback, private, or link-local.
+func isInternalIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	// RFC 1918 and RFC 6598 private ranges.
+	privateRanges := []struct {
+		network string
+	}{
+		{"10.0.0.0/8"},
+		{"172.16.0.0/12"},
+		{"192.168.0.0/16"},
+		{"169.254.0.0/16"},
+		{"fc00::/7"},
+	}
+	for _, r := range privateRanges {
+		_, cidr, _ := net.ParseCIDR(r.network)
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// ssrfSafeDialer returns a DialContext function that resolves the target address
+// and rejects connections to internal/private IP ranges. This check runs on
+// every connection attempt, including redirect hops, because the HTTP client
+// calls DialContext for each new TCP connection.
+func ssrfSafeDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		for _, ipAddr := range ips {
+			if isInternalIP(ipAddr.IP) {
+				return nil, errInternalAddress
+			}
+		}
+		// Connect to the first resolved address directly.
+		return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+	}
+}
 
 // grabResult is the shape emitted by --json on success.
 type grabResult struct {
@@ -73,12 +131,14 @@ func emitError(jsonFlag bool, code int, rawURL string, status int, format string
 func init() {
 	shared.Register(shared.ToolMeta{
 		Name:  "grab",
-		Short: "URL fetcher — clean markdown, plain text, or raw HTML",
+		Short: "URL fetcher - clean markdown, plain text, or raw HTML",
 		Flags: []shared.FlagMeta{
 			{Name: "text", Shorthand: "t", Usage: "plain prose output, no markdown syntax"},
 			{Name: "raw", Usage: "raw HTML, no processing"},
 			{Name: "json", Shorthand: "j", Usage: "emit JSON envelope with metadata"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
+			{Name: "max-size", Usage: "max response body size in bytes (default 10MB)"},
+			{Name: "allow-internal", Usage: "allow requests to private/loopback addresses"},
 		},
 	})
 }
@@ -89,11 +149,14 @@ func Run() int {
 	fs := pflag.NewFlagSet("grab", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	var textFlag, rawFlag, jsonFlag, quietFlag bool
+	var textFlag, rawFlag, jsonFlag, quietFlag, allowInternal bool
+	var maxSize int
 	fs.BoolVarP(&textFlag, "text", "t", false, "plain prose output, no markdown syntax")
 	fs.BoolVar(&rawFlag, "raw", false, "raw HTML, no processing")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit JSON envelope with metadata")
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
+	fs.IntVar(&maxSize, "max-size", defaultMaxSize, "max response body size in bytes")
+	fs.BoolVar(&allowInternal, "allow-internal", false, "allow requests to private/loopback addresses")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -153,9 +216,17 @@ func Run() int {
 	cleanURL := u.String()
 
 	// Build a cookie-free HTTP client with redirect cap.
+	// When --allow-internal is not set, use a custom transport with a DialContext
+	// hook that rejects connections to private/loopback/link-local addresses.
+	// This check runs on every TCP connection, including redirect hops.
+	var transport http.RoundTripper
+	if !allowInternal {
+		transport = &http.Transport{DialContext: ssrfSafeDialer()}
+	}
 	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Jar:     nil,
+		Transport: transport,
+		Timeout:   30 * time.Second,
+		Jar:       nil,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 5 {
 				return errTooManyRedirects
@@ -185,9 +256,12 @@ func Run() int {
 			"grab: HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(maxSize)))
 	if err != nil {
 		return emitError(jsonFlag, 1, cleanURL, 0, "grab: reading response body: %v", err)
+	}
+	if len(body) >= maxSize {
+		return emitError(jsonFlag, 1, cleanURL, resp.StatusCode, "grab: response body exceeded %d byte limit for %s", maxSize, cleanURL)
 	}
 
 	fetchedAt := time.Now().Unix()
@@ -284,6 +358,8 @@ func Flags() *pflag.FlagSet {
 	fs.Bool("raw", false, "raw HTML, no processing")
 	fs.BoolP("json", "j", false, "emit JSON envelope with metadata")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
+	fs.Int("max-size", defaultMaxSize, "max response body size in bytes")
+	fs.Bool("allow-internal", false, "allow requests to private/loopback addresses")
 	return fs
 }
 

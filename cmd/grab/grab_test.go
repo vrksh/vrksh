@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -69,7 +70,7 @@ func runGrab(t *testing.T, args []string, stdinContent string) (stdout, stderr s
 	}
 	os.Stderr = stderrW
 
-	os.Args = append([]string{"grab"}, args...)
+	os.Args = append([]string{"grab", "--allow-internal"}, args...)
 
 	code = Run()
 
@@ -622,5 +623,252 @@ func TestJSONErrorToStdout(t *testing.T) {
 	}
 	if _, ok := obj["error"]; !ok {
 		t.Error("JSON missing key \"error\"")
+	}
+}
+
+// --- SSRF protection tests ---
+
+// runGrabNoAllowInternal is like runGrab but does NOT prepend --allow-internal,
+// so the SSRF guard is active. Use for testing SSRF blocking behaviour.
+func runGrabNoAllowInternal(t *testing.T, args []string, stdinContent string) (stdout, stderr string, code int) {
+	t.Helper()
+
+	origStdin := os.Stdin
+	origStdout := os.Stdout
+	origStderr := os.Stderr
+	origArgs := os.Args
+
+	t.Cleanup(func() {
+		os.Stdin = origStdin
+		os.Stdout = origStdout
+		os.Stderr = origStderr
+		os.Args = origArgs
+	})
+
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
+	}
+	if _, err := io.WriteString(stdinW, stdinContent); err != nil {
+		t.Fatalf("write stdin: %v", err)
+	}
+	if err := stdinW.Close(); err != nil {
+		t.Fatalf("close stdin write end: %v", err)
+	}
+	os.Stdin = stdinR
+
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	os.Stdout = stdoutW
+
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	os.Stderr = stderrW
+
+	os.Args = append([]string{"grab"}, args...)
+
+	code = Run()
+
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+
+	var outBuf, errBuf bytes.Buffer
+	if _, err := io.Copy(&outBuf, stdoutR); err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	if _, err := io.Copy(&errBuf, stderrR); err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	_ = stdoutR.Close()
+	_ = stderrR.Close()
+
+	return outBuf.String(), errBuf.String(), code
+}
+
+// TestSSRFBlocksLoopback verifies that requests to 127.0.0.1 are blocked
+// when --allow-internal is not set.
+func TestSSRFBlocksLoopback(t *testing.T) {
+	srv := htmlServer()
+	defer srv.Close()
+
+	_, stderr, code := runGrabNoAllowInternal(t, []string{srv.URL}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (blocked by SSRF guard)", code)
+	}
+	if !strings.Contains(stderr, "internal network address") {
+		t.Errorf("stderr = %q, want it to mention 'internal network address'", stderr)
+	}
+}
+
+// TestSSRFAllowInternalBypasses verifies that --allow-internal lets the request
+// through to a localhost server.
+func TestSSRFAllowInternalBypasses(t *testing.T) {
+	srv := htmlServer()
+	defer srv.Close()
+
+	// runGrab already prepends --allow-internal
+	stdout, _, code := runGrab(t, []string{srv.URL}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (--allow-internal should bypass SSRF guard)", code)
+	}
+	if !strings.Contains(stdout, "Hello World") {
+		t.Errorf("stdout = %q, want it to contain 'Hello World'", stdout)
+	}
+}
+
+// TestSSRFBlocksLoopbackJSON verifies that --json routes the SSRF error to
+// stdout as JSON with stderr empty.
+func TestSSRFBlocksLoopbackJSON(t *testing.T) {
+	srv := htmlServer()
+	defer srv.Close()
+
+	stdout, stderr, code := runGrabNoAllowInternal(t, []string{srv.URL, "--json"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	if _, ok := obj["error"]; !ok {
+		t.Error("JSON missing 'error' field")
+	}
+	errMsg, _ := obj["error"].(string)
+	if !strings.Contains(errMsg, "internal network address") {
+		t.Errorf("error = %q, want it to mention 'internal network address'", errMsg)
+	}
+}
+
+// TestSSRFBlocksRedirectToInternal verifies that a public-looking URL that
+// redirects to a loopback address is also blocked. The SSRF guard runs in the
+// DialContext hook, so it fires on every TCP connection including redirect hops.
+func TestSSRFBlocksRedirectToInternal(t *testing.T) {
+	// Internal target server on localhost.
+	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprint(w, "<html><body><p>secret</p></body></html>")
+	}))
+	defer internal.Close()
+
+	// "Public" server that redirects to the internal server.
+	// Both use 127.0.0.1 in tests, but the point is the redirect hop is checked.
+	public := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, internal.URL, http.StatusFound)
+	}))
+	defer public.Close()
+
+	_, stderr, code := runGrabNoAllowInternal(t, []string{public.URL}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (redirect to internal should be blocked)", code)
+	}
+	if !strings.Contains(stderr, "internal network address") {
+		t.Errorf("stderr = %q, want it to mention 'internal network address'", stderr)
+	}
+}
+
+// TestIsInternalIP verifies the isInternalIP function against known private,
+// loopback, and link-local addresses, plus a public address.
+func TestIsInternalIP(t *testing.T) {
+	cases := []struct {
+		ip   string
+		want bool
+	}{
+		{"127.0.0.1", true},
+		{"127.0.0.2", true},
+		{"10.0.0.1", true},
+		{"10.255.255.255", true},
+		{"172.16.0.1", true},
+		{"172.31.255.255", true},
+		{"192.168.1.1", true},
+		{"192.168.255.255", true},
+		{"169.254.169.254", true},
+		{"169.254.0.1", true},
+		{"::1", true},
+		{"fc00::1", true},
+		{"fd12:3456::1", true},
+		{"fe80::1", true},
+		{"8.8.8.8", false},
+		{"1.1.1.1", false},
+		{"93.184.216.34", false},
+		{"2607:f8b0:4004:800::200e", false},
+	}
+	for _, tc := range cases {
+		ip := net.ParseIP(tc.ip)
+		if ip == nil {
+			t.Fatalf("failed to parse IP %q", tc.ip)
+		}
+		got := isInternalIP(ip)
+		if got != tc.want {
+			t.Errorf("isInternalIP(%s) = %v, want %v", tc.ip, got, tc.want)
+		}
+	}
+}
+
+// --- max-size tests ---
+
+// TestMaxSizeExceeded verifies that --max-size limits the response body and
+// exits 1 when the limit is hit.
+func TestMaxSizeExceeded(t *testing.T) {
+	bigBody := strings.Repeat("x", 1024)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprint(w, bigBody)
+	}))
+	defer srv.Close()
+
+	// Set --max-size to 512 bytes, smaller than the 1024 byte response.
+	_, stderr, code := runGrab(t, []string{srv.URL, "--max-size", "512"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (response exceeds max-size)", code)
+	}
+	if !strings.Contains(stderr, "exceeded") {
+		t.Errorf("stderr = %q, want it to mention 'exceeded'", stderr)
+	}
+}
+
+// TestMaxSizeExceededJSON verifies --max-size error goes to stdout as JSON.
+func TestMaxSizeExceededJSON(t *testing.T) {
+	bigBody := strings.Repeat("x", 1024)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprint(w, bigBody)
+	}))
+	defer srv.Close()
+
+	stdout, stderr, code := runGrab(t, []string{srv.URL, "--json", "--max-size", "512"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if stderr != "" {
+		t.Errorf("stderr must be empty when --json active, got %q", stderr)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\ngot: %q", err, stdout)
+	}
+	errMsg, _ := obj["error"].(string)
+	if !strings.Contains(errMsg, "exceeded") {
+		t.Errorf("error = %q, want it to mention 'exceeded'", errMsg)
+	}
+}
+
+// TestMaxSizeDefault verifies the default max-size allows a normal small response.
+func TestMaxSizeDefault(t *testing.T) {
+	srv := htmlServer()
+	defer srv.Close()
+
+	stdout, _, code := runGrab(t, []string{srv.URL}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (small response within default limit)", code)
+	}
+	if !strings.Contains(stdout, "Hello World") {
+		t.Errorf("stdout = %q, want it to contain 'Hello World'", stdout)
 	}
 }

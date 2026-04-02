@@ -21,6 +21,18 @@ import (
 // isTerminal is a var so tests can override TTY detection without a real fd.
 var isTerminal = shared.IsTerminal
 
+// httpTimeout is the timeout for all LLM API calls. LLM responses can be slow
+// (large completions, busy endpoints), so 120s is generous but bounded.
+const httpTimeout = 120 * time.Second
+
+// maxResponseBytes is the maximum API response body size (50MB). Protects
+// against a malicious or misconfigured endpoint returning unbounded data.
+// Var so tests can override without allocating a 50MB response.
+var maxResponseBytes int64 = 50 * 1024 * 1024
+
+// apiClient is the shared HTTP client used for all LLM API calls.
+var apiClient = &http.Client{Timeout: httpTimeout}
+
 type provider int
 
 const (
@@ -232,15 +244,18 @@ func callAnthropic(model, key, prompt, systemPrompt string, temp float64) (callR
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 	httpReq.Header.Set("content-type", "application/json")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := apiClient.Do(httpReq)
 	if err != nil {
 		return callResult{}, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return callResult{}, fmt.Errorf("reading response body: %w", err)
+	}
+	if int64(len(respBody)) >= maxResponseBytes {
+		return callResult{}, fmt.Errorf("API response exceeded %dMB limit", maxResponseBytes/(1024*1024))
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -338,15 +353,18 @@ func callOpenAI(model, key, prompt string, temp float64, schema map[string]strin
 	httpReq.Header.Set("Authorization", "Bearer "+key)
 	httpReq.Header.Set("content-type", "application/json")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := apiClient.Do(httpReq)
 	if err != nil {
 		return callResult{}, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return callResult{}, fmt.Errorf("reading response body: %w", err)
+	}
+	if int64(len(respBody)) >= maxResponseBytes {
+		return callResult{}, fmt.Errorf("API response exceeded %dMB limit", maxResponseBytes/(1024*1024))
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -378,6 +396,14 @@ func callOpenAI(model, key, prompt string, temp float64, schema map[string]strin
 		promptTokens:   result.Usage.PromptTokens,
 		responseTokens: result.Usage.CompletionTokens,
 	}, nil
+}
+
+// shellEscapeSingleQuote escapes s for use inside a single-quoted shell string.
+// Any embedded single quote is replaced with the sequence '\” which ends the
+// current single-quoted segment, adds a backslash-escaped literal quote, and
+// reopens the single-quoted segment.
+func shellEscapeSingleQuote(s string) string {
+	return strings.ReplaceAll(s, "'", `'\''`)
 }
 
 // printExplain writes a curl equivalent command to stdout and returns 0.
@@ -417,7 +443,7 @@ func printExplain(w io.Writer, prov provider, model, prompt string, schema map[s
 		_, _ = fmt.Fprintf(bw, "curl https://api.openai.com/v1/chat/completions \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"Authorization: Bearer $OPENAI_API_KEY\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"content-type: application/json\" \\\n")
-		_, _ = fmt.Fprintf(bw, "  -d '%s'\n", string(bodyJSON))
+		_, _ = fmt.Fprintf(bw, "  -d '%s'\n", shellEscapeSingleQuote(string(bodyJSON)))
 
 	default: // providerAnthropic
 		type msgBody struct {
@@ -440,7 +466,7 @@ func printExplain(w io.Writer, prov provider, model, prompt string, schema map[s
 		_, _ = fmt.Fprintf(bw, "  -H \"x-api-key: $ANTHROPIC_API_KEY\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"anthropic-version: 2023-06-01\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"content-type: application/json\" \\\n")
-		_, _ = fmt.Fprintf(bw, "  -d '%s'\n", string(bodyJSON))
+		_, _ = fmt.Fprintf(bw, "  -d '%s'\n", shellEscapeSingleQuote(string(bodyJSON)))
 	}
 
 	if err := bw.Flush(); err != nil {
@@ -521,15 +547,18 @@ func callOpenAICompatible(endpointURL, model, prompt string, temp float64, schem
 		httpReq.Header.Set("Authorization", "Bearer "+key)
 	}
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := apiClient.Do(httpReq)
 	if err != nil {
 		return callResult{}, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return callResult{}, fmt.Errorf("reading response body: %w", err)
+	}
+	if int64(len(respBody)) >= maxResponseBytes {
+		return callResult{}, fmt.Errorf("API response exceeded %dMB limit", maxResponseBytes/(1024*1024))
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -592,7 +621,7 @@ func printExplainEndpoint(w io.Writer, endpointURL, model, prompt string, schema
 		_, _ = fmt.Fprintf(bw, "  -H \"Authorization: Bearer $VRK_LLM_KEY\" \\\n")
 	}
 	_, _ = fmt.Fprintf(bw, "  -H \"content-type: application/json\" \\\n")
-	_, _ = fmt.Fprintf(bw, "  -d '%s'\n", string(bodyJSON))
+	_, _ = fmt.Fprintf(bw, "  -d '%s'\n", shellEscapeSingleQuote(string(bodyJSON)))
 
 	if err := bw.Flush(); err != nil {
 		return shared.Errorf("prompt: flushing output: %v", err)

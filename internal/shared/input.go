@@ -72,11 +72,17 @@ func ReadInputLines(args []string) ([]string, error) {
 	return lines, nil
 }
 
-// ScanLines returns a bufio.Scanner over r. Use for JSONL record-processing
-// tools that read input line-by-line. Never use io.ReadAll for record-processing
-// tools — it will OOM on large inputs.
+// ScanLines returns a bufio.Scanner over r with a 1MB max line buffer. Use for
+// JSONL record-processing tools that read input line-by-line. Never use
+// io.ReadAll for record-processing tools - it will OOM on large inputs.
+//
+// The default bufio.Scanner buffer is 64KB, which is too small for JSONL records
+// containing LLM responses or large base64 blobs. 1MB matches the buffer size
+// used by the MCP server and prompt field mode.
 func ScanLines(r io.Reader) *bufio.Scanner {
-	return bufio.NewScanner(r)
+	s := bufio.NewScanner(r)
+	s.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	return s
 }
 
 // readFromStdin reads all of stdin, strips exactly one trailing newline, and

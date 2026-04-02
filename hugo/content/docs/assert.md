@@ -51,13 +51,13 @@ echo '{"status":"ok","count":42}' | vrk assert '.count > 0'
 
 ## Flags
 
-| Flag         | Short | Type   | Description                                  |
-|--------------|-------|--------|----------------------------------------------|
-| `--contains` |       | string | Assert stdin contains this literal substring |
-| `--matches`  |       | string | Assert stdin matches this regular expression |
-| `--message`  | -m    | string | Custom message on failure                    |
-| `--json`     | -j    | bool   | Emit errors as JSON to stdout                |
-| `--quiet`    | -q    | bool   | Suppress stderr output on failure            |
+| Flag         | Short | Type   | Description                                                                                                               |
+|--------------|-------|--------|---------------------------------------------------------------------------------------------------------------------------|
+| `--contains` |       | string | Assert stdin contains this literal substring                                                                              |
+| `--matches`  |       | string | Assert stdin matches this regular expression. Complex patterns with many alternations reduce throughput on large streams. |
+| `--message`  | -m    | string | Custom message on failure                                                                                                 |
+| `--json`     | -j    | bool   | Emit errors as JSON to stdout                                                                                             |
+| `--quiet`    | -q    | bool   | Suppress stderr output on failure                                                                                         |
 
 
 <!-- notes - edit in notes/assert.notes.md -->

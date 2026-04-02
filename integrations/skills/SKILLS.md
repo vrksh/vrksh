@@ -999,11 +999,14 @@ Input: positional argument or stdin.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--text` | `-t` | Plain prose output, no markdown syntax |
-| `--raw` | — | Raw HTML, no processing or extraction |
+| `--raw` | - | Raw HTML, no processing or extraction |
 | `--json` | `-j` | Emit a JSON envelope with metadata |
+| `--quiet` | `-q` | Suppress stderr output |
+| `--max-size` | - | Max response body size in bytes (default 10MB) |
+| `--allow-internal` | - | Allow requests to private/loopback/link-local addresses |
 
 `--text`, `--raw`, and `--json` are mutually exclusive. Combining any two exits 2.
-No `--quiet` — `grab` produces no informational stderr in normal operation.
+Requests to internal network addresses (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, link-local) are blocked by default. Pass `--allow-internal` to allow them.
 
 ### --json output shape
 
@@ -1026,6 +1029,8 @@ No `--quiet` — `grab` produces no informational stderr in normal operation.
 | 1 | Fetch failed: DNS error, connection refused, timeout |
 | 1 | HTTP status >= 400 |
 | 1 | More than 5 redirect hops |
+| 1 | Response body exceeded `--max-size` limit |
+| 1 | Request to internal address blocked (without `--allow-internal`) |
 | 2 | No URL provided (interactive terminal or empty stdin) |
 | 2 | Invalid URL format (no scheme, non-http/https scheme, unparseable) |
 | 2 | Unknown flag |
@@ -1092,6 +1097,8 @@ vrk coax --times 3 --backoff exp:1s -- vrk grab https://example.com
 - **`token_estimate` uses cl100k_base (~95% accurate for Claude).** The estimate reflects the extracted `content` field, not the raw HTML. Set downstream budgets at 90% of the actual model limit to absorb the error margin.
 - **`--text` output is whitespace-normalised.** `grab --text` runs the HTML extractor then `vrk plain`'s markdown stripper. Consecutive blank lines are collapsed to one, and multiple spaces on a line are collapsed to one. The prose content is unchanged, but whitespace structure may differ from the raw page.
 - **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.
+- **Internal addresses are blocked by default.** Requests to 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, ::1, and link-local IPv6 exit 1 unless `--allow-internal` is passed. This includes addresses reached via redirects - a public URL that redirects to localhost is also blocked.
+- **Response size is capped at 10MB by default.** Use `--max-size` to raise or lower the limit. Responses that exceed the limit exit 1.
 
 ---
 

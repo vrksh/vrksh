@@ -21,7 +21,7 @@ flags:
   - flag: --pattern
     short: ""
     type: "[]string"
-    description: Additional Go regex to match and redact (repeatable)
+    description: Additional Go regex to match and redact (repeatable). Complex patterns with many alternations reduce throughput on large streams.
   - flag: --entropy
     short: ""
     type: float64

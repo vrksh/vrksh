@@ -89,6 +89,17 @@ func openDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("kv: cannot determine home directory: %w\nset VRK_KV_PATH to override", err)
 	}
 
+	// Create the database file with restricted permissions (0600) if it does
+	// not already exist. sql.Open would create it with the default umask
+	// (typically 0644), making it world-readable.
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		f, createErr := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+		if createErr != nil {
+			return nil, fmt.Errorf("kv: create database %s: %w", path, createErr)
+		}
+		_ = f.Close()
+	}
+
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("kv: open database %s: %w", path, err)

@@ -45,20 +45,22 @@ vrk grab https://blog.example.com/llm-best-practices | vrk tok
 
 ## Exit codes
 
-| Code | Meaning                                                       |
-|------|---------------------------------------------------------------|
-| 0    | Success                                                       |
-| 1    | HTTP error, fetch timeout, or I/O error                       |
-| 2    | Usage error - invalid URL, no input, mutually exclusive flags |
+| Code | Meaning                                                                               |
+|------|---------------------------------------------------------------------------------------|
+| 0    | Success                                                                               |
+| 1    | HTTP error, fetch timeout, response too large, blocked internal address, or I/O error |
+| 2    | Usage error - invalid URL, no input, mutually exclusive flags                         |
 
 ## Flags
 
-| Flag      | Short | Type | Description                            |
-|-----------|-------|------|----------------------------------------|
-| `--text`  | -t    | bool | Plain prose output, no markdown syntax |
-| `--raw`   |       | bool | Raw HTML, no processing                |
-| `--json`  | -j    | bool | Emit JSON envelope with metadata       |
-| `--quiet` | -q    | bool | Suppress stderr output                 |
+| Flag               | Short | Type | Description                                                                                        |
+|--------------------|-------|------|----------------------------------------------------------------------------------------------------|
+| `--text`           | -t    | bool | Plain prose output, no markdown syntax                                                             |
+| `--raw`            |       | bool | Raw HTML, no processing                                                                            |
+| `--json`           | -j    | bool | Emit JSON envelope with metadata                                                                   |
+| `--quiet`          | -q    | bool | Suppress stderr output                                                                             |
+| `--max-size`       |       | int  | Max response body size in bytes (default 10MB)                                                     |
+| `--allow-internal` |       | bool | Allow requests to private, loopback, and link-local addresses (blocked by default for SSRF safety) |
 
 
 <!-- notes - edit in notes/grab.notes.md -->

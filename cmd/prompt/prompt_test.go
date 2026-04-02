@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // runPrompt sets os.Args, captures stdout/stderr, overrides environment
@@ -1140,5 +1141,129 @@ func TestFieldNewlineEscape(t *testing.T) {
 	}
 	if !strings.Contains(lines[0], `\n`) {
 		t.Errorf("output does not contain escaped newlines: %q", lines[0])
+	}
+}
+
+// --- M3: HTTP client timeout ---
+
+// TestAPIClientHasTimeout verifies that the package-level apiClient has a
+// non-zero timeout set. This is a unit test - it reads the Timeout field
+// directly rather than waiting for an actual timeout.
+func TestAPIClientHasTimeout(t *testing.T) {
+	if apiClient == nil {
+		t.Fatal("apiClient is nil")
+	}
+	if apiClient.Timeout == 0 {
+		t.Error("apiClient.Timeout is 0, want non-zero")
+	}
+	if apiClient.Timeout != 120*time.Second {
+		t.Errorf("apiClient.Timeout = %v, want %v", apiClient.Timeout, 120*time.Second)
+	}
+}
+
+// TestHTTPTimeoutConstant verifies the named constant matches the expected value.
+func TestHTTPTimeoutConstant(t *testing.T) {
+	if httpTimeout != 120*time.Second {
+		t.Errorf("httpTimeout = %v, want 120s", httpTimeout)
+	}
+}
+
+// --- L1: single quote escaping in --explain ---
+
+// TestExplainSingleQuoteEscaping verifies that a prompt containing single
+// quotes produces valid, copy-pasteable curl output. The shell pattern for
+// embedding a single quote inside a single-quoted string is: '\”
+func TestExplainSingleQuoteEscaping(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--explain"}, "it's a test")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	// The raw single quote from "it's" must not appear unescaped inside the
+	// -d '...' argument. It should be escaped as '\''
+	if strings.Contains(stdout, "it's a test") {
+		t.Errorf("stdout contains unescaped single quote in curl body:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, `'\''`) {
+		t.Errorf("stdout does not contain escaped single quote sequence '\\'':\n%s", stdout)
+	}
+}
+
+// TestExplainSingleQuoteOpenAI tests single quote escaping with the OpenAI provider.
+func TestExplainSingleQuoteOpenAI(t *testing.T) {
+	env := map[string]string{"OPENAI_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--explain"}, "don't stop")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if strings.Contains(stdout, "don't stop") {
+		t.Errorf("stdout contains unescaped single quote:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, `'\''`) {
+		t.Errorf("stdout missing escaped single quote sequence:\n%s", stdout)
+	}
+}
+
+// TestExplainSingleQuoteEndpoint tests single quote escaping with a custom endpoint.
+func TestExplainSingleQuoteEndpoint(t *testing.T) {
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", "http://localhost:11434/v1", "--explain"}, "it's fine")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if strings.Contains(stdout, "it's fine") {
+		t.Errorf("stdout contains unescaped single quote:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, `'\''`) {
+		t.Errorf("stdout missing escaped single quote sequence:\n%s", stdout)
+	}
+}
+
+// TestExplainNoQuotesUnchanged verifies that prompts without single quotes
+// still render correctly in --explain output.
+func TestExplainNoQuotesUnchanged(t *testing.T) {
+	env := map[string]string{"ANTHROPIC_API_KEY": "fake"}
+	stdout, _, code := runPrompt(t, env, []string{"--explain"}, "hello world")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stdout, "hello world") {
+		t.Errorf("stdout does not contain prompt text 'hello world':\n%s", stdout)
+	}
+}
+
+// --- L2: response body size limit ---
+
+// TestMaxResponseBytesConstant verifies the limit constant is 50MB.
+func TestMaxResponseBytesConstant(t *testing.T) {
+	want := int64(50 * 1024 * 1024)
+	if maxResponseBytes != want {
+		t.Errorf("maxResponseBytes = %d, want %d (50MB)", maxResponseBytes, want)
+	}
+}
+
+// TestResponseBodyLimit verifies that an API response larger than
+// maxResponseBytes results in exit 1 with a clear error message.
+func TestResponseBodyLimit(t *testing.T) {
+	// Save and restore the original maxResponseBytes so we can test with a
+	// tiny limit without needing a 50MB response in the test.
+	origMax := maxResponseBytes
+	maxResponseBytes = 64 // 64 bytes
+	t.Cleanup(func() { maxResponseBytes = origMax })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Write a response larger than 64 bytes.
+		_, _ = w.Write([]byte(strings.Repeat("x", 128)))
+	}))
+	defer srv.Close()
+
+	_, stderr, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", srv.URL, "--model", "test"}, "hello")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "exceeded") {
+		t.Errorf("stderr = %q, want it to mention 'exceeded'", stderr)
 	}
 }

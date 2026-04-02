@@ -83,7 +83,11 @@ body {
   border: 1px solid var(--color-accent);
 }
 
-/* Announcement stripe marquee */
+/* Announcement stripe marquee
+   Two identical .stripe-copy spans sit side by side inside .stripe-track.
+   The animation slides the track left by exactly one copy's width (50% of
+   the track). When it loops back to 0 the second copy is in the exact
+   position the first copy started, so the seam is invisible. */
 @keyframes marquee {
   0% {
     transform: translateX(0);
@@ -93,20 +97,26 @@ body {
   }
 }
 
-.stripe-inner {
+.stripe-track {
   display: flex;
-  gap: 3rem;
-  animation: marquee 30s linear infinite;
+  width: max-content;
+  animation: marquee 40s linear infinite;
   white-space: nowrap;
 }
 
-.announcement-stripe:hover .stripe-inner {
+.stripe-copy {
+  display: flex;
+  gap: 3rem;
+  padding-right: 3rem; /* gap between end of copy 1 and start of copy 2 */
+}
+
+.announcement-stripe:hover .stripe-track {
   animation-play-state: paused;
 }
 
 @media (max-width: 640px) {
-  .stripe-inner {
-    animation-duration: 15s;
+  .stripe-track {
+    animation-duration: 35s;
   }
 }
 

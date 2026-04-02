@@ -4,13 +4,13 @@ Machine-readable tool reference. One section per tool.
 
 ## assert - pipeline condition check - jq conditions, --contains, --matches
 
-| Flag         | Short | Description                                  |
-|--------------|-------|----------------------------------------------|
-| `--contains` |       | Assert stdin contains this literal substring |
-| `--matches`  |       | Assert stdin matches this regular expression |
-| `--message`  | -m    | Custom message on failure                    |
-| `--json`     | -j    | Emit errors as JSON to stdout                |
-| `--quiet`    | -q    | Suppress stderr output on failure            |
+| Flag         | Short | Description                                                                                                               |
+|--------------|-------|---------------------------------------------------------------------------------------------------------------------------|
+| `--contains` |       | Assert stdin contains this literal substring                                                                              |
+| `--matches`  |       | Assert stdin matches this regular expression. Complex patterns with many alternations reduce throughput on large streams. |
+| `--message`  | -m    | Custom message on failure                                                                                                 |
+| `--json`     | -j    | Emit errors as JSON to stdout                                                                                             |
+| `--quiet`    | -q    | Suppress stderr output on failure                                                                                         |
 
 Exit 0: All conditions passed; input passed through to stdout
 Exit 1: Assertion failed, or runtime error
@@ -164,15 +164,17 @@ vrk epoch '+3d' --iso
 
 ## grab - URL fetcher - clean markdown, plain text, or raw HTML.
 
-| Flag      | Short | Description                            |
-|-----------|-------|----------------------------------------|
-| `--text`  | -t    | Plain prose output, no markdown syntax |
-| `--raw`   |       | Raw HTML, no processing                |
-| `--json`  | -j    | Emit JSON envelope with metadata       |
-| `--quiet` | -q    | Suppress stderr output                 |
+| Flag               | Short | Description                                                                                        |
+|--------------------|-------|----------------------------------------------------------------------------------------------------|
+| `--text`           | -t    | Plain prose output, no markdown syntax                                                             |
+| `--raw`            |       | Raw HTML, no processing                                                                            |
+| `--json`           | -j    | Emit JSON envelope with metadata                                                                   |
+| `--quiet`          | -q    | Suppress stderr output                                                                             |
+| `--max-size`       |       | Max response body size in bytes (default 10MB)                                                     |
+| `--allow-internal` |       | Allow requests to private, loopback, and link-local addresses (blocked by default for SSRF safety) |
 
 Exit 0: Success
-Exit 1: HTTP error, fetch timeout, or I/O error
+Exit 1: HTTP error, fetch timeout, response too large, blocked internal address, or I/O error
 Exit 2: Usage error - invalid URL, no input, mutually exclusive flags
 
 ```bash
@@ -249,12 +251,12 @@ vrk grab https://example.com/docs | vrk links --bare
 
 ## mask - secret redactor - entropy + pattern-based, streaming
 
-| Flag        | Short | Description                                          |
-|-------------|-------|------------------------------------------------------|
-| `--pattern` |       | Additional Go regex to match and redact (repeatable) |
-| `--entropy` |       | Shannon entropy threshold; lower catches more        |
-| `--json`    | -j    | Append metadata trailer after output                 |
-| `--quiet`   | -q    | Suppress stderr output                               |
+| Flag        | Short | Description                                                                                                                       |
+|-------------|-------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `--pattern` |       | Additional Go regex to match and redact (repeatable). Complex patterns with many alternations reduce throughput on large streams. |
+| `--entropy` |       | Shannon entropy threshold; lower catches more                                                                                     |
+| `--json`    | -j    | Append metadata trailer after output                                                                                              |
+| `--quiet`   | -q    | Suppress stderr output                                                                                                            |
 
 Exit 0: All lines processed
 Exit 1: Stdin scanner error or write failure

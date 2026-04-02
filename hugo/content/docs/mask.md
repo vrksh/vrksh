@@ -50,12 +50,12 @@ cat deploy.log | vrk mask | vrk prompt --system 'What errors occurred?'
 
 ## Flags
 
-| Flag        | Short | Type     | Description                                          |
-|-------------|-------|----------|------------------------------------------------------|
-| `--pattern` |       | []string | Additional Go regex to match and redact (repeatable) |
-| `--entropy` |       | float64  | Shannon entropy threshold; lower catches more        |
-| `--json`    | -j    | bool     | Append metadata trailer after output                 |
-| `--quiet`   | -q    | bool     | Suppress stderr output                               |
+| Flag        | Short | Type     | Description                                                                                                                       |
+|-------------|-------|----------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `--pattern` |       | []string | Additional Go regex to match and redact (repeatable). Complex patterns with many alternations reduce throughput on large streams. |
+| `--entropy` |       | float64  | Shannon entropy threshold; lower catches more                                                                                     |
+| `--json`    | -j    | bool     | Append metadata trailer after output                                                                                              |
+| `--quiet`   | -q    | bool     | Suppress stderr output                                                                                                            |
 
 
 <!-- notes - edit in notes/mask.notes.md -->

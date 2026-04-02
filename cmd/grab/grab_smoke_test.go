@@ -52,7 +52,7 @@ func vrkBinary(t *testing.T) string {
 func runBinary(t *testing.T, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
 	vrk := vrkBinary(t)
-	cmd := exec.Command(vrk, append([]string{"grab"}, args...)...)
+	cmd := exec.Command(vrk, append([]string{"grab", "--allow-internal"}, args...)...)
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf

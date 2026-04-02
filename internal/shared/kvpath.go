@@ -13,7 +13,7 @@ import (
 func KVPath() (string, error) {
 	if p := os.Getenv("VRK_KV_PATH"); p != "" {
 		dir := filepath.Dir(p)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return "", fmt.Errorf("creating kv directory %s: %w", dir, err)
 		}
 		return p, nil

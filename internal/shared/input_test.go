@@ -290,3 +290,53 @@ func TestScanLines(t *testing.T) {
 		}
 	}
 }
+
+// TestScanLinesLargeBuffer verifies ScanLines handles lines larger than the
+// default 64KB bufio.Scanner limit. A 100KB line must pass through without
+// a bufio.ErrTooLong error.
+func TestScanLinesLargeBuffer(t *testing.T) {
+	// Build a 100KB line (well above the default 64KB limit).
+	bigLine := strings.Repeat("x", 100*1024)
+	input := bigLine + "\n"
+
+	scanner := ScanLines(strings.NewReader(input))
+
+	if !scanner.Scan() {
+		err := scanner.Err()
+		t.Fatalf("Scan() returned false on 100KB line; err = %v", err)
+	}
+	got := scanner.Text()
+	if got != bigLine {
+		t.Errorf("got %d bytes, want %d", len(got), len(bigLine))
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scanner error after scan: %v", err)
+	}
+}
+
+// TestScanLinesMultipleLargeLines verifies that multiple lines above 64KB each
+// are all scanned correctly.
+func TestScanLinesMultipleLargeLines(t *testing.T) {
+	line1 := strings.Repeat("a", 80*1024)
+	line2 := strings.Repeat("b", 90*1024)
+	input := line1 + "\n" + line2 + "\n"
+
+	scanner := ScanLines(strings.NewReader(input))
+
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scanner error: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2", len(lines))
+	}
+	if len(lines[0]) != 80*1024 {
+		t.Errorf("line[0] len = %d, want %d", len(lines[0]), 80*1024)
+	}
+	if len(lines[1]) != 90*1024 {
+		t.Errorf("line[1] len = %d, want %d", len(lines[1]), 90*1024)
+	}
+}

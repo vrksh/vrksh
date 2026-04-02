@@ -80,4 +80,24 @@ func TestKVPath(t *testing.T) {
 			t.Error("expected error when parent dir cannot be created, got nil")
 		}
 	})
+
+	t.Run("creates parent directory with 0700 permissions", func(t *testing.T) {
+		dir := t.TempDir()
+		subdir := filepath.Join(dir, "restricted")
+		dbPath := filepath.Join(subdir, "test.db")
+		t.Setenv("VRK_KV_PATH", dbPath)
+
+		_, err := KVPath()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		info, err := os.Stat(subdir)
+		if err != nil {
+			t.Fatalf("stat %s: %v", subdir, err)
+		}
+		perm := info.Mode().Perm()
+		if perm != 0o700 {
+			t.Errorf("directory permissions = %04o, want 0700", perm)
+		}
+	})
 }

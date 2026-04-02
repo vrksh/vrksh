@@ -8,28 +8,26 @@
     aria-label="Latest updates"
 >
     <div
-        class="stripe-inner py-1.5 text-xs"
+        class="stripe-track py-1.5 text-xs"
         style="
             font-family: var(--font-mono);
             color: var(--color-text);
             opacity: 0.6;
         "
     >
-        <span>26 Unix tools. One binary. Zero dependencies.</span>
-        <span>&middot;</span>
-        <span>the missing coreutils for the agent era</span>
-        <span>&middot;</span>
-        <span>vrk mcp - expose all 26 tools to any AI agent</span>
-        <span>&middot;</span>
-        <span>curl vrk.sh/install.sh | sh - ready in 5 seconds</span>
-        <span>&middot;</span>
-        <span>26 Unix tools. One binary. Zero dependencies.</span>
-        <span>&middot;</span>
-        <span>the missing coreutils for the agent era</span>
-        <span>&middot;</span>
-        <span>vrk mcp - expose all 26 tools to any AI agent</span>
-        <span>&middot;</span>
-        <span>curl vrk.sh/install.sh | sh - ready in 5 seconds</span>
+        {{ $items := slice
+            "26 Unix tools. One binary. Zero dependencies."
+            "the missing coreutils for the agent era"
+            "vrk mcp - expose all 26 tools to any AI agent"
+            "curl vrk.sh/install.sh | sh - ready in 5 seconds"
+        }}
+        <!-- Two identical copies side by side. The animation translates by
+             exactly one copy's width, so when it loops the seam is invisible. -->
+        {{ range seq 2 }}
+        <span class="stripe-copy" aria-hidden="{{ if eq . 2 }}true{{ end }}">
+            {{ range $items }}<span>{{ . }}</span><span>&middot;</span>{{ end }}
+        </span>
+        {{ end }}
     </div>
 </div>
 

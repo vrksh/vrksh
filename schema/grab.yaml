@@ -37,11 +37,19 @@ flags:
     short: "-q"
     type: bool
     description: Suppress stderr output
+  - flag: --max-size
+    short: ""
+    type: int
+    description: Max response body size in bytes (default 10MB)
+  - flag: --allow-internal
+    short: ""
+    type: bool
+    description: Allow requests to private, loopback, and link-local addresses (blocked by default for SSRF safety)
 exit_codes:
   - code: 0
     meaning: Success
   - code: 1
-    meaning: HTTP error, fetch timeout, or I/O error
+    meaning: HTTP error, fetch timeout, response too large, blocked internal address, or I/O error
   - code: 2
     meaning: Usage error - invalid URL, no input, mutually exclusive flags
 og_image:

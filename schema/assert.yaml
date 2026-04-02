@@ -26,7 +26,7 @@ flags:
   - flag: --matches
     short: ""
     type: string
-    description: Assert stdin matches this regular expression
+    description: Assert stdin matches this regular expression. Complex patterns with many alternations reduce throughput on large streams.
   - flag: --message
     short: "-m"
     type: string

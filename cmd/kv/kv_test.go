@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -653,5 +654,60 @@ func TestBeginImmediateCancelledContext(t *testing.T) {
 	const maxExpected = 100 * time.Millisecond
 	if elapsed > maxExpected {
 		t.Errorf("beginImmediate took %v with pre-cancelled context, want <%v", elapsed, maxExpected)
+	}
+}
+
+// --- M4: database file permissions ---
+
+// TestOpenDBCreatesFileWith0600 verifies that openDB creates a new database
+// file with 0600 permissions (owner-only read/write), not the default umask.
+func TestOpenDBCreatesFileWith0600(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test-perms.db")
+	t.Setenv("VRK_KV_PATH", dbPath)
+
+	db, err := openDB()
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	_ = db.Close()
+
+	info, err := os.Stat(dbPath)
+	if err != nil {
+		t.Fatalf("stat %s: %v", dbPath, err)
+	}
+	perm := info.Mode().Perm()
+	if perm != 0o600 {
+		t.Errorf("database file permissions = %04o, want 0600", perm)
+	}
+}
+
+// TestOpenDBPreservesExistingPermissions verifies that if the database file
+// already exists, openDB does not change its permissions.
+func TestOpenDBPreservesExistingPermissions(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "existing.db")
+	t.Setenv("VRK_KV_PATH", dbPath)
+
+	// Create the file with 0644 first - simulating an existing database.
+	f, err := os.OpenFile(dbPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+	_ = f.Close()
+
+	db, err := openDB()
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	_ = db.Close()
+
+	info, err := os.Stat(dbPath)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	perm := info.Mode().Perm()
+	if perm != 0o644 {
+		t.Errorf("existing file permissions changed to %04o, want 0644 (unchanged)", perm)
 	}
 }
