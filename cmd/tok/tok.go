@@ -18,7 +18,6 @@ var isTerminal = shared.IsTerminal
 // readAll is a var so tests can inject I/O errors.
 var readAll = io.ReadAll
 
-// tokOutput is the shape emitted by --json in measurement mode.
 type tokOutput struct {
 	Tokens int    `json:"tokens"`
 	Model  string `json:"model"`

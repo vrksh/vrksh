@@ -11,7 +11,7 @@ You're working with LLMs. Maybe you're building pipelines in Python. Maybe your 
 
 These aren't hard problems. But the solutions are scattered. Token counting is a Python library. Retry with backoff is another library. Secret redaction is a third. Schema validation is a fourth. Each one pulls in dependencies, needs a runtime, and only works inside your Python process. Your agent can't call them. Your CI pipeline can't call them. The developer SSHed into a production box at 2 AM definitely can't call them.
 
-vrk puts all of it in one place. 26 CLI tools for the things that come up constantly when you work with LLMs - token counting, API calls, schema validation, secret redaction, retry logic, rate limiting, state persistence. Each one is a Unix command: stdin in, stdout out, exit codes that mean something. A developer can run them from the terminal. A Python script can shell out to them. An agent can call them as tools. A cron job can chain them together. One static binary, no runtime dependencies, works the same on every platform.
+vrk puts all of it in one place. 26 Unix tools for the things that come up constantly when you work with LLMs - token counting, API calls, schema validation, secret redaction, retry logic, rate limiting, state persistence. Each one is a Unix command: stdin in, stdout out, exit codes that mean something. A developer can run them from the terminal. A Python script can shell out to them. An agent can call them as tools. A cron job can chain them together. One static binary, no runtime dependencies, works the same on every platform.
 
 ## The name
 

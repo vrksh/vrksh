@@ -384,8 +384,6 @@ func printUsage(fs *pflag.FlagSet) int {
 	return 0
 }
 
-// --- HTML extraction ---
-
 // skipTags lists elements whose entire subtree is stripped from extraction.
 var skipTags = map[atom.Atom]bool{
 	atom.Script: true,

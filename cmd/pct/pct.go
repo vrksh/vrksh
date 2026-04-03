@@ -21,7 +21,6 @@ var isTerminal = shared.IsTerminal
 // readAll is a var so tests can inject I/O errors.
 var readAll = io.ReadAll
 
-// pctRecord is the JSON envelope emitted per line when --json is active.
 type pctRecord struct {
 	Input  string `json:"input"`
 	Output string `json:"output"`

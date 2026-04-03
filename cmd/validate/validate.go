@@ -30,7 +30,6 @@ var fixFn = execPromptFix
 // so tests inject an error-producing reader to cover the scanner error path.
 var newStdinReader = func() io.Reader { return os.Stdin }
 
-// metaRecord is the trailing --json record emitted after all data lines.
 type metaRecord struct {
 	VRK    string `json:"_vrk"`
 	Total  int    `json:"total"`

@@ -20,7 +20,6 @@ var isTerminal = shared.IsTerminal
 // nil means "use os.Stdin" at the time Run() is called.
 var stdinReader io.Reader
 
-// sseRecord is the shape emitted to stdout for each parsed SSE event.
 type sseRecord struct {
 	Event string      `json:"event"`
 	Data  interface{} `json:"data"`

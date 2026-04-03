@@ -28,7 +28,6 @@ var sleepFn = time.Sleep
 // If nil, os.Stdin is used.
 var stdinReader io.Reader
 
-// metaRecord is the --json trailing record.
 type metaRecord struct {
 	VRK       string `json:"_vrk"`
 	Rate      string `json:"rate"`

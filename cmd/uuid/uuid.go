@@ -13,7 +13,6 @@ import (
 	"github.com/vrksh/vrksh/internal/shared"
 )
 
-// uuidOutput is the JSON envelope emitted with --json.
 type uuidOutput struct {
 	UUID        string `json:"uuid"`
 	Version     int    `json:"version"`

@@ -39,14 +39,12 @@ var (
 	reHTMLTag = regexp.MustCompile(`<[^>]+>`)
 )
 
-// linkRecord is one emitted JSONL record.
 type linkRecord struct {
 	Text string `json:"text"`
 	URL  string `json:"url"`
 	Line int    `json:"line"`
 }
 
-// metaRecord is the trailing --json envelope.
 type metaRecord struct {
 	VRK   string `json:"_vrk"`
 	Count int    `json:"count"`
