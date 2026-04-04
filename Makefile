@@ -73,7 +73,7 @@ generate-og:
 
 # Validate all schema YAMLs and check skills.md token budget.
 validate-schemas:
-	go run ./internal/schema/cmd/validate ./schema/
+	go run ./internal/schema/main ./schema/
 
 # Validate all generated surfaces are in sync with manifest.json.
 # Exits non-zero if any tool is missing from any surface.
