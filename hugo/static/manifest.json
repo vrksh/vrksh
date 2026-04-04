@@ -104,14 +104,6 @@
     {
       "name": "assert",
       "description": "pipeline condition check - jq conditions, --contains, --matches"
-    },
-    {
-      "name": "bare",
-      "description": "symlink creator - use vrksh tools without the vrk prefix"
-    },
-    {
-      "name": "completions",
-      "description": "shell completion script generator - bash, zsh, fish"
     }
   ]
 }

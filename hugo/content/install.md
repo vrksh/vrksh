@@ -11,7 +11,7 @@ One static binary. No runtime. No dependencies. Pick the method that fits your s
 The fastest path if you already have Homebrew:
 
 ```bash
-brew tap vrksh/homebrew-vrksh
+brew tap vrksh/vrksh
 brew install vrk
 ```
 

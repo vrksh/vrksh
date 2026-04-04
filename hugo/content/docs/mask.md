@@ -85,9 +85,9 @@ Appends a metadata trailer showing what was redacted:
 
 ```bash
 $ printf 'Bearer ghp_xK9mN2pL4qR7sT0uW3yZ5bD8fH1jM6nP9rV2\nNormal line\n' | vrk mask --json
-Bearer [REDACTED] [REDACTED]
+Bearer [REDACTED]
 Normal line
-{"_vrk":"mask","lines":2,"redacted":1,"patterns_matched":["bearer","entropy"]}
+{"_vrk":"mask","lines":2,"redacted":1,"patterns_matched":["bearer"]}
 ```
 
 ### Custom patterns (--pattern)
