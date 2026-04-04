@@ -383,16 +383,34 @@ assert_stdout "epoch ts embedded in prompt --explain" "$ts" "$explain"
 # ---------------------------------------------------------------------------
 echo "--- Section 12: prompt (live) ---"
 
+# tok check gate before prompt (no API key needed)
+text="What is 2 + 2?"
+echo "$text" | $VRK tok --check 500 > /dev/null 2>/dev/null
+assert_exit "tok check gate before prompt (under limit)" 0 $?
+
+# prompt --explain + kv: cache by uuid key (no API key needed)
+req_id=$($VRK uuid)
+response=$(echo "$text" | $VRK prompt --explain)
+$VRK kv set "response:$req_id" "$response"
+cached=$($VRK kv get "response:$req_id")
+[ -n "$cached" ] \
+  && { echo "PASS: prompt --explain response cached in kv via uuid key"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: prompt --explain response cached in kv via uuid key"; FAIL=$((FAIL+1)); }
+
+# jwt claim extraction + prompt --explain (no API key needed)
+JWT=$(make_jwt '{"sub":"alice","role":"admin","exp":9999999999}')
+role=$(echo "$JWT" | $VRK jwt --claim role --quiet)
+explain=$(echo "Reply with only the word: $role" | $VRK prompt --explain)
+echo "$explain" | grep -q "admin" \
+  && { echo "PASS: jwt claim injected into prompt --explain"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: jwt claim injected into prompt --explain"; FAIL=$((FAIL+1)); }
+
+# Live prompt tests - gated on API key
 if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
-  echo "SKIP: neither ANTHROPIC_API_KEY nor OPENAI_API_KEY set — skipping live prompt tests"
+  echo "SKIP: neither ANTHROPIC_API_KEY nor OPENAI_API_KEY set - skipping live prompt tests"
 else
   VRK_KV_PATH="$TMPDIR/prompt_kv.db"
   export VRK_KV_PATH
-
-  # tok check gate before prompt: gate the call
-  text="What is 2 + 2?"
-  echo "$text" | $VRK tok --check 500 > /dev/null 2>/dev/null
-  assert_exit "tok check gate before prompt (under limit)" 0 $?
 
   # prompt + kv: cache the response by a uuid request key
   req_id=$($VRK uuid)
@@ -409,11 +427,11 @@ else
   $VRK coax --times 2 -- "$PROMPT_SCRIPT"
   assert_exit "coax + prompt succeeds when API is reachable" 0 $?
 
-  # jwt claim extraction → prompt (inject decoded claim as context)
+  # jwt claim extraction + prompt (inject decoded claim as context)
   JWT=$(make_jwt '{"sub":"alice","role":"admin","exp":9999999999}')
   role=$(echo "$JWT" | $VRK jwt --claim role --quiet)
   answer=$(echo "Reply with only the word: $role" | $VRK prompt)
-  assert_stdout "jwt claim → prompt injects decoded value" "admin" "$answer"
+  assert_stdout "jwt claim -> prompt injects decoded value" "admin" "$answer"
 
   unset VRK_KV_PATH
 fi
