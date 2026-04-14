@@ -1,0 +1,29 @@
+{{ $current := .Params.tool }}
+{{ $coreOrder := slice "tok" "prompt" "chunk" }}
+{{ $pipelineOrder := slice "grab" "sse" "validate" "coax" "kv" "mask" }}
+{{ $utilityOrder := slice "jwt" "epoch" "uuid" "base" "digest" "plain" "links" "recase" "slug" "moniker" "pct" "jsonl" "sip" "throttle" "urlinfo" "emit" "assert" }}
+{{ $metaOrder := slice "completions" "bare" }}
+
+<aside class="hidden lg:block w-52 shrink-0">
+  <div class="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pr-2">
+    <nav class="text-sm" style="font-family: var(--font-mono);" aria-label="Tools">
+      {{ range $group := slice
+          (dict "label" "Core" "tools" $coreOrder)
+          (dict "label" "Pipeline" "tools" $pipelineOrder)
+          (dict "label" "Utilities" "tools" $utilityOrder)
+          (dict "label" "Meta" "tools" $metaOrder)
+      }}
+      <div class="mb-5">
+        <p class="text-xs uppercase tracking-wider mb-2" style="color: var(--color-muted); letter-spacing: 0.05em;">{{ $group.label }}</p>
+        <ul class="space-y-1">
+          {{ range $tool := $group.tools }}
+          <li>
+            <a href="/docs/{{ $tool }}/" class="sidebar-link block px-2 py-1 rounded {{ if eq $tool $current }}active{{ end }}">vrk {{ $tool }}</a>
+          </li>
+          {{ end }}
+        </ul>
+      </div>
+      {{ end }}
+    </nav>
+  </div>
+</aside>

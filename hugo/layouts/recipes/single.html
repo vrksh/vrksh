@@ -6,8 +6,10 @@
 <body style="background-color: var(--color-bg); color: var(--color-text);">
   {{ partial "nav.html" . }}
 
-  <main class="max-w-6xl mx-auto px-4 py-12">
-    <article class="max-w-4xl">
+  <main class="max-w-7xl mx-auto px-4 py-12">
+    <div class="flex gap-10">
+      {{ partial "recipes-sidebar.html" . }}
+      <article class="flex-1 min-w-0 max-w-4xl">
       <h1 class="text-3xl font-bold mb-4">{{ .Title }}</h1>
 
       <p class="text-lg mb-6" style="color: var(--color-text); font-weight: 500;">{{ .Params.why }}</p>
@@ -33,6 +35,7 @@
         </div>
       </div>
     </article>
+    </div>
   </main>
 
   {{ partial "footer.html" . }}

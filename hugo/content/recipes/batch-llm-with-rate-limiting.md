@@ -11,7 +11,7 @@ steps:
       | while read -r f; do
           cat "$f" \
             | vrk tok --check 8000 \
-            | vrk prompt --system 'Summarize this document.' \
+            | vrk prompt \
             | vrk kv set "result:$(basename "$f")"
         done
 tags:
@@ -45,7 +45,7 @@ ls docs/*.md | vrk throttle --rate 60/m \
       KEY="result:$(basename "$f")"
       vrk kv get "$KEY" >/dev/null 2>&1 && continue
       cat "$f" | vrk tok --check 8000 \
-        | vrk prompt --system 'Summarize this document.' \
+        | vrk prompt \
         | vrk kv set "$KEY"
     done
 ```

@@ -80,16 +80,21 @@
                     <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
                         try it now - no API key needed
                     </p>
-                    <pre
-                        class="text-sm"
-                        style="margin: 0"
-                    ><code class="language-bash"># Count tokens in a document
+                    <div class="terminal">
+                        <div class="terminal-header">
+                            <div class="terminal-dots"><span></span><span></span><span></span></div>
+                            <div class="terminal-title">~ vrk</div>
+                        </div>
+                        <div class="terminal-body">
+                            <pre class="text-sm"><code class="language-bash"># Count tokens in a document
 cat README.md | vrk tok
 # → 342
 
 # Mask secrets before they leak
 echo "key: sk-ant-api-abc123xyz" | vrk mask
 # → key: [REDACTED]</code></pre>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -132,14 +137,19 @@ jsonschema.validate(json.loads(result), schema)</code></pre>
                         <p class="text-sm mb-2 font-mono" style="color: var(--color-accent);">
                             after
                         </p>
-                        <pre
-                            class="text-xs"
-                            style="margin: 0"
-                        ><code class="language-bash">cat article.md \
+                        <div class="terminal">
+                            <div class="terminal-header">
+                                <div class="terminal-dots"><span></span><span></span><span></span></div>
+                                <div class="terminal-title">~ vrk</div>
+                            </div>
+                            <div class="terminal-body">
+                                <pre class="text-xs"><code class="language-bash">cat article.md \
   | vrk tok --check 8000 \
   | vrk mask \
   | vrk prompt --system 'Summarize' \
   | vrk validate --schema schema.json</code></pre>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -163,13 +173,18 @@ jsonschema.validate(json.loads(result), schema)</code></pre>
                 <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
                     batch jobs at scale
                 </p>
-                <pre
-                    class="text-xs"
-                    style="margin: 0"
-                ><code class="language-bash">find docs/ -name '*.md' -exec cat {} + \
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <div class="terminal-dots"><span></span><span></span><span></span></div>
+                        <div class="terminal-title">~ vrk</div>
+                    </div>
+                    <div class="terminal-body">
+                        <pre class="text-xs"><code class="language-bash">find docs/ -name '*.md' -exec cat {} + \
   | vrk chunk --size 4000 \
   | vrk throttle --rate 60/m \
   | vrk prompt --field text --model gpt-4o --json</code></pre>
+                    </div>
+                </div>
                 <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
                     chunked. paced. structured output. safe to rerun.
                 </p>

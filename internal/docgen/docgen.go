@@ -478,9 +478,31 @@ func UpdateManifest(tools []schema.Tool, path string) error {
 		m.Version = "0.1.0"
 	}
 
+	// Meta tools (bare, completions) are operations on the binary itself,
+	// not pipeline tools. Exclude them from the manifest so agents discovering
+	// tools via --manifest do not try to compose them.
+	filtered := make([]schema.Tool, 0, len(tools))
+	metaNames := make(map[string]bool)
+	for _, t := range tools {
+		if t.Category == "meta" {
+			metaNames[t.Name] = true
+			continue
+		}
+		filtered = append(filtered, t)
+	}
+
+	// Drop any existing manifest entries that are now meta-category.
+	kept := m.Tools[:0]
+	for _, e := range m.Tools {
+		if !metaNames[e.Name] {
+			kept = append(kept, e)
+		}
+	}
+	m.Tools = kept
+
 	// Build map of schema tools (overrides)
 	overrides := make(map[string]string)
-	for _, t := range tools {
+	for _, t := range filtered {
 		overrides[t.Name] = t.Tagline
 	}
 
@@ -494,7 +516,7 @@ func UpdateManifest(tools []schema.Tool, path string) error {
 	}
 
 	// Append new schema tools not already in manifest
-	for _, t := range tools {
+	for _, t := range filtered {
 		if !seen[t.Name] {
 			m.Tools = append(m.Tools, manifestEntry{
 				Name:        t.Name,

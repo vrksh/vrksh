@@ -6,8 +6,12 @@
 <body{{ if .Params.noindex }} data-pagefind-ignore{{ end }} style="background-color: var(--color-bg); color: var(--color-text);">
   {{ partial "nav.html" . }}
 
-  <main class="max-w-6xl mx-auto px-4 py-12">
-    <div class="flex gap-12">
+  <main class="max-w-7xl mx-auto px-4 py-12">
+    <div class="flex gap-10">
+      {{ if eq .Section "docs" }}
+      {{ partial "docs-sidebar.html" . }}
+      {{ end }}
+
       <!-- Content -->
       <article id="doc-content" class="flex-1 min-w-0">
         <!-- Title bar -->
@@ -77,6 +81,7 @@
         a.className = 'anchor-link hover:text-[var(--color-text)] transition-colors';
         a.dataset.section = id;
         a.textContent = num;
+        a.setAttribute('data-tooltip', h2.textContent.replace(/^\s*\d+\s*/, '').trim());
         anchorBar.appendChild(a);
       }
     });

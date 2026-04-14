@@ -1,0 +1,17 @@
+{{ $currentURL := .RelPermalink }}
+{{ $recipes := where .Site.RegularPages "Section" "recipes" }}
+
+<aside class="hidden lg:block w-56 shrink-0">
+  <div class="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pr-2">
+    <nav class="text-sm" aria-label="Recipes">
+      <p class="text-xs uppercase tracking-wider mb-2" style="color: var(--color-muted); letter-spacing: 0.05em; font-family: var(--font-mono);">Recipes</p>
+      <ul class="space-y-1">
+        {{ range $recipes.ByTitle }}
+        <li>
+          <a href="{{ .RelPermalink }}" class="sidebar-link block px-2 py-1 rounded {{ if eq .RelPermalink $currentURL }}active{{ end }}">{{ .Title }}</a>
+        </li>
+        {{ end }}
+      </ul>
+    </nav>
+  </div>
+</aside>
