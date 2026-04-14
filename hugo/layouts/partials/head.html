@@ -2,6 +2,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ if .IsHome }}vrksh - Unix tools for the agent era{{ else }}{{ with .Params.meta_title }}{{ . }} | vrksh{{ else }}{{ .Title }} - vrksh{{ end }}{{ end }}</title>
 <meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
+<link rel="canonical" href="{{ .Permalink }}">
+{{ with .Params.keywords }}<meta name="keywords" content="{{ delimit . ", " }}">{{ end }}
+{{ with .Params.author }}<meta name="author" content="{{ . }}">{{ end }}
+{{ if eq .Section "blog" }}{{ if .IsPage }}
+<meta property="article:published_time" content="{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}">
+{{ with .Lastmod }}<meta property="article:modified_time" content="{{ .Format "2006-01-02T15:04:05Z07:00" }}">{{ end }}
+{{ with .Params.author }}<meta property="article:author" content="{{ . }}">{{ end }}
+{{ range .Params.tags }}<meta property="article:tag" content="{{ . }}">
+{{ end }}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": {{ .Title | jsonify }},
+  "description": {{ (.Description | default .Site.Params.description) | jsonify }},
+  "datePublished": "{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}",
+  "dateModified": "{{ .Lastmod.Format "2006-01-02T15:04:05Z07:00" }}",
+  "author": {"@type": "Person", "name": {{ (.Params.author | default "abhinav") | jsonify }}},
+  "publisher": {"@type": "Organization", "name": "vrksh", "url": "{{ .Site.BaseURL }}"},
+  "mainEntityOfPage": {"@type": "WebPage", "@id": {{ .Permalink | jsonify }}},
+  "image": {{ cond (ne (string .Params.og_image) "") (.Params.og_image | absURL) (printf "%sog/blog-default.png" .Site.BaseURL) | jsonify }}
+}
+</script>
+{{ end }}{{ end }}
 
 <!-- Google Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,14 +43,29 @@
 <meta property="og:description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
 <meta property="og:type" content="{{ if .IsPage }}article{{ else }}website{{ end }}">
 <meta property="og:url" content="{{ .Permalink }}">
-{{ if .Params.tool -}}
-<meta property="og:image" content="{{ .Site.BaseURL }}og/{{ .Params.tool }}.png">
-{{- else if and .File (eq .File.ContentBaseName "install") -}}
-<meta property="og:image" content="{{ .Site.BaseURL }}og/install.png">
-{{- else -}}
-<meta property="og:image" content="{{ .Site.BaseURL }}og/default.png">
-{{- end }}
+{{ $ogImage := printf "%sog/default.png" .Site.BaseURL -}}
+{{ if .Params.og_image -}}
+  {{ $ogImage = (.Params.og_image | absURL) -}}
+{{ else if .Params.tool -}}
+  {{ $ogImage = printf "%sog/%s.png" .Site.BaseURL .Params.tool -}}
+{{ else if and .File (eq .File.ContentBaseName "install") -}}
+  {{ $ogImage = printf "%sog/install.png" .Site.BaseURL -}}
+{{ else if eq .Section "blog" -}}
+  {{ $blogImg := printf "og/blog-%s.png" .File.ContentBaseName -}}
+  {{ if fileExists (printf "static/%s" $blogImg) -}}
+    {{ $ogImage = printf "%s%s" .Site.BaseURL $blogImg -}}
+  {{ else -}}
+    {{ $ogImage = printf "%sog/blog-default.png" .Site.BaseURL -}}
+  {{ end -}}
+{{ end -}}
+<meta property="og:image" content="{{ $ogImage }}">
+<meta property="og:image:alt" content="{{ with .Params.og_image_alt }}{{ . }}{{ else }}{{ .Title }}{{ end }}">
+{{ if eq .Section "blog" }}{{ if .IsPage }}
+<meta property="og:site_name" content="vrksh blog">
+<meta property="article:section" content="Blog">
+{{ end }}{{ end }}
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{{ $ogImage }}">
 
 <!-- Favicon -->
 <link rel="icon" type="image/x-icon" href="/favicon.ico">

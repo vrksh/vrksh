@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body style="background-color: var(--color-bg); color: var(--color-text);">
+  {{ partial "nav.html" . }}
+
+  <main class="max-w-3xl mx-auto px-4 py-12">
+    {{ if eq .Kind "term" }}
+      {{ $blogPosts := where .Pages "Section" "in" (slice "blog" "recipes") }}
+      <header class="mb-10">
+        <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">tag</p>
+        <h1 class="text-3xl font-bold mb-2 font-mono lowercase">#{{ .Title | lower }}</h1>
+        <p class="font-mono text-sm" style="color: var(--color-muted);">
+          {{ len $blogPosts }} post{{ if ne (len $blogPosts) 1 }}s{{ end }} tagged <span>#{{ .Title | lower }}</span>
+        </p>
+      </header>
+
+      {{ if $blogPosts }}
+      <div class="space-y-8">
+        {{ range $blogPosts.ByDate.Reverse }}
+        <article>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-xs font-mono uppercase tracking-wider px-2 py-0.5 rounded"
+                  style="background-color: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-accent);">
+              {{ if eq .Section "blog" }}blog{{ else }}recipe{{ end }}
+            </span>
+          </div>
+          <h2 class="text-xl font-semibold">
+            <a href="{{ .RelPermalink }}">{{ .Title }}</a>
+          </h2>
+          <div class="text-sm font-mono mt-1" style="color: var(--color-muted);">
+            {{ with .Date }}<time datetime="{{ .Format "2006-01-02" }}">{{ .Format "January 2, 2006" }}</time>{{ end }}
+            {{ with .Params.author }} &middot; {{ . }}{{ end }}
+            {{ with .ReadingTime }} &middot; {{ . }} min read{{ end }}
+          </div>
+          {{ with .Description }}<p class="mt-2" style="color: var(--color-muted);">{{ . }}</p>{{ end }}
+          {{ with .Params.tags }}
+          <div class="mt-2 text-xs font-mono flex flex-wrap gap-2" style="color: var(--color-muted);">
+            {{ range . }}<a href="{{ "/tags/" | relURL }}{{ . | urlize }}/" class="hover:text-[var(--color-text)] transition-colors">#{{ . | lower }}</a>{{ end }}
+          </div>
+          {{ end }}
+        </article>
+        {{ end }}
+      </div>
+      {{ else }}
+      <p style="color: var(--color-muted);">No posts with this tag yet.</p>
+      {{ end }}
+    {{ else }}
+      <header class="mb-10">
+        <h1 class="text-3xl font-bold mb-2">{{ .Title }}</h1>
+        <p style="color: var(--color-muted);">Browse blog posts and recipes by tag. The number on each chip is the post count.</p>
+      </header>
+
+      {{ $hasAny := false }}
+      <div class="flex flex-wrap gap-3 text-sm font-mono">
+        {{ range .Data.Terms.Alphabetical }}
+          {{ $matched := where .Page.Pages "Section" "in" (slice "blog" "recipes") }}
+          {{ $count := len $matched }}
+          {{ if gt $count 0 }}
+            {{ $hasAny = true }}
+            <a href="{{ .Page.RelPermalink }}"
+               class="inline-flex items-center rounded-full overflow-hidden transition-colors lowercase"
+               style="background-color: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-muted);"
+               title="{{ $count }} post{{ if ne $count 1 }}s{{ end }} tagged #{{ .Page.Title | lower }}">
+              <span class="px-3 py-1">#{{ .Page.Title | lower }}</span>
+              <span class="px-2 py-1 text-xs"
+                    style="background-color: var(--color-bg); border-left: 1px solid var(--color-border); color: var(--color-accent);"
+                    aria-label="{{ $count }} posts">
+                {{ $count }}
+              </span>
+            </a>
+          {{ end }}
+        {{ end }}
+      </div>
+      {{ if not $hasAny }}
+      <p style="color: var(--color-muted);">No tags yet.</p>
+      {{ end }}
+    {{ end }}
+
+    <nav class="mt-12 text-sm">
+      <a href="/blog/">&larr; back to blog</a>
+    </nav>
+  </main>
+
+  {{ partial "footer.html" . }}
+</body>
+</html>

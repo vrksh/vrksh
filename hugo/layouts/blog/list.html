@@ -2,12 +2,26 @@
 <html lang="en">
 <head>
   {{ partial "head.html" . }}
+  <link rel="alternate" type="application/rss+xml" title="vrksh blog" href="{{ "blog/index.xml" | absURL }}">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    "name": "vrksh blog",
+    "url": {{ .Permalink | jsonify }},
+    "description": {{ (.Description | default .Site.Params.description) | jsonify }},
+    "publisher": {"@type": "Organization", "name": "vrksh", "url": "{{ .Site.BaseURL }}"}
+  }
+  </script>
 </head>
 <body style="background-color: var(--color-bg); color: var(--color-text);">
   {{ partial "nav.html" . }}
 
   <main class="max-w-3xl mx-auto px-4 py-12">
-    <h1 class="text-3xl font-bold mb-8">{{ .Title }}</h1>
+    <header class="mb-10">
+      <h1 class="text-3xl font-bold mb-2">{{ .Title }}</h1>
+      {{ with .Description }}<p style="color: var(--color-muted);">{{ . }}</p>{{ end }}
+    </header>
 
     {{ if .Pages }}
     <div class="space-y-8">
@@ -16,11 +30,16 @@
         <h2 class="text-xl font-semibold">
           <a href="{{ .RelPermalink }}">{{ .Title }}</a>
         </h2>
-        {{ with .Date }}
-        <time class="text-sm" style="color: var(--color-muted);">{{ .Format "January 2, 2006" }}</time>
-        {{ end }}
-        {{ with .Description }}
-        <p class="mt-1" style="color: var(--color-muted);">{{ . }}</p>
+        <div class="text-sm font-mono mt-1" style="color: var(--color-muted);">
+          {{ with .Date }}<time datetime="{{ .Format "2006-01-02" }}">{{ .Format "January 2, 2006" }}</time>{{ end }}
+          {{ with .Params.author }} &middot; {{ . }}{{ end }}
+          {{ with .ReadingTime }} &middot; {{ . }} min read{{ end }}
+        </div>
+        {{ with .Description }}<p class="mt-2" style="color: var(--color-muted);">{{ . }}</p>{{ end }}
+        {{ with .Params.tags }}
+        <div class="mt-2 text-xs font-mono flex flex-wrap gap-2" style="color: var(--color-muted);">
+          {{ range . }}<a href="{{ "/tags/" | relURL }}{{ . | urlize }}/" class="hover:text-[var(--color-text)] transition-colors">#{{ . | lower }}</a>{{ end }}
+        </div>
         {{ end }}
       </article>
       {{ end }}
