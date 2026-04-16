@@ -12,7 +12,7 @@
       <header class="mb-8">
         <h1 class="text-3xl font-bold mb-2" itemprop="headline">{{ .Title }}</h1>
         <div class="text-sm font-mono" style="color: var(--color-muted);">
-          {{ with .Date }}<time itemprop="datePublished" datetime="{{ .Format "2006-01-02" }}">{{ .Format "January 2, 2006" }}</time>{{ end }}
+          {{ with .Date }}<time itemprop="datePublished" datetime="{{ .Format "2006-01-02" }}">{{ .Format "January 2, 2006" | lower }}</time>{{ end }}
           {{ with .Params.author }} &middot; <span itemprop="author" itemscope itemtype="https://schema.org/Person"><span itemprop="name">{{ . }}</span></span>{{ end }}
           {{ with .ReadingTime }} &middot; {{ . }} min read{{ end }}
         </div>

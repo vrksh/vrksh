@@ -31,7 +31,7 @@
           <a href="{{ .RelPermalink }}">{{ .Title }}</a>
         </h2>
         <div class="text-sm font-mono mt-1" style="color: var(--color-muted);">
-          {{ with .Date }}<time datetime="{{ .Format "2006-01-02" }}">{{ .Format "January 2, 2006" }}</time>{{ end }}
+          {{ with .Date }}<time datetime="{{ .Format "2006-01-02" }}">{{ .Format "January 2, 2006" | lower }}</time>{{ end }}
           {{ with .Params.author }} &middot; {{ . }}{{ end }}
           {{ with .ReadingTime }} &middot; {{ . }} min read{{ end }}
         </div>

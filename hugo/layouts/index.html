@@ -105,10 +105,9 @@ echo "key: sk-ant-api-abc123xyz" | vrk mask
                         <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
                             before
                         </p>
-                        <pre
-                            class="text-xs"
-                            style="margin: 0"
-                        ><code class="language-python">import anthropic, tiktoken, json, re, jsonschema
+                        <div class="code-with-gutter">
+                            <div class="code-gutter" aria-hidden="true">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19<br>20<br>21<br>22<br>23<br>24</div>
+                            <pre><code class="language-python">import anthropic, tiktoken, json, re, jsonschema
 
 client = anthropic.Anthropic()
 with open("article.md") as f:
@@ -132,6 +131,7 @@ result = resp.content[0].text
 # Validate the output
 schema = json.load(open("schema.json"))
 jsonschema.validate(json.loads(result), schema)</code></pre>
+                        </div>
                     </div>
                     <div>
                         <p class="text-sm mb-2 font-mono" style="color: var(--color-accent);">

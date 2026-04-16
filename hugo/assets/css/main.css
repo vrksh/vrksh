@@ -12,6 +12,7 @@
   --color-accent: #6EE7B7;
   --color-accent-dim: #3D8B6E;
   --color-dot: #2a2a2a;
+  --color-dot-mute: #4a4a4a;
 }
 
 /* Light overrides */
@@ -24,6 +25,7 @@
   --color-accent: #059669;
   --color-accent-dim: #a7f3d0;
   --color-dot: #e0e0e0;
+  --color-dot-mute: #c0c0c0;
 }
 
 /* Base styles */
@@ -146,9 +148,9 @@ body {
   display: inline-block;
 }
 
-.terminal-dots span:nth-child(1) { background-color: #ff5f57; }
-.terminal-dots span:nth-child(2) { background-color: #febc2e; }
-.terminal-dots span:nth-child(3) { background-color: #28c840; }
+.terminal-dots span:nth-child(1),
+.terminal-dots span:nth-child(2),
+.terminal-dots span:nth-child(3) { background-color: var(--color-dot-mute); }
 
 .terminal-title {
   flex: 1;
@@ -166,6 +168,57 @@ body {
 .terminal-body pre {
   margin: 0;
   background: transparent !important;
+}
+
+/* Line-numbered code block (used on the "before" block to contrast
+   a maintained file vs a typed pipeline). The wrapper becomes the
+   visual container; the inner pre drops its own border/background
+   so the gutter and code share one box and one line grid. */
+.code-with-gutter {
+  display: flex;
+  align-items: stretch;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.code-gutter {
+  flex-shrink: 0;
+  padding: 1rem 0.75rem 1rem 1rem;
+  text-align: right;
+  color: var(--color-muted);
+  opacity: 0.5;
+  user-select: none;
+  -webkit-user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.code-with-gutter pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 1rem 1rem 1rem 0.25rem;
+  background: transparent !important;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+@media (max-width: 640px) {
+  .code-with-gutter {
+    font-size: 0.8125rem;
+  }
+  .code-gutter {
+    padding: 0.75rem 0.5rem 0.75rem 0.75rem;
+  }
+  .code-with-gutter pre {
+    padding: 0.75rem 0.75rem 0.75rem 0.25rem;
+  }
 }
 
 /* CTA glow */
