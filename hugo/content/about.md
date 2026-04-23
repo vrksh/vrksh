@@ -15,9 +15,9 @@ vrk puts all of it in one place. 26 Unix tools for the things that come up const
 
 ## The name
 
-vrksh (वृक्ष) is the Sanskrit word for tree. The project is **vrksh**. The command is `vrk`. Use the full name when referring to the project; use the command name in code.
+vrksh (वृक्ष) is the Sanskrit word for tree. The formal project name is **vrksh**, but in writing and code just call it **vrk** - that's what you type, what you see in pipelines, and what the domain (vrk.sh) spells. Reserve "vrksh" for the formal framing: the Sanskrit etymology, the Homebrew tap (`vrksh/vrksh`), and the GitHub org.
 
-vrk is pronounced "vruk" and rhymes with truck.
+Pronunciation: **vrksh** is "vruksh", **vrk** is "vruk" (rhymes with truck).
 
 ## The contract
 

@@ -118,7 +118,7 @@ rm $(which vrk)
 
 ## Platforms
 
-vrksh is a single static binary with no CGO. It runs anywhere Go cross-compiles to:
+vrk is a single static binary with no CGO. It runs anywhere Go cross-compiles to:
 
 - **macOS** - amd64 (Intel) and arm64 (Apple Silicon)
 - **Linux** - amd64 and arm64

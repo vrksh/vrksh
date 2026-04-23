@@ -56,9 +56,9 @@ vrk --skills
 Drop this block into your agent's `CLAUDE.md`, system prompt, or tool-use instructions. It teaches the agent the key patterns without consuming the full reference:
 
 ```markdown
-## vrksh tools
+## vrk tools
 
-vrksh is installed as `vrk`. 26 Unix tools for working with LLMs.
+vrk is 26 Unix tools for working with LLMs, shipped as one static binary.
 
 Discovery:
 - `vrk --manifest` lists all tools (JSON)

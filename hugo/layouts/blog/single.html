@@ -16,8 +16,11 @@
           {{ with .Params.author }} &middot; <span itemprop="author" itemscope itemtype="https://schema.org/Person"><span itemprop="name">{{ . }}</span></span>{{ end }}
           {{ with .ReadingTime }} &middot; {{ . }} min read{{ end }}
         </div>
-        {{ with .Description }}<p class="mt-3" itemprop="description" style="color: var(--color-muted);">{{ . }}</p>{{ end }}
       </header>
+
+      {{ with .Params.summary }}
+      <aside class="mb-10 pl-4 py-1 italic" style="border-left: 2px solid var(--color-accent-dim); color: var(--color-muted); font-size: 0.95rem; line-height: 1.7;" itemprop="abstract">{{ . | markdownify }}</aside>
+      {{ end }}
 
       <div class="prose" itemprop="articleBody" style="line-height: 1.8; font-size: 1.0625rem;">
         {{ .Content }}

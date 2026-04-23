@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
   {{ partial "head.html" . }}
-  <link rel="alternate" type="application/rss+xml" title="vrksh blog" href="{{ "blog/index.xml" | absURL }}">
+  <link rel="alternate" type="application/rss+xml" title="vrk blog" href="{{ "blog/index.xml" | absURL }}">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "Blog",
-    "name": "vrksh blog",
+    "name": "vrk blog",
     "url": {{ .Permalink | jsonify }},
     "description": {{ (.Description | default .Site.Params.description) | jsonify }},
-    "publisher": {"@type": "Organization", "name": "vrksh", "url": "{{ .Site.BaseURL }}"}
+    "publisher": {"@type": "Organization", "name": "vrk", "url": "{{ .Site.BaseURL }}"}
   }
   </script>
 </head>
