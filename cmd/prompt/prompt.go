@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -137,11 +138,60 @@ func buildSystemPrompt(schema map[string]string) string {
 	var sb strings.Builder
 	sb.WriteString("You must respond with a valid JSON object. ")
 	sb.WriteString("The JSON object must have exactly these keys with the specified types:\n")
-	for k, v := range schema {
-		fmt.Fprintf(&sb, "  %q: %s\n", k, v)
+	for _, k := range sortedKeys(schema) {
+		fmt.Fprintf(&sb, "  %q: %s\n", k, schema[k])
 	}
 	sb.WriteString("Respond with ONLY the JSON object, no other text.")
 	return sb.String()
+}
+
+// withSchemaInstructions appends the schema instructions to the user's system
+// prompt, separated by a blank line. Used for Anthropic and --endpoint, which
+// have no native schema enforcement.
+func withSchemaInstructions(systemPrompt string, schema map[string]string) string {
+	if schema == nil {
+		return systemPrompt
+	}
+	if systemPrompt == "" {
+		return buildSystemPrompt(schema)
+	}
+	return systemPrompt + "\n\n" + buildSystemPrompt(schema)
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// openAIJSONSchemaFor turns the flat {"key":"type"} schema into a JSON Schema
+// object for OpenAI response_format. strict is true only when every type is a
+// scalar, because OpenAI strict mode needs full nested schemas for arrays and
+// objects.
+func openAIJSONSchemaFor(schema map[string]string) (s map[string]any, strict bool) {
+	props := make(map[string]any, len(schema))
+	strict = true
+	for k, t := range schema {
+		switch t {
+		case "array":
+			props[k] = map[string]any{"type": "array", "items": map[string]any{}}
+			strict = false
+		case "object":
+			props[k] = map[string]any{"type": "object"}
+			strict = false
+		default:
+			props[k] = map[string]any{"type": t}
+		}
+	}
+	return map[string]any{
+		"type":                 "object",
+		"properties":           props,
+		"required":             sortedKeys(schema),
+		"additionalProperties": false,
+	}, strict
 }
 
 // parseSchema parses schema string (inline JSON or file path) into a map.
@@ -217,21 +267,19 @@ type anthropicMessage struct {
 	Content string `json:"content"`
 }
 
-// callAnthropic makes a single call to the Anthropic messages API.
-func callAnthropic(model, key, prompt, systemPrompt string, temp float64) (callResult, error) {
-	req := anthropicRequest{
+func anthropicBody(model, prompt, systemPrompt string, temp float64) anthropicRequest {
+	return anthropicRequest{
 		Model:     model,
 		MaxTokens: 4096,
+		System:    systemPrompt,
 		Temp:      temp,
-		Messages: []anthropicMessage{
-			{Role: "user", Content: prompt},
-		},
+		Messages:  []anthropicMessage{{Role: "user", Content: prompt}},
 	}
-	if systemPrompt != "" {
-		req.System = systemPrompt
-	}
+}
 
-	body, err := json.Marshal(req)
+// callAnthropic makes a single call to the Anthropic messages API.
+func callAnthropic(model, key, prompt, systemPrompt string, temp float64) (callResult, error) {
+	body, err := json.Marshal(anthropicBody(model, prompt, systemPrompt, temp))
 	if err != nil {
 		return callResult{}, fmt.Errorf("marshaling request: %w", err)
 	}
@@ -312,36 +360,34 @@ type openAIJSONSchema struct {
 	Schema map[string]interface{} `json:"schema"`
 }
 
-// callOpenAI makes a single call to the OpenAI chat completions API.
-func callOpenAI(model, key, prompt string, temp float64, schema map[string]string, systemPrompt string) (callResult, error) {
+func chatMessages(prompt, systemPrompt string) []openAIMessage {
 	var msgs []openAIMessage
 	if systemPrompt != "" {
 		msgs = append(msgs, openAIMessage{Role: "system", Content: systemPrompt})
 	}
-	msgs = append(msgs, openAIMessage{Role: "user", Content: prompt})
+	return append(msgs, openAIMessage{Role: "user", Content: prompt})
+}
 
+func openAIBody(model, prompt string, temp float64, schema map[string]string, systemPrompt string) openAIRequest {
 	req := openAIRequest{
 		Model:     model,
 		MaxTokens: 4096,
 		Temp:      temp,
-		Messages:  msgs,
+		Messages:  chatMessages(prompt, systemPrompt),
 	}
 	if schema != nil {
-		schemaObj := make(map[string]interface{}, len(schema))
-		for k, v := range schema {
-			schemaObj[k] = v
-		}
+		s, strict := openAIJSONSchemaFor(schema)
 		req.ResponseFormat = &openAIRespFmt{
-			Type: "json_schema",
-			JSONSchema: &openAIJSONSchema{
-				Strict: true,
-				Name:   "output",
-				Schema: schemaObj,
-			},
+			Type:       "json_schema",
+			JSONSchema: &openAIJSONSchema{Strict: strict, Name: "output", Schema: s},
 		}
 	}
+	return req
+}
 
-	body, err := json.Marshal(req)
+// callOpenAI makes a single call to the OpenAI chat completions API.
+func callOpenAI(model, key, prompt string, temp float64, schema map[string]string, systemPrompt string) (callResult, error) {
+	body, err := json.Marshal(openAIBody(model, prompt, temp, schema, systemPrompt))
 	if err != nil {
 		return callResult{}, fmt.Errorf("marshaling request: %w", err)
 	}
@@ -413,55 +459,14 @@ func printExplain(w io.Writer, prov provider, model, prompt string, schema map[s
 
 	switch prov {
 	case providerOpenAI:
-		var msgs []map[string]string
-		if systemPrompt != "" {
-			msgs = append(msgs, map[string]string{"role": "system", "content": systemPrompt})
-		}
-		msgs = append(msgs, map[string]string{"role": "user", "content": prompt})
-
-		body := map[string]interface{}{
-			"model":       model,
-			"max_tokens":  4096,
-			"temperature": 0,
-			"messages":    msgs,
-		}
-		if schema != nil {
-			schemaObj := make(map[string]interface{}, len(schema))
-			for k, v := range schema {
-				schemaObj[k] = v
-			}
-			body["response_format"] = map[string]interface{}{
-				"type": "json_schema",
-				"json_schema": map[string]interface{}{
-					"strict": true,
-					"name":   "output",
-					"schema": schemaObj,
-				},
-			}
-		}
-		bodyJSON, _ := json.Marshal(body)
+		bodyJSON, _ := json.Marshal(openAIBody(model, prompt, 0, schema, systemPrompt))
 		_, _ = fmt.Fprintf(bw, "curl https://api.openai.com/v1/chat/completions \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"Authorization: Bearer $OPENAI_API_KEY\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"content-type: application/json\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -d '%s'\n", shellEscapeSingleQuote(string(bodyJSON)))
 
-	default: // providerAnthropic
-		type msgBody struct {
-			Model     string             `json:"model"`
-			MaxTokens int                `json:"max_tokens"`
-			System    string             `json:"system,omitempty"`
-			Messages  []anthropicMessage `json:"messages"`
-		}
-		mb := msgBody{
-			Model:     model,
-			MaxTokens: 4096,
-			Messages:  []anthropicMessage{{Role: "user", Content: prompt}},
-		}
-		// systemPrompt is already combined with schema instructions by the caller.
-		if systemPrompt != "" {
-			mb.System = systemPrompt
-		}
-		bodyJSON, _ := json.Marshal(mb)
+	default: // providerAnthropic; systemPrompt already includes schema instructions.
+		bodyJSON, _ := json.Marshal(anthropicBody(model, prompt, systemPrompt, 0))
 		_, _ = fmt.Fprintf(bw, "curl https://api.anthropic.com/v1/messages \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"x-api-key: $ANTHROPIC_API_KEY\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"anthropic-version: 2023-06-01\" \\\n")
@@ -511,29 +516,28 @@ type openAICompatRequest struct {
 	ResponseFormat *openAIRespFmt  `json:"response_format,omitempty"`
 }
 
+// endpointBody builds the request for an OpenAI-compatible endpoint. The schema
+// itself travels in systemPrompt (see withSchemaInstructions); here it only
+// switches on json_object mode.
+func endpointBody(model, prompt string, temp float64, schema map[string]string, systemPrompt string) openAICompatRequest {
+	req := openAICompatRequest{
+		Model:     model,
+		MaxTokens: 4096,
+		Temp:      temp,
+		Messages:  chatMessages(prompt, systemPrompt),
+	}
+	if schema != nil {
+		req.ResponseFormat = &openAIRespFmt{Type: "json_object"}
+	}
+	return req
+}
+
 // callOpenAICompatible sends a request to an OpenAI-compatible endpoint and returns
 // a callResult with the assistant reply and token counts.
 // Auth: reads VRK_LLM_KEY and sets Authorization: Bearer only if non-empty.
 // Never uses OPENAI_API_KEY or ANTHROPIC_API_KEY.
 func callOpenAICompatible(endpointURL, model, prompt string, temp float64, schema map[string]string, systemPrompt string) (callResult, error) {
-	var msgs []openAIMessage
-	if systemPrompt != "" {
-		msgs = append(msgs, openAIMessage{Role: "system", Content: systemPrompt})
-	}
-	msgs = append(msgs, openAIMessage{Role: "user", Content: prompt})
-
-	req := openAICompatRequest{
-		Model:     model,
-		MaxTokens: 4096,
-		Temp:      temp,
-		Stream:    false,
-		Messages:  msgs,
-	}
-	if schema != nil {
-		req.ResponseFormat = &openAIRespFmt{Type: "json_object"}
-	}
-
-	body, err := json.Marshal(req)
+	body, err := json.Marshal(endpointBody(model, prompt, temp, schema, systemPrompt))
 	if err != nil {
 		return callResult{}, fmt.Errorf("marshaling request: %w", err)
 	}
@@ -598,23 +602,7 @@ func callOpenAICompatible(endpointURL, model, prompt string, temp float64, schem
 func printExplainEndpoint(w io.Writer, endpointURL, model, prompt string, schema map[string]string, systemPrompt string) int {
 	bw := bufio.NewWriter(w)
 
-	var msgs []map[string]string
-	if systemPrompt != "" {
-		msgs = append(msgs, map[string]string{"role": "system", "content": systemPrompt})
-	}
-	msgs = append(msgs, map[string]string{"role": "user", "content": prompt})
-
-	body := map[string]interface{}{
-		"model":       model,
-		"max_tokens":  4096,
-		"temperature": 0,
-		"stream":      false,
-		"messages":    msgs,
-	}
-	if schema != nil {
-		body["response_format"] = map[string]string{"type": "json_object"}
-	}
-	bodyJSON, _ := json.Marshal(body)
+	bodyJSON, _ := json.Marshal(endpointBody(model, prompt, 0, schema, systemPrompt))
 
 	_, _ = fmt.Fprintf(bw, "curl %s \\\n", endpointURL)
 	if os.Getenv("VRK_LLM_KEY") != "" {
@@ -647,6 +635,57 @@ func dotGet(obj map[string]any, path string) (any, error) {
 	return dotGet(nested, parts[1])
 }
 
+// sender makes one request at the given temperature.
+type sender func(prompt string, temp float64) (callResult, error)
+
+// newSender decides how a request is built and sent. Validation, retry,
+// --fail, and output are the same for every provider (see callWithSchema).
+// Anthropic and --endpoint get the schema as system prompt instructions;
+// OpenAI gets it as response_format.
+func newSender(endpoint string, prov provider, model, apiKey, systemPrompt string, schema map[string]string) sender {
+	switch {
+	case endpoint != "":
+		sys := withSchemaInstructions(systemPrompt, schema)
+		return func(p string, t float64) (callResult, error) {
+			return callOpenAICompatible(endpoint, model, p, t, schema, sys)
+		}
+	case prov == providerOpenAI:
+		return func(p string, t float64) (callResult, error) {
+			return callOpenAI(model, apiKey, p, t, schema, systemPrompt)
+		}
+	default:
+		sys := withSchemaInstructions(systemPrompt, schema)
+		return func(p string, t float64) (callResult, error) {
+			return callAnthropic(model, apiKey, p, sys, t)
+		}
+	}
+}
+
+// callWithSchema sends prompt and, when a schema is set, validates the reply
+// and retries with rising temperature (0, 0.1, 0.2, ... capped at 1). A final
+// mismatch is an error only with --fail or --retry. Without them it warns and
+// returns the response, so the caller prints it and exits 0.
+func callWithSchema(send sender, prompt string, schema map[string]string, retryCount int, failFlag bool, linePrefix string) (callResult, error) {
+	for attempt := 0; ; attempt++ {
+		cr, err := send(prompt, min(float64(attempt)/10, 1))
+		if err != nil || schema == nil || validateSchema(cr.text, schema) {
+			return cr, err
+		}
+		if attempt < retryCount {
+			fmt.Fprintf(os.Stderr, "prompt: %sattempt %d failed schema validation, retrying...\n", linePrefix, attempt+1)
+			continue
+		}
+		if !failFlag && retryCount <= 0 {
+			fmt.Fprintf(os.Stderr, "prompt: %swarning: response does not match schema\n", linePrefix)
+			return cr, nil
+		}
+		if attempt == 0 {
+			return cr, errors.New("response does not match schema")
+		}
+		return cr, fmt.Errorf("response does not match schema after %d attempts", attempt+1)
+	}
+}
+
 func init() {
 	shared.Register(shared.ToolMeta{
 		Name:  "prompt",
@@ -655,7 +694,7 @@ func init() {
 			{Name: "model", Shorthand: "m", Usage: "LLM model (default: claude-sonnet-4-6 or VRK_DEFAULT_MODEL)"},
 			{Name: "field", Usage: "dot-path field in each JSONL line to use as prompt text"},
 			{Name: "budget", Usage: "exit 1 if prompt exceeds N tokens (0 = disabled)"},
-			{Name: "fail", Shorthand: "f", Usage: "fail on non-2xx API response or schema mismatch"},
+			{Name: "fail", Shorthand: "f", Usage: "exit 1 on schema mismatch (API errors always exit 1)"},
 			{Name: "json", Shorthand: "j", Usage: "emit response as JSON envelope with metadata"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 			{Name: "schema", Shorthand: "s", Usage: "JSON schema string or file path for response validation"},
@@ -689,7 +728,7 @@ func Run() int {
 	fs.StringVarP(&modelFlag, "model", "m", "", "LLM model (default: claude-sonnet-4-6 or VRK_DEFAULT_MODEL)")
 	fs.StringVar(&fieldFlag, "field", "", "dot-path field in each JSONL line to use as prompt text")
 	fs.IntVar(&budget, "budget", 0, "exit 1 if prompt exceeds N tokens (0 = disabled)")
-	fs.BoolVarP(&failFlag, "fail", "f", false, "fail on non-2xx API response or schema mismatch")
+	fs.BoolVarP(&failFlag, "fail", "f", false, "exit 1 on schema mismatch (API errors always exit 1)")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit response as JSON envelope with metadata")
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 	fs.StringVarP(&schemaArg, "schema", "s", "", "JSON schema string or file path for response validation")
@@ -801,7 +840,7 @@ func Run() int {
 
 	// --field mode: JSONL streaming. Handles everything and returns.
 	if fieldFlag != "" {
-		return runFieldMode(fieldFlag, model, endpoint, budget, jsonFlag, quietFlag, schema, schemaArg, retryCount, systemPrompt, systemSet)
+		return runFieldMode(fieldFlag, model, endpoint, budget, jsonFlag, quietFlag, failFlag, schema, retryCount, systemPrompt)
 	}
 
 	// Read input: positional arg wins over stdin.
@@ -816,7 +855,16 @@ func Run() int {
 		}
 		promptText = strings.TrimSuffix(string(b), "\n")
 	}
-	// If --explain and no prompt, use empty string — that is fine.
+	// If --explain and no prompt, use empty string - that is fine.
+
+	// D8: an empty prompt is a mistake upstream (a failed step, an unset
+	// variable). Never send it.
+	if strings.TrimSpace(promptText) == "" && !explainFlag {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": "prompt: empty prompt, nothing sent", "code": 1})
+		}
+		return shared.Errorf("prompt: empty prompt, nothing sent")
+	}
 
 	// Budget check: count tokens and gate before any API call or key check.
 	if budget > 0 {
@@ -835,187 +883,71 @@ func Run() int {
 		}
 	}
 
-	// Custom endpoint path — bypasses all provider detection.
-	// --endpoint (or VRK_LLM_URL) always uses OpenAI chat completions format.
+	var prov provider
+	var apiKey string
 	if endpoint != "" {
+		// Custom endpoint: always OpenAI chat completions format, no provider detection.
 		if explainFlag {
-			return printExplainEndpoint(os.Stdout, endpoint, model, promptText, schema, systemPrompt)
+			return printExplainEndpoint(os.Stdout, endpoint, model, promptText, schema, withSchemaInstructions(systemPrompt, schema))
 		}
-		// Local model names cannot be guessed — require an explicit --model.
+		// Local model names cannot be guessed - require an explicit --model.
 		if model == "" {
 			if jsonFlag {
 				return shared.PrintJSONError(map[string]any{"error": "prompt: --model is required when using --endpoint", "code": 2})
 			}
 			return shared.UsageErrorf("prompt: --model is required when using --endpoint")
 		}
-
-		start := time.Now()
-		cr, callErr := callOpenAICompatible(endpoint, model, promptText, 0, schema, systemPrompt)
-		if callErr != nil {
-			safeErr := scrubKey(callErr.Error(), os.Getenv("VRK_LLM_KEY"))
-			if jsonFlag {
-				return shared.PrintJSONError(map[string]any{
-					"error": fmt.Sprintf("prompt: %s", safeErr),
-					"code":  1,
-				})
-			}
-			return shared.Errorf("prompt: %s", safeErr)
-		}
-		elapsedMs := time.Since(start).Milliseconds()
-
-		bw := bufio.NewWriter(os.Stdout)
-		if jsonFlag {
-			out := promptOutput{
-				Response:       cr.text,
-				Model:          model,
-				PromptTokens:   cr.promptTokens,
-				ResponseTokens: cr.responseTokens,
-				ElapsedMs:      elapsedMs,
-			}
-			if systemSet {
-				out.SystemPrompt = systemPrompt
-			}
-			enc := json.NewEncoder(bw)
-			if encErr := enc.Encode(out); encErr != nil {
-				_ = bw.Flush()
-				return shared.Errorf("prompt: encoding JSON output: %v", encErr)
-			}
-		} else {
-			if _, writeErr := fmt.Fprint(bw, cr.text); writeErr != nil {
-				_ = bw.Flush()
-				return shared.Errorf("prompt: writing output: %v", writeErr)
-			}
-			if len(cr.text) == 0 || cr.text[len(cr.text)-1] != '\n' {
-				_, _ = fmt.Fprintln(bw)
-			}
-		}
-		if flushErr := bw.Flush(); flushErr != nil {
-			return shared.Errorf("prompt: flushing output: %v", flushErr)
-		}
-		return 0
-	}
-
-	// Read API keys so we can select provider.
-	anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
-	openaiKey := os.Getenv("OPENAI_API_KEY")
-
-	// Determine provider. For --explain with no keys, default to Anthropic
-	// (user still gets a useful curl template).
-	var prov provider
-	var apiKey string
-	if !explainFlag {
-		var err error
-		prov, apiKey, err = selectProvider(model, anthropicKey, openaiKey)
-		if err != nil {
-			if jsonFlag {
-				return shared.PrintJSONError(map[string]any{
-					"error": fmt.Sprintf("prompt: %v", err),
-					"code":  1,
-				})
-			}
-			return shared.Errorf("prompt: %v", err)
-		}
+		apiKey = os.Getenv("VRK_LLM_KEY")
 	} else {
-		// For --explain we pick a provider for display purposes only.
-		if openaiKey != "" && anthropicKey == "" {
+		// Read API keys so we can select provider.
+		anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
+		openaiKey := os.Getenv("OPENAI_API_KEY")
+
+		// Determine provider. For --explain with no keys, default to Anthropic
+		// (user still gets a useful curl template).
+		if !explainFlag {
+			var err error
+			prov, apiKey, err = selectProvider(model, anthropicKey, openaiKey)
+			if err != nil {
+				if jsonFlag {
+					return shared.PrintJSONError(map[string]any{
+						"error": fmt.Sprintf("prompt: %v", err),
+						"code":  1,
+					})
+				}
+				return shared.Errorf("prompt: %v", err)
+			}
+		} else if openaiKey != "" && anthropicKey == "" {
 			prov = providerOpenAI
-		} else {
-			prov = providerAnthropic
+		}
+
+		// Apply provider-appropriate default when no explicit model was given.
+		if model == "" {
+			model = defaultModel(prov)
+		}
+
+		// --explain: print curl equivalent and exit 0.
+		if explainFlag {
+			explainSystem := systemPrompt
+			if prov == providerAnthropic {
+				explainSystem = withSchemaInstructions(systemPrompt, schema)
+			}
+			return printExplain(os.Stdout, prov, model, promptText, schema, explainSystem)
 		}
 	}
 
-	// Apply provider-appropriate default when no explicit model was given.
-	if model == "" {
-		model = defaultModel(prov)
-	}
-
-	// --explain: print curl equivalent and exit 0.
-	if explainFlag {
-		bw := bufio.NewWriter(os.Stdout)
-		// For --explain, combine system prompt with schema instructions for Anthropic.
-		explainSystem := systemPrompt
-		if schema != nil && prov == providerAnthropic {
-			schemaInstr := buildSystemPrompt(schema)
-			if explainSystem != "" {
-				explainSystem = explainSystem + "\n\n" + schemaInstr
-			} else {
-				explainSystem = schemaInstr
-			}
+	startTime := time.Now()
+	send := newSender(endpoint, prov, model, apiKey, systemPrompt, schema)
+	cr, callErr := callWithSchema(send, promptText, schema, retryCount, failFlag, "")
+	if callErr != nil {
+		safeErr := scrubKey(callErr.Error(), apiKey)
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{
+				"error": fmt.Sprintf("prompt: %s", safeErr),
+				"code":  1,
+			})
 		}
-		code := printExplain(bw, prov, model, promptText, schema, explainSystem)
-		_ = bw.Flush()
-		return code
-	}
-
-	// Temperature escalation for retries.
-	temps := []float64{0.0, 0.1, 0.2}
-
-	var (
-		cr        callResult
-		startTime = time.Now()
-	)
-
-	for attempt := 0; attempt <= retryCount; attempt++ {
-		temp := 0.0
-		if attempt < len(temps) {
-			temp = temps[attempt]
-		} else {
-			temp = temps[len(temps)-1]
-		}
-
-		// Combine user system prompt with schema instructions for Anthropic.
-		apiSystem := systemPrompt
-		if schema != nil && prov == providerAnthropic {
-			schemaInstr := buildSystemPrompt(schema)
-			if apiSystem != "" {
-				apiSystem = apiSystem + "\n\n" + schemaInstr
-			} else {
-				apiSystem = schemaInstr
-			}
-		}
-
-		var callErr error
-		switch prov {
-		case providerAnthropic:
-			cr, callErr = callAnthropic(model, apiKey, promptText, apiSystem, temp)
-		case providerOpenAI:
-			var schemaForOpenAI map[string]string
-			if schema != nil {
-				schemaForOpenAI = schema
-			}
-			cr, callErr = callOpenAI(model, apiKey, promptText, temp, schemaForOpenAI, systemPrompt)
-		}
-
-		if callErr != nil {
-			safeErr := scrubKey(callErr.Error(), apiKey)
-			if jsonFlag {
-				return shared.PrintJSONError(map[string]any{
-					"error": fmt.Sprintf("prompt: %s", safeErr),
-					"code":  1,
-				})
-			}
-			return shared.Errorf("prompt: %s", safeErr)
-		}
-
-		// Schema validation (Anthropic only - OpenAI uses response_format).
-		if schema != nil && prov == providerAnthropic {
-			if validateSchema(cr.text, schema) {
-				break
-			}
-			if attempt < retryCount {
-				fmt.Fprintf(os.Stderr, "prompt: attempt %d failed schema validation, retrying...\n", attempt+1)
-				continue
-			}
-			if jsonFlag {
-				return shared.PrintJSONError(map[string]any{
-					"error": fmt.Sprintf("prompt: response does not match schema after %d attempts", retryCount+1),
-					"code":  1,
-				})
-			}
-			return shared.Errorf("prompt: response does not match schema after %d attempts", retryCount+1)
-		}
-
-		break
+		return shared.Errorf("prompt: %s", safeErr)
 	}
 
 	elapsedMs := time.Since(startTime).Milliseconds()
@@ -1057,10 +989,9 @@ func Run() int {
 
 // runFieldMode processes JSONL stdin line by line, extracting the named field
 // from each record as prompt text and making one API call per line.
-func runFieldMode(fieldPath, model, endpoint string, budget int, jsonFlag, quietFlag bool, schema map[string]string, schemaArg string, retryCount int, systemPrompt string, systemSet bool) int {
+func runFieldMode(fieldPath, model, endpoint string, budget int, jsonFlag, quietFlag, failFlag bool, schema map[string]string, retryCount int, systemPrompt string) int {
 	// Set up scanner early so we can exit 0 on empty stdin before provider resolution.
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max line
+	scanner := shared.ScanLines(os.Stdin)
 
 	// Peek: if there's no first line, exit 0 immediately (empty stdin).
 	if !scanner.Scan() {
@@ -1104,9 +1035,10 @@ func runFieldMode(fieldPath, model, endpoint string, budget int, jsonFlag, quiet
 			}
 			return shared.UsageErrorf("prompt: --model is required when using --endpoint")
 		}
+		apiKey = os.Getenv("VRK_LLM_KEY")
 	}
 
-	temps := []float64{0.0, 0.1, 0.2}
+	send := newSender(endpoint, prov, model, apiKey, systemPrompt, schema)
 
 	bw := bufio.NewWriter(os.Stdout)
 
@@ -1152,6 +1084,16 @@ func runFieldMode(fieldPath, model, endpoint string, budget int, jsonFlag, quiet
 			return shared.Errorf("prompt: line %d: field %q is not a string", lineNum, fieldPath)
 		}
 
+		// D8: never send an empty prompt. Skip the record and keep going.
+		if strings.TrimSpace(promptText) == "" {
+			fmt.Fprintf(os.Stderr, "prompt: line %d: empty prompt, skipped\n", lineNum)
+			if !scanner.Scan() {
+				break
+			}
+			line = scanner.Text()
+			continue
+		}
+
 		// Per-record budget check.
 		if budget > 0 {
 			count, err := tokcount.CountTokens(promptText)
@@ -1169,84 +1111,17 @@ func runFieldMode(fieldPath, model, endpoint string, budget int, jsonFlag, quiet
 			}
 		}
 
-		// Make API call with retry logic.
-		var cr callResult
 		start := time.Now()
-
-		for attempt := 0; attempt <= retryCount; attempt++ {
-			temp := 0.0
-			if attempt < len(temps) {
-				temp = temps[attempt]
-			} else {
-				temp = temps[len(temps)-1]
+		cr, callErr := callWithSchema(send, promptText, schema, retryCount, failFlag, fmt.Sprintf("line %d: ", lineNum))
+		if callErr != nil {
+			safeErr := scrubKey(callErr.Error(), apiKey)
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{
+					"error": fmt.Sprintf("prompt: line %d: %s", lineNum, safeErr),
+					"code":  1,
+				})
 			}
-
-			var callErr error
-			if endpoint != "" {
-				// Combine schema instructions into system prompt for endpoint path.
-				apiSystem := systemPrompt
-				if schema != nil {
-					schemaInstr := buildSystemPrompt(schema)
-					if apiSystem != "" {
-						apiSystem = apiSystem + "\n\n" + schemaInstr
-					} else {
-						apiSystem = schemaInstr
-					}
-				}
-				cr, callErr = callOpenAICompatible(endpoint, model, promptText, temp, schema, apiSystem)
-			} else {
-				switch prov {
-				case providerAnthropic:
-					apiSystem := systemPrompt
-					if schema != nil {
-						schemaInstr := buildSystemPrompt(schema)
-						if apiSystem != "" {
-							apiSystem = apiSystem + "\n\n" + schemaInstr
-						} else {
-							apiSystem = schemaInstr
-						}
-					}
-					cr, callErr = callAnthropic(model, apiKey, promptText, apiSystem, temp)
-				case providerOpenAI:
-					var schemaForOpenAI map[string]string
-					if schema != nil {
-						schemaForOpenAI = schema
-					}
-					cr, callErr = callOpenAI(model, apiKey, promptText, temp, schemaForOpenAI, systemPrompt)
-				}
-			}
-
-			if callErr != nil {
-				safeErr := scrubKey(callErr.Error(), apiKey)
-				safeErr = scrubKey(safeErr, os.Getenv("VRK_LLM_KEY"))
-				if jsonFlag {
-					return shared.PrintJSONError(map[string]any{
-						"error": fmt.Sprintf("prompt: line %d: %s", lineNum, safeErr),
-						"code":  1,
-					})
-				}
-				return shared.Errorf("prompt: line %d: %s", lineNum, safeErr)
-			}
-
-			// Schema validation for all providers in field mode.
-			if schema != nil {
-				if validateSchema(cr.text, schema) {
-					break
-				}
-				if attempt < retryCount {
-					fmt.Fprintf(os.Stderr, "prompt: line %d: attempt %d failed schema validation, retrying...\n", lineNum, attempt+1)
-					continue
-				}
-				if jsonFlag {
-					return shared.PrintJSONError(map[string]any{
-						"error": fmt.Sprintf("prompt: line %d: response does not match schema", lineNum),
-						"code":  1,
-					})
-				}
-				return shared.Errorf("prompt: line %d: response does not match schema", lineNum)
-			}
-
-			break
+			return shared.Errorf("prompt: line %d: %s", lineNum, safeErr)
 		}
 
 		elapsedMs := time.Since(start).Milliseconds()
@@ -1305,7 +1180,7 @@ func Flags() *pflag.FlagSet {
 	fs.StringP("model", "m", "", "LLM model (default: claude-sonnet-4-6 or VRK_DEFAULT_MODEL)")
 	fs.String("field", "", "dot-path field in each JSONL line to use as prompt text")
 	fs.Int("budget", 0, "exit 1 if prompt exceeds N tokens (0 = disabled)")
-	fs.BoolP("fail", "f", false, "fail on non-2xx API response or schema mismatch")
+	fs.BoolP("fail", "f", false, "exit 1 on schema mismatch (API errors always exit 1)")
 	fs.BoolP("json", "j", false, "emit response as JSON envelope with metadata")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	fs.StringP("schema", "s", "", "JSON schema string or file path for response validation")
