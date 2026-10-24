@@ -465,8 +465,8 @@ unset VRK_KV_PATH
 # tok over limit: stdout empty, exit 1 (runtime error - check exceeded)
 check_empty_stdout "tok --check exceeded" 1 sh -c "echo 'hello world' | $VRK tok --check 1"
 
-# epoch bad input (natural language): stdout empty, exit 2 (usage error — unparseable input)
-check_empty_stdout "epoch bad input" 2 sh -c "echo 'next tuesday' | $VRK epoch"
+# epoch bad input (natural language): stdout empty, exit 1 (runtime error - unparseable input)
+check_empty_stdout "epoch bad input" 1 sh -c "echo 'next tuesday' | $VRK epoch"
 
 # prompt with no API key: stdout empty, exit 1 (runtime error — missing credentials)
 check_empty_stdout "prompt no-API-key" 1 sh -c "ANTHROPIC_API_KEY='' OPENAI_API_KEY='' $VRK prompt 'hello'"
