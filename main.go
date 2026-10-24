@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/cmd/assert"
@@ -149,12 +150,13 @@ func main() {
 
 // printHelp writes the tool list and meta commands.
 func printHelp(w io.Writer) {
-	fmt.Fprintf(w, "vrk %s - Unix tools for LLM pipelines\n\n", version)
-	fmt.Fprintf(w, "usage: vrk <tool> [args]      run 'vrk <tool> --help' for details\n\ntools:\n")
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "vrk %s - Unix tools for LLM pipelines\n\n", version)
+	fmt.Fprintf(&sb, "usage: vrk <tool> [args]      run 'vrk <tool> --help' for details\n\ntools:\n")
 	for _, t := range shared.Registry() {
-		fmt.Fprintf(w, "  %-12s %s\n", t.Name, t.Short)
+		fmt.Fprintf(&sb, "  %-12s %s\n", t.Name, t.Short)
 	}
-	fmt.Fprint(w, `
+	fmt.Fprint(&sb, `
 meta:
   vrk --bare | bare     symlink tools so you can call them without 'vrk'
   vrk completions       shell completion scripts
@@ -163,6 +165,7 @@ meta:
   vrk --skills [tool]   agent skill docs
   vrk --version         print version
 `)
+	_, _ = io.WriteString(w, sb.String())
 }
 
 // printSkillFiles reads per-tool skill files from the embedded skillsFS and
