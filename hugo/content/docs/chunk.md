@@ -74,8 +74,8 @@ Every record contains three fields:
 
 ```bash
 $ cat technical-spec.md | vrk chunk --size 30
-{"index":0,"text":"Section one covers the system architecture. The platform uses a microservices pattern with...","tokens":30}
-{"index":1,"text":"event-driven communication between services. Each service maintains its own database...","tokens":28}
+{"index":0,"text":"# Title\n\nvrk is a set of small Unix tools for AI pipelines. Each tool reads stdin, writes stdout, and uses exit codes to report","tokens":30}
+{"index":1,"text":" failure. The tools compose with pipes.\n\n## Details\n\nSee [the docs](https://vrk.sh/docs) for more.","tokens":26}
 ```
 
 ## Flag details

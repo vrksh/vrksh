@@ -160,6 +160,7 @@ $ echo $?
 
 No input:
 
+<!-- doccheck: skip (needs an interactive terminal, doccheck runs with empty stdin) -->
 ```bash
 $ vrk urlinfo
 usage error: urlinfo: no input: pipe a URL to stdin

@@ -66,6 +66,7 @@ vrk uuid --v7 --count 5
 
 ### v4 (random, default)
 
+<!-- doccheck: skip (random output) -->
 ```bash
 $ vrk uuid
 98d06ca5-e747-4a63-8fc9-045f0e02f8d4
@@ -75,6 +76,7 @@ Standard random UUID. Good for correlation IDs, file names, and anywhere uniquen
 
 ### v7 (time-ordered)
 
+<!-- doccheck: skip (random output) -->
 ```bash
 $ vrk uuid --v7
 019d3fdb-2de7-756e-a340-de561cfa43ab
@@ -84,6 +86,7 @@ The first 48 bits encode a millisecond timestamp. v7 UUIDs sort chronologically 
 
 ### Batch generation
 
+<!-- doccheck: skip (random output) -->
 ```bash
 $ vrk uuid --count 3
 c00bb1e4-51fd-4cfc-96b2-2c0123268c80

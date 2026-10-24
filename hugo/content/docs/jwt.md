@@ -78,6 +78,7 @@ The full payload as JSON, sorted alphabetically. No signature verification - thi
 ### Extract a single claim
 
 ```bash
+$ TOKEN='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiZXhwIjoxNjAwMDAwMDAwLCJpYXQiOjE1MTYyMzkwMjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
 $ echo "$TOKEN" | vrk jwt --claim name
 John Doe
 
@@ -90,8 +91,9 @@ Returns the raw value, no JSON wrapping. Useful for extracting a user ID or emai
 ### Check if a token is expired
 
 ```bash
+$ TOKEN='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiZXhwIjoxNjAwMDAwMDAwLCJpYXQiOjE1MTYyMzkwMjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
 $ echo "$TOKEN" | vrk jwt --expired
-error: jwt: token expired 48581h20m37s ago (exp: 2020-09-13T12:26:40Z)
+error: jwt: token expired ... ago (exp: 2020-09-13T12:26:40Z)
 $ echo $?
 1
 ```
@@ -145,8 +147,9 @@ vrk epoch "$EXP" --iso
 Expired token:
 
 ```bash
+$ TOKEN='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiZXhwIjoxNjAwMDAwMDAwLCJpYXQiOjE1MTYyMzkwMjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
 $ echo "$TOKEN" | vrk jwt --expired
-error: jwt: token expired 48581h20m37s ago (exp: 2020-09-13T12:26:40Z)
+error: jwt: token expired ... ago (exp: 2020-09-13T12:26:40Z)
 $ echo $?
 1
 ```
@@ -155,7 +158,7 @@ Invalid token format:
 
 ```bash
 $ echo "not.a.jwt" | vrk jwt
-error: jwt: invalid token: header is not base64url
+error: jwt: invalid token: header is not valid JSON
 $ echo $?
 1
 ```
@@ -164,7 +167,7 @@ No input:
 
 ```bash
 $ vrk jwt
-usage error: jwt: no token provided
+usage error: jwt: no input: provide as argument or via stdin
 $ echo $?
 2
 ```

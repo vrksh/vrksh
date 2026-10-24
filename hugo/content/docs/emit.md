@@ -107,7 +107,7 @@ Tags let you filter logs by stage: `jq 'select(.tag == "fetch")'`.
 ### Combined: tag + parse-level
 
 ```bash
-$ run-deploy.sh 2>&1 | vrk emit --tag deploy --parse-level
+$ printf 'INFO Starting deployment\nERROR Container health check failed\nWARN Rolling back to previous version\n' | vrk emit --tag deploy --parse-level
 {"ts":"...","level":"info","tag":"deploy","msg":"Starting deployment"}
 {"ts":"...","level":"error","tag":"deploy","msg":"Container health check failed"}
 {"ts":"...","level":"warn","tag":"deploy","msg":"Rolling back to previous version"}
@@ -153,6 +153,7 @@ echo "$RESULT" | vrk emit --tag summarize --level info
 
 Interactive terminal with no input:
 
+<!-- doccheck: skip (TTY-only behaviour) -->
 ```bash
 $ vrk emit
 usage error: emit: no input: pipe lines to stdin

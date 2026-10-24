@@ -72,10 +72,10 @@ Counts tokens and prints the number to stdout:
 
 ```bash
 $ cat system-prompt.txt | vrk tok
-8847
+11
 
 $ cat system-prompt.txt | vrk tok --json
-{"tokens":8847,"model":"cl100k_base"}
+{"tokens":11,"model":"cl100k_base"}
 ```
 
 ### Gate mode (--check N)
@@ -89,7 +89,7 @@ short input
 
 # Over budget - empty stdout, exit 1
 $ printf 'You are a helpful assistant.' | vrk tok --check 3
-# (no stdout)
+tok: 6 tokens exceeds limit of 3
 $ echo $?
 1
 ```

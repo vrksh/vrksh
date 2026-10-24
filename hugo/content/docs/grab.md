@@ -72,6 +72,7 @@ vrk grab https://blog.example.com/llm-best-practices | vrk tok
 
 ### Markdown (default)
 
+<!-- doccheck: skip (real network fetch) -->
 ```bash
 $ vrk grab https://example.com/blog/llm-pipelines
 # Getting Started with LLM Pipelines
@@ -87,6 +88,7 @@ Clean markdown - headers, paragraphs, links, and code blocks preserved. Ready to
 
 ### Plain text (--text)
 
+<!-- doccheck: skip (real network fetch) -->
 ```bash
 $ vrk grab --text https://example.com/blog/llm-pipelines
 Getting Started with LLM Pipelines
@@ -177,6 +179,7 @@ $ echo $?
 
 HTTP error:
 
+<!-- doccheck: skip (real network fetch) -->
 ```bash
 $ vrk grab https://example.com/this-page-does-not-exist
 error: grab: HTTP 404: Not Found

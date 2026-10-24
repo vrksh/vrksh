@@ -75,6 +75,7 @@ cat article.md | vrk prompt --system 'Summarize the key findings in 3 bullet poi
 
 ### Simple question
 
+<!-- doccheck: skip (real LLM output, the mock endpoint cannot answer questions) -->
 ```bash
 $ echo 'What is the capital of France?' | vrk prompt
 Paris.
@@ -92,6 +93,7 @@ cat user-feedback.csv | vrk prompt --system @prompts/analyze-feedback.txt
 
 Force the LLM to return JSON matching a specific shape:
 
+<!-- doccheck: skip (real LLM output, the mock endpoint cannot fill a schema sent as system text) -->
 ```bash
 $ cat bug-report.txt | vrk prompt \
     --system 'Extract structured fields from this bug report' \
@@ -126,6 +128,7 @@ In every case vrk checks the reply itself, so `--fail` and `--retry` behave the 
 
 ### See what would be sent without calling the API
 
+<!-- doccheck: skip (output holds the provider endpoint, which differs per setup) -->
 ```bash
 $ echo 'test input' | vrk prompt --explain
 ```
@@ -151,8 +154,8 @@ cat article.md | vrk prompt -m llama3 --endpoint http://localhost:11434/v1
 Pre-flight token check. If the prompt exceeds N tokens, prompt exits 1 without calling the API. Saves money on obviously-too-large inputs.
 
 ```bash
-$ cat huge-document.txt | vrk prompt --budget 4000 --system 'Summarize'
-error: prompt: 23847 tokens exceeds budget of 4000
+$ cat huge-document.txt | vrk prompt --budget 10 --system 'Summarize'
+error: prompt: 35 tokens exceeds budget of 10
 $ echo $?
 1
 ```
@@ -249,6 +252,7 @@ done
 
 API key missing:
 
+<!-- doccheck: skip (doccheck always sets a mock endpoint and key) -->
 ```bash
 $ echo 'hello' | ANTHROPIC_API_KEY= vrk prompt
 error: prompt: no API key found: set ANTHROPIC_API_KEY or OPENAI_API_KEY
@@ -259,8 +263,8 @@ $ echo $?
 Budget exceeded:
 
 ```bash
-$ cat huge-file.txt | vrk prompt --budget 100 --system 'Summarize'
-error: prompt: 23847 tokens exceeds budget of 100
+$ cat huge-file.txt | vrk prompt --budget 20 --system 'Summarize'
+error: prompt: 35 tokens exceeds budget of 20
 $ echo $?
 1
 ```

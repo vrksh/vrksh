@@ -68,37 +68,46 @@ vrk --bare --dry-run
 
 ### Create symlinks
 
+<!-- doccheck: skip (creates symlinks next to the binary) -->
 ```bash
 $ vrk bare
-Created 26 symlinks in /usr/local/bin/
+Linking assert   → /usr/local/bin/assert  ✓
+Linking base     → /usr/local/bin/base  ✓
+...
+26 linked.
 ```
 
 Each tool gets a symlink: `tok -> vrk`, `jwt -> vrk`, `epoch -> vrk`, etc. The multicall binary detects which name it was invoked as and dispatches to the right tool.
 
 ### Preview before creating (--dry-run)
 
+<!-- doccheck: skip (creates symlinks next to the binary) -->
 ```bash
 $ vrk bare --dry-run
-Would create: /usr/local/bin/tok -> /usr/local/bin/vrk
-Would create: /usr/local/bin/jwt -> /usr/local/bin/vrk
-Would create: /usr/local/bin/epoch -> /usr/local/bin/vrk
+Linking assert   → /usr/local/bin/assert
+Linking base     → /usr/local/bin/base
 ...
 ```
 
 ### Check existing symlinks (--list)
 
+<!-- doccheck: skip (depends on which symlinks exist) -->
 ```bash
 $ vrk bare --list
-tok -> /usr/local/bin/vrk
-jwt -> /usr/local/bin/vrk
-epoch -> /usr/local/bin/vrk
+assert    /usr/local/bin/assert
+base      /usr/local/bin/base
+...
 ```
 
 ### Remove symlinks (--remove)
 
+<!-- doccheck: skip (removes symlinks next to the binary) -->
 ```bash
 $ vrk bare --remove
-Removed 26 symlinks
+Removed assert
+Removed base
+...
+26 removed.
 ```
 
 Only removes symlinks that point to the vrk binary. Other files with the same names are left untouched.

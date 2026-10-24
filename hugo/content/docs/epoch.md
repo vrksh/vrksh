@@ -99,15 +99,16 @@ $ vrk epoch '2025-02-20T00:00:00Z'
 ### Relative time
 
 ```bash
-$ vrk epoch '+3d'
-1775152019
+$ vrk epoch '+3d' --at 1740009600
+1740268800
 
-$ vrk epoch '+3d' --iso
-2026-04-02T17:46:59Z
+$ vrk epoch '+3d' --at 1740009600 --iso
+2025-02-23T00:00:00Z
 ```
 
 ### Current time
 
+<!-- doccheck: skip (wall-clock time) -->
 ```bash
 $ vrk epoch --now
 1774892819
@@ -116,8 +117,8 @@ $ vrk epoch --now
 ### JSON output
 
 ```bash
-$ vrk epoch '+3d' --json
-{"input":"+3d","unix":1775152019,"iso":"2026-04-02T17:46:59Z"}
+$ vrk epoch '+3d' --at 1740009600 --json
+{"input":"+3d","unix":1740268800,"iso":"2025-02-23T00:00:00Z","ref":"1740009600"}
 ```
 
 ### Timezone conversion
@@ -195,7 +196,7 @@ Missing input:
 
 ```bash
 $ vrk epoch
-usage error: epoch: no input provided
+usage error: epoch: no input: provide as argument or via stdin
 $ echo $?
 2
 ```

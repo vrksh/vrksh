@@ -129,6 +129,7 @@ done
 
 No input:
 
+<!-- doccheck: skip (only fails on an interactive terminal, doccheck stdin is not a TTY) -->
 ```bash
 $ vrk plain
 usage error: plain: no input: pipe markdown to stdin
