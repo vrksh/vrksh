@@ -1,0 +1,556 @@
+package pdf
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	lpdf "github.com/ledongthuc/pdf"
+)
+
+// runPdf replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and returns
+// captured stdout, stderr, and the exit code. Not parallel-safe - tests share
+// global OS state.
+func runPdf(t *testing.T, args []string, stdin []byte) (stdout, stderr string, code int) {
+	t.Helper()
+
+	origStdin, origStdout, origStderr, origArgs := os.Stdin, os.Stdout, os.Stderr, os.Args
+	t.Cleanup(func() {
+		os.Stdin, os.Stdout, os.Stderr, os.Args = origStdin, origStdout, origStderr, origArgs
+	})
+
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdin pipe: %v", err)
+	}
+	// Write in a goroutine so inputs bigger than the pipe buffer don't block.
+	go func() {
+		_, _ = stdinW.Write(stdin)
+		_ = stdinW.Close()
+	}()
+	os.Stdin = stdinR
+
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	os.Stdout, os.Stderr = stdoutW, stderrW
+
+	var outBuf, errBuf bytes.Buffer
+	outDone, errDone := make(chan struct{}), make(chan struct{})
+	go func() { _, _ = io.Copy(&outBuf, stdoutR); close(outDone) }()
+	go func() { _, _ = io.Copy(&errBuf, stderrR); close(errDone) }()
+
+	os.Args = append([]string{"pdf"}, args...)
+	code = Run()
+
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+	<-outDone
+	<-errDone
+	_ = stdinR.Close()
+	return outBuf.String(), errBuf.String(), code
+}
+
+// assemblePDF writes a PDF 1.4 file with one Helvetica text line per page and
+// a correct xref table. kids overrides the /Kids array of the page tree when
+// non-empty; trailer is extra text for the trailer dictionary.
+func assemblePDF(kids, trailer string, pages []string) []byte {
+	var b bytes.Buffer
+	var offs []int
+	obj := func(body string) {
+		offs = append(offs, b.Len())
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", len(offs), body)
+	}
+
+	if kids == "" {
+		refs := make([]string, len(pages))
+		for i := range pages {
+			refs[i] = fmt.Sprintf("%d 0 R", 4+2*i)
+		}
+		kids = strings.Join(refs, " ")
+	}
+
+	b.WriteString("%PDF-1.4\n")
+	obj("<< /Type /Catalog /Pages 2 0 R >>")
+	obj(fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids, len(pages)))
+	obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+	esc := strings.NewReplacer(`\`, `\\`, `(`, `\(`, `)`, `\)`)
+	for i, p := range pages {
+		obj(fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents %d 0 R >>", 5+2*i))
+		var content string
+		if p != "" {
+			content = fmt.Sprintf("BT /F1 12 Tf 72 720 Td (%s) Tj ET", esc.Replace(p))
+		}
+		obj(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content))
+	}
+
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(offs)+1)
+	for _, o := range offs {
+		fmt.Fprintf(&b, "%010d 00000 n \n", o)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R %s>>\nstartxref\n%d\n%%%%EOF\n", len(offs)+1, trailer, xref)
+	return b.Bytes()
+}
+
+// buildPDF returns a valid PDF with one page per argument.
+func buildPDF(pages ...string) []byte {
+	return assemblePDF("", "", pages)
+}
+
+// buildEncryptedPDF returns a PDF with a Standard security handler whose U
+// entry doesn't match the empty password, so opening it needs a password.
+func buildEncryptedPDF(pages ...string) []byte {
+	enc := "/Encrypt << /Filter /Standard /V 1 /R 2 /O <" + strings.Repeat("ab", 32) +
+		"> /U <" + strings.Repeat("cd", 32) + "> /P -4 >> /ID [<" + strings.Repeat("01", 16) +
+		"> <" + strings.Repeat("01", 16) + ">] "
+	return assemblePDF("", enc, pages)
+}
+
+// buildLoopPDF returns a PDF whose page tree lists itself as its own kid.
+// The library's Reader.Page walks this forever.
+func buildLoopPDF() []byte {
+	return assemblePDF("2 0 R", "", []string{"p1"})
+}
+
+// buildMissingKidPDF returns a PDF whose page tree points at an object that
+// doesn't exist.
+func buildMissingKidPDF() []byte {
+	return assemblePDF("99 0 R", "", []string{"p1", "p2"})
+}
+
+func writeTemp(t *testing.T, name string, data []byte) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, data, 0o644); err != nil {
+		t.Fatalf("write %s: %v", p, err)
+	}
+	return p
+}
+
+type jsonRec struct {
+	Page  int    `json:"page"`
+	Text  string `json:"text"`
+	VRK   string `json:"_vrk"`
+	Count int    `json:"count"`
+}
+
+func parseJSONL(t *testing.T, s string) []jsonRec {
+	t.Helper()
+	var recs []jsonRec
+	for _, line := range strings.Split(strings.TrimSuffix(s, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		var r jsonRec
+		if err := json.Unmarshal([]byte(line), &r); err != nil {
+			t.Fatalf("bad JSONL line %q: %v", line, err)
+		}
+		recs = append(recs, r)
+	}
+	return recs
+}
+
+func assertJSONError(t *testing.T, stdout, stderr string, code, wantCode int, wantMsg string) {
+	t.Helper()
+	if code != wantCode {
+		t.Errorf("exit = %d, want %d", code, wantCode)
+	}
+	if stderr != "" {
+		t.Errorf("stderr should be empty with --json, got %q", stderr)
+	}
+	var e struct {
+		Error string `json:"error"`
+		Code  int    `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &e); err != nil {
+		t.Fatalf("stdout not error JSON: %q (%v)", stdout, err)
+	}
+	if e.Code != wantCode || !strings.Contains(e.Error, wantMsg) {
+		t.Errorf("error JSON = %+v, want code %d and message containing %q", e, wantCode, wantMsg)
+	}
+}
+
+// --- sanity ---
+
+func TestBuildPDFSanity(t *testing.T) {
+	data := buildPDF("p1", "p2", "p3")
+	r, err := lpdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("generated PDF doesn't open: %v", err)
+	}
+	if r.NumPage() != 3 {
+		t.Fatalf("NumPage = %d, want 3", r.NumPage())
+	}
+	enc := buildEncryptedPDF("secret")
+	if _, err := lpdf.NewReader(bytes.NewReader(enc), int64(len(enc))); !errors.Is(err, lpdf.ErrInvalidPassword) {
+		t.Fatalf("encrypted PDF opened with empty password: err = %v", err)
+	}
+}
+
+// --- happy paths ---
+
+func TestStdinMultiPage(t *testing.T) {
+	stdout, stderr, code := runPdf(t, nil, buildPDF("p1", "p2", "p3"))
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr)
+	}
+	if stdout != "p1\n\fp2\n\fp3\n" {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestFileArgMatchesStdin(t *testing.T) {
+	data := buildPDF("p1", "p2", "p3")
+	path := writeTemp(t, "doc.pdf", data)
+	fromFile, _, code := runPdf(t, []string{path}, nil)
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	fromStdin, _, _ := runPdf(t, nil, data)
+	if fromFile != fromStdin {
+		t.Errorf("file %q != stdin %q", fromFile, fromStdin)
+	}
+}
+
+func TestEmptyPages(t *testing.T) {
+	cases := []struct {
+		pages []string
+		want  string
+	}{
+		{[]string{"p1", "", "p3"}, "p1\n\f\fp3\n"},
+		{[]string{"p1", ""}, "p1\n\f\n"},
+	}
+	for _, tc := range cases {
+		stdout, stderr, code := runPdf(t, nil, buildPDF(tc.pages...))
+		if code != 0 || stdout != tc.want {
+			t.Errorf("pages %q: exit %d stdout %q stderr %q, want %q", tc.pages, code, stdout, stderr, tc.want)
+		}
+	}
+}
+
+func TestJSONOutput(t *testing.T) {
+	stdout, stderr, code := runPdf(t, []string{"--json"}, buildPDF("p1", "p2", "p3"))
+	if code != 0 || stderr != "" {
+		t.Fatalf("exit %d stderr %q", code, stderr)
+	}
+	recs := parseJSONL(t, stdout)
+	if len(recs) != 4 {
+		t.Fatalf("got %d records, want 4: %q", len(recs), stdout)
+	}
+	for i := 0; i < 3; i++ {
+		if recs[i].Page != i+1 || recs[i].Text != fmt.Sprintf("p%d", i+1) {
+			t.Errorf("record %d = %+v", i, recs[i])
+		}
+	}
+	if recs[3].VRK != "pdf" || recs[3].Count != 3 {
+		t.Errorf("trailer = %+v", recs[3])
+	}
+	if !strings.HasSuffix(stdout, `{"_vrk":"pdf","count":3}`+"\n") {
+		t.Errorf("trailer bytes wrong: %q", stdout)
+	}
+}
+
+func TestJSONPagesKeepRealNumbers(t *testing.T) {
+	stdout, _, code := runPdf(t, []string{"--json", "--pages", "2-3"}, buildPDF("p1", "p2", "p3"))
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	recs := parseJSONL(t, stdout)
+	if len(recs) != 3 || recs[0].Page != 2 || recs[1].Page != 3 || recs[2].Count != 2 {
+		t.Errorf("records = %+v", recs)
+	}
+}
+
+func TestPagesSelection(t *testing.T) {
+	data := buildPDF("p1", "p2", "p3", "p4", "p5")
+	cases := map[string]string{
+		"3":   "p3\n",
+		"2-5": "p2\n\fp3\n\fp4\n\fp5\n",
+		"3-":  "p3\n\fp4\n\fp5\n",
+		" 3 ": "p3\n",
+	}
+	for arg, want := range cases {
+		stdout, stderr, code := runPdf(t, []string{"--pages", arg}, data)
+		if code != 0 || stdout != want {
+			t.Errorf("--pages %q: exit %d stdout %q stderr %q, want %q", arg, code, stdout, stderr, want)
+		}
+	}
+	// -p shorthand
+	if stdout, _, _ := runPdf(t, []string{"-p", "1"}, data); stdout != "p1\n" {
+		t.Errorf("-p 1 = %q", stdout)
+	}
+}
+
+// --- usage errors ---
+
+func TestPagesInvalid(t *testing.T) {
+	data := buildPDF("p1", "p2", "p3")
+	for _, arg := range []string{"0", "5-2", "abc", "-3", "1-2-3", "+3", " ", "0-2", "2-0"} {
+		stdout, stderr, code := runPdf(t, []string{"--pages=" + arg}, data)
+		if code != 2 {
+			t.Errorf("--pages %q: exit %d, want 2", arg, code)
+		}
+		if stdout != "" {
+			t.Errorf("--pages %q: stdout %q", arg, stdout)
+		}
+		if !strings.Contains(stderr, "pdf: invalid page range: "+arg) {
+			t.Errorf("--pages %q: stderr %q", arg, stderr)
+		}
+	}
+}
+
+func TestTwoPositionalArgs(t *testing.T) {
+	_, stderr, code := runPdf(t, []string{"a.pdf", "b.pdf"}, nil)
+	if code != 2 || !strings.Contains(stderr, "pdf:") {
+		t.Errorf("exit %d stderr %q", code, stderr)
+	}
+}
+
+func TestHelp(t *testing.T) {
+	stdout, _, code := runPdf(t, []string{"--help"}, nil)
+	if code != 0 || !strings.Contains(stdout, "pdf") || !strings.Contains(stdout, "--pages") {
+		t.Errorf("exit %d stdout %q", code, stdout)
+	}
+}
+
+func TestUnknownFlag(t *testing.T) {
+	stdout, _, code := runPdf(t, []string{"--nope"}, nil)
+	if code != 2 || stdout != "" {
+		t.Errorf("exit %d stdout %q", code, stdout)
+	}
+}
+
+func TestTTY(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	t.Cleanup(func() { isTerminal = orig })
+
+	stdout, stderr, code := runPdf(t, nil, nil)
+	if code != 2 || stdout != "" || !strings.Contains(stderr, "pdf: no input: provide a file path or pipe a PDF to stdin") {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+
+	stdout, stderr, code = runPdf(t, []string{"--json"}, nil)
+	assertJSONError(t, stdout, stderr, code, 2, "pdf: no input")
+
+	path := writeTemp(t, "doc.pdf", buildPDF("p1"))
+	stdout, _, code = runPdf(t, []string{path}, nil)
+	if code != 0 || stdout != "p1\n" {
+		t.Errorf("TTY + file: exit %d stdout %q", code, stdout)
+	}
+}
+
+// --- runtime errors ---
+
+func TestPageOutOfRange(t *testing.T) {
+	data := buildPDF("p1", "p2", "p3")
+	for _, arg := range []string{"9", "2-9", "9-"} {
+		stdout, stderr, code := runPdf(t, []string{"--pages", arg}, data)
+		if code != 1 || stdout != "" || !strings.Contains(stderr, "pdf: page 9 does not exist (PDF has 3 pages)") {
+			t.Errorf("--pages %s: exit %d stdout %q stderr %q", arg, code, stdout, stderr)
+		}
+	}
+}
+
+const ocrMsg = "pdf: no extractable text found; document may be scanned (OCR required)"
+
+func TestNoText(t *testing.T) {
+	stdout, stderr, code := runPdf(t, nil, buildPDF("", ""))
+	if code != 1 || stdout != "" || !strings.Contains(stderr, ocrMsg) {
+		t.Errorf("blank: exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runPdf(t, []string{"--pages", "2"}, buildPDF("p1", ""))
+	if code != 1 || stdout != "" || !strings.Contains(stderr, ocrMsg) {
+		t.Errorf("blank page 2: exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runPdf(t, []string{"--json"}, buildPDF(""))
+	assertJSONError(t, stdout, stderr, code, 1, ocrMsg)
+}
+
+func TestEncrypted(t *testing.T) {
+	stdout, stderr, code := runPdf(t, nil, buildEncryptedPDF("secret"))
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "pdf: PDF is encrypted: cannot extract text") {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
+func TestNotAPDF(t *testing.T) {
+	stdout, stderr, code := runPdf(t, nil, []byte("just some text, not a pdf\n"))
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "pdf: not a valid PDF: ") {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
+func TestPDF20Rejected(t *testing.T) {
+	data := buildPDF("p1")
+	data = append([]byte("%PDF-2.0"), data[len("%PDF-1.4"):]...)
+	_, stderr, code := runPdf(t, nil, data)
+	if code != 1 || !strings.Contains(stderr, "pdf: not a valid PDF: ") {
+		t.Errorf("exit %d stderr %q", code, stderr)
+	}
+}
+
+func TestBrokenPageTree(t *testing.T) {
+	for name, data := range map[string][]byte{"loop": buildLoopPDF(), "missing kid": buildMissingKidPDF()} {
+		done := make(chan struct{})
+		var stdout, stderr string
+		var code int
+		go func() {
+			stdout, stderr, code = runPdf(t, nil, data)
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: hung", name)
+		}
+		if code != 1 || stdout != "" || !strings.Contains(stderr, "pdf: corrupt PDF: ") {
+			t.Errorf("%s: exit %d stdout %q stderr %q", name, code, stdout, stderr)
+		}
+	}
+}
+
+func TestMissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nope.pdf")
+	stdout, stderr, code := runPdf(t, []string{path}, nil)
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "pdf: file not found: "+path) {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runPdf(t, []string{"--json", path}, nil)
+	assertJSONError(t, stdout, stderr, code, 1, "pdf: file not found")
+}
+
+func TestJSONReadError(t *testing.T) {
+	orig := readAll
+	readAll = func(io.Reader) ([]byte, error) { return nil, errors.New("simulated") }
+	t.Cleanup(func() { readAll = orig })
+
+	stdout, stderr, code := runPdf(t, []string{"--json"}, nil)
+	assertJSONError(t, stdout, stderr, code, 1, "simulated")
+}
+
+func TestJSONErrorsKeepStderrEmpty(t *testing.T) {
+	stdout, stderr, code := runPdf(t, []string{"--json"}, buildEncryptedPDF("x"))
+	assertJSONError(t, stdout, stderr, code, 1, "encrypted")
+	stdout, stderr, code = runPdf(t, []string{"--json", "--pages", "abc"}, buildPDF("p1"))
+	assertJSONError(t, stdout, stderr, code, 2, "invalid page range")
+}
+
+func TestEmptyStdin(t *testing.T) {
+	for _, args := range [][]string{nil, {"--json"}} {
+		stdout, stderr, code := runPdf(t, args, nil)
+		if code != 0 || stdout != "" || stderr != "" {
+			t.Errorf("%v: exit %d stdout %q stderr %q", args, code, stdout, stderr)
+		}
+	}
+}
+
+func TestQuiet(t *testing.T) {
+	_, stderr, code := runPdf(t, []string{"--quiet"}, []byte("not a pdf"))
+	if code != 1 || stderr != "" {
+		t.Errorf("exit %d stderr %q", code, stderr)
+	}
+}
+
+// --- property ---
+
+func TestPropertyJSONRoundTrip(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	for iter := 0; iter < 50; iter++ {
+		pages := make([]string, 1+rng.Intn(5))
+		for i := range pages {
+			// Printable ASCII with no leading or trailing space: the library
+			// can't tell a positioned space from layout at the edges.
+			n := 1 + rng.Intn(40)
+			b := make([]byte, n)
+			for j := range b {
+				b[j] = byte(0x20 + rng.Intn(0x7f-0x20))
+				if (j == 0 || j == n-1) && b[j] == ' ' {
+					b[j] = 'x'
+				}
+			}
+			pages[i] = string(b)
+		}
+		stdout, stderr, code := runPdf(t, []string{"--json"}, buildPDF(pages...))
+		if code != 0 {
+			t.Fatalf("pages %q: exit %d stderr %q", pages, code, stderr)
+		}
+		recs := parseJSONL(t, stdout)
+		if len(recs) != len(pages)+1 || recs[len(pages)].Count != len(pages) {
+			t.Fatalf("pages %q: records %+v", pages, recs)
+		}
+		for i, p := range pages {
+			if recs[i].Page != i+1 || recs[i].Text != p {
+				t.Errorf("page %d: got %+v, want %q", i+1, recs[i], p)
+			}
+		}
+	}
+}
+
+// --- fuzz ---
+
+func FuzzPdf(f *testing.F) {
+	f.Add(buildPDF("p1", "p2"))
+	f.Add(buildPDF(""))
+	f.Add(buildEncryptedPDF("x"))
+	f.Add(buildLoopPDF())
+	f.Add(buildMissingKidPDF())
+	f.Add([]byte("%PDF-1.4\n%%EOF\n"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			r, _, err := open(data)
+			if err != nil {
+				return
+			}
+			_, _ = extract(r, pageRange{start: 1})
+		}()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatalf("hung on %d bytes", len(data))
+		}
+	})
+}
+
+// --- fixtures ---
+
+// TestWriteFixtures regenerates the committed smoke fixtures.
+// Run with VRK_UPDATE_FIXTURES=1 make test-tool TOOL=pdf.
+func TestWriteFixtures(t *testing.T) {
+	if os.Getenv("VRK_UPDATE_FIXTURES") == "" {
+		t.Skip("set VRK_UPDATE_FIXTURES=1 to regenerate testdata/pdf/fixtures")
+	}
+	dir := filepath.Join("..", "..", "testdata", "pdf", "fixtures")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string][]byte{
+		"text.pdf":      buildPDF("Quarterly report, page one.", "Revenue grew in every region.", "Outlook for next year."),
+		"blank.pdf":     buildPDF("", ""),
+		"encrypted.pdf": buildEncryptedPDF("secret"),
+	}
+	for name, data := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

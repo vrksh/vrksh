@@ -5,7 +5,7 @@ description: "Environment variables read by vrk at runtime. No config file requi
 noindex: false
 ---
 
-Most vrk tools need zero configuration. Only two of 26 tools read environment variables at all.
+Most vrk tools need zero configuration. Only two of 27 tools read environment variables at all.
 
 ## vrk prompt
 

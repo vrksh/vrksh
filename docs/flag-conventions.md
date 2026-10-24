@@ -174,6 +174,17 @@ cat data.txt | vrk prompt --schema s.json --retry 3   # retry if Claude's output
 
 ---
 
+### `--pages <range>` (pdf)
+
+**Meaning:** Select a page range. `N` is one page, `N-M` an inclusive range, `N-` runs to the last page. 1-indexed. A malformed range exits 2; a page past the end exits 1. Short form `-p`.
+
+```bash
+vrk pdf --pages 2-5 report.pdf     # pages 2, 3, 4, 5
+vrk pdf -p 4- report.pdf           # page 4 to the end
+```
+
+---
+
 ## Reserved Shorthands
 
 These single-letter shorthands are permanently reserved. **Do not use them for any other flag**, even if the long flag name seems unrelated. Their meanings are fixed Unix conventions that users will assume globally.

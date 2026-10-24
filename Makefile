@@ -42,6 +42,7 @@ fuzz:
 	go test -fuzz=FuzzTok   -fuzztime=60s ./cmd/tok/
 	go test -fuzz=FuzzSse   -fuzztime=60s ./cmd/sse/
 	go test -fuzz=FuzzChunk -fuzztime=60s ./cmd/chunk/
+	go test -fuzz=FuzzPdf   -fuzztime=60s ./cmd/pdf/
 	go test -fuzz=FuzzMatchesTiktokenGo -fuzztime=60s ./internal/shared/tokcount/
 
 # Verify cross-compilation works. Run after every Claude Code session.

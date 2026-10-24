@@ -63,6 +63,6 @@ Five tools, one line. If the page exceeds 8,000 tokens, `tok` exits 1 and the pi
 
 ## Where to go next
 
-- [All 26 tools](/docs/) - flags, exit codes, examples
+- [All 27 tools](/docs/) - flags, exit codes, examples
 - [Recipes](/recipes/) - multi-tool pipeline patterns
 - [Agent integration](/agents/) - using vrk from AI agents

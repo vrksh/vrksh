@@ -21,6 +21,7 @@ One binary: `vrk`. Unix tools for AI pipelines.
 | `mask`        | secret redactor - entropy + pattern-based, streaming               |
 | `moniker`     | memorable name generator - run IDs, job labels, temp dirs          |
 | `pct`         | percent encoder/decoder - RFC 3986, --encode, --decode, --form     |
+| `pdf`         | PDF text extractor - plain text or JSONL per page, --pages         |
 | `plain`       | markdown stripper - removes syntax, keeps prose                    |
 | `prompt`      | LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.       |
 | `recase`      | naming convention converter - snake, camel, kebab, pascal, title   |

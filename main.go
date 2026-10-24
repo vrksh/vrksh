@@ -26,6 +26,7 @@ import (
 	"github.com/vrksh/vrksh/cmd/mask"
 	"github.com/vrksh/vrksh/cmd/moniker"
 	"github.com/vrksh/vrksh/cmd/pct"
+	"github.com/vrksh/vrksh/cmd/pdf"
 	"github.com/vrksh/vrksh/cmd/plain"
 	"github.com/vrksh/vrksh/cmd/prompt"
 	"github.com/vrksh/vrksh/cmd/recase"
@@ -76,6 +77,7 @@ var tools = map[string]func() int{
 	"mask":     mask.Run,
 	"moniker":  moniker.Run,
 	"pct":      pct.Run,
+	"pdf":      pdf.Run,
 	"recase":   recase.Run,
 	"sip":      sip.Run,
 	"slug":     slug.Run,

@@ -304,6 +304,22 @@ Exit 2: Neither --encode nor --decode specified, both specified, interactive TTY
 echo 'hello world&foo=bar' | vrk pct --encode
 ```
 
+## pdf - PDF text extractor - plain text or JSONL per page, --pages
+
+| Flag      | Short | Description                                  |
+|-----------|-------|----------------------------------------------|
+| `--pages` | -p    | Page range: N, N-M, or N- (1-indexed)        |
+| `--json`  | -j    | One record per page, then a metadata trailer |
+| `--quiet` | -q    | Suppress stderr output                       |
+
+Exit 0: Success, including empty stdin
+Exit 1: File not found, not a PDF, encrypted, corrupt, page out of range, or no extractable text
+Exit 2: Invalid --pages range, more than one file, unknown flag, or interactive TTY with no input
+
+```bash
+vrk pdf --pages 1-3 report.pdf | vrk tok
+```
+
 ## plain - markdown stripper - removes syntax, keeps prose
 
 | Flag      | Short | Description                                    |

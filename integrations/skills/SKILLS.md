@@ -2453,6 +2453,93 @@ echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set last_result
 
 ---
 
+## pdf - PDF Text Extractor
+
+Extracts the text layer of a PDF. Plain text by default, pages separated by form feeds (`\f`).
+With `--json`, one record per page: `{"page":N,"text":"..."}`, then `{"_vrk":"pdf","count":N}`.
+Input: a file path as the positional argument, or PDF bytes on stdin. Empty stdin exits 0 with no output.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--pages` | `-p` | Page range: `N`, `N-M`, or `N-` (to the end). 1-indexed |
+| `--json` | `-j` | One `{"page":N,"text":"..."}` per page, then `{"_vrk":"pdf","count":N}` |
+| `--quiet` | `-q` | Suppress stderr output |
+
+### --json output shapes
+
+| Flags | Shape |
+|-------|-------|
+| `--json` | page records + `{"_vrk":"pdf","count":N}` |
+| `--json --pages 2-3` | records for pages 2 and 3 (real page numbers) + trailer with `count:2` |
+| Any error + `--json` | `{"error":"msg","code":N}` on stdout; stderr empty |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success, including empty stdin |
+| 1 | File not found, not a PDF, encrypted, corrupt, page out of range, no extractable text |
+| 2 | Usage error - invalid `--pages`, more than one file, unknown flag, interactive terminal with no input |
+
+### Examples
+
+```bash
+# Extract all text from a file
+vrk pdf report.pdf
+
+# Same thing from stdin
+cat report.pdf | vrk pdf
+
+# Only page 3, or pages 2 through 5, or page 4 to the end
+vrk pdf --pages 3 report.pdf
+vrk pdf --pages 2-5 report.pdf
+vrk pdf -p 4- report.pdf
+
+# One JSONL record per page
+vrk pdf --json report.pdf
+
+# Split plain output into pages
+vrk pdf report.pdf | awk 'BEGIN{RS="\f"} {print NR": "length($0)" chars"}'
+```
+
+### Compose patterns
+
+```bash
+# Count tokens in the text of a PDF
+vrk pdf report.pdf | vrk tok
+
+# Per-page token counts (skip the trailer with select(.page))
+vrk pdf --json report.pdf | jq -c 'select(.page)' | while read -r rec; do
+  printf '%s %s\n' "$(jq -r .page <<<"$rec")" "$(jq -r .text <<<"$rec" | vrk tok)"
+done
+
+# Chunk a PDF for RAG
+vrk pdf report.pdf | vrk chunk --size 1000
+
+# Summarise one page with an LLM
+vrk pdf --pages 1 report.pdf | vrk prompt --system 'Summarise this page in two sentences.'
+
+# Scanned PDFs exit 1, so the pipeline stops before reaching the model
+vrk pdf scan.pdf | vrk prompt --system 'Summarise.' || echo "no text layer, needs OCR"
+```
+
+### Gotchas
+
+- **The argument is a path, not content** - unlike most vrk tools, `vrk pdf 'text'` opens a file called `text`. Pipe bytes on stdin or pass a path.
+- **Text layer only, no OCR** - scanned PDFs (images of pages) exit 1 with `pdf: no extractable text found; document may be scanned (OCR required)`.
+- **No layout reconstruction** - text comes out in content-stream order. Multi-column layouts and tables may interleave.
+- **PDF 2.0 is rejected** - the underlying reader handles PDF 1.0 to 1.7. A `%PDF-2.0` header exits 1 with `pdf: not a valid PDF: ...`.
+- **Encrypted PDFs exit 1** - there is no password flag. A PDF encrypted with an empty user password (owner-only restrictions) still opens.
+- **Ligatures may come out as U+FFFD** - fonts without a ToUnicode map for glyphs like "fi" or "ft" produce `�` where the ligature was.
+- **The `--json` trailer is a record too** - use `jq 'select(.page)'` to skip `{"_vrk":"pdf","count":N}`.
+- **An empty page is still a page** - plain output keeps its `\f`, so the form-feed count is always pages minus one.
+- **`--pages` past the end exits 1** - `pdf: page 9 does not exist (PDF has 3 pages)`. A malformed range like `0`, `5-2` or `abc` exits 2.
+- **Whole file held in memory** - the reader needs random access, so a 500 MB PDF uses about 500 MB.
+
+---
+
 # Utilities
 
 These are not pipeline tools — they support discovery and integration.

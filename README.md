@@ -16,7 +16,7 @@ vrksh (वृक्ष) is the Sanskrit word for tree. The project is **vrksh**.
 
 Shell pipelines that call LLMs break in quiet ways. A prompt exceeds the context window and the model silently truncates. A retry loop swallows errors. An API key leaks into logs. `jq` and `awk` were not designed for this failure mode.
 
-vrksh is 26 Unix-style CLI tools in a single static binary. Each tool reads stdin, writes stdout, and uses exit codes that pipelines can trust: 0 for success, 1 for runtime errors, 2 for usage errors. JSONL is the native interchange format. Large inputs stream through `bufio.Scanner`, not `io.ReadAll`, so a 10GB log file won't OOM your agent.
+vrksh is 27 Unix-style CLI tools in a single static binary. Each tool reads stdin, writes stdout, and uses exit codes that pipelines can trust: 0 for success, 1 for runtime errors, 2 for usage errors. JSONL is the native interchange format. Large inputs stream through `bufio.Scanner`, not `io.ReadAll`, so a 10GB log file won't OOM your agent.
 
 ## Install
 
@@ -67,6 +67,7 @@ go install github.com/vrksh/vrksh@latest
 | `recase`   | Convert naming conventions (snake, camel, kebab)           | `--to`, `--json`                            |
 | `slug`     | Convert text to URL-safe slugs                             | `--separator`, `--max`, `--json`            |
 | `moniker`  | Generate memorable adjective-noun names                    | `--count`, `--seed`, `--json`               |
+| `pdf`      | Extract text from a PDF, per page                          | `--pages`, `--json`                         |
 | `pct`      | Percent-encode/decode per RFC 3986                         | `--encode`, `--decode`, `--form`            |
 | `urlinfo`  | Parse a URL into components, no network calls              | `--field`, `--json`                         |
 
@@ -171,6 +172,6 @@ vrk completions fish > ~/.config/fish/completions/vrk.fish
 ## Docs
 
 - **[Quickstart](https://vrk.sh/quickstart/)** - zero to working pipeline in five minutes
-- **[Tool reference](https://vrk.sh/docs/)** - flags, exit codes, examples for all 26 tools
+- **[Tool reference](https://vrk.sh/docs/)** - flags, exit codes, examples for all 27 tools
 - **[Recipes](https://vrk.sh/recipes/)** - multi-tool pipeline patterns
 - **[Environment variables](https://vrk.sh/env/)** - API keys and runtime config

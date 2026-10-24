@@ -8,6 +8,7 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/google/uuid v1.6.0
 	github.com/itchyny/gojq v0.12.18
+	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/spf13/pflag v1.0.10
 	github.com/yuin/goldmark v1.7.16
