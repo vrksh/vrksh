@@ -80,11 +80,12 @@ $ echo $?
 
 ```bash
 $ echo '{"status":"error"}' | vrk assert '.status == "ok"'
+assert: assertion failed: .status == "ok"
 $ echo $?
 1
 ```
 
-Stderr: `assert: assertion failed: .status == "ok"`
+The message goes to stderr. Stdout is empty.
 
 ### Common gojq expressions
 
@@ -106,11 +107,12 @@ echo "$JSON" | vrk assert '.status == "ok"' '.items | length > 0'
 
 ```bash
 $ echo '{"score":0.3}' | vrk assert '.score >= 0.8' -m 'Confidence too low for production'
+assert: assertion failed: Confidence too low for production (.score >= 0.8)
 $ echo $?
 1
 ```
 
-Stderr: `assert: Confidence too low for production`
+Your message goes in front, and the failed condition is added in brackets.
 
 ## Text mode
 
@@ -125,11 +127,10 @@ $ echo $?
 0
 
 $ echo 'deployment failed' | vrk assert --contains 'successful'
+assert: assertion failed: input does not contain "successful"
 $ echo $?
 1
 ```
-
-Stderr: `assert: assertion failed: input does not contain "successful"`
 
 ### --matches (regex check)
 
@@ -140,11 +141,12 @@ $ echo $?
 0
 
 $ echo 'not-a-version' | vrk assert --matches '^v[0-9]+\.[0-9]+\.[0-9]+$'
+assert: assertion failed: input does not match "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
 $ echo $?
 1
 ```
 
-Stderr: `assert: assertion failed: input does not match "^v[0-9]+\.[0-9]+\.[0-9]+$"`
+The pattern is printed as a Go-quoted string, so each backslash shows up twice.
 
 ## Pipeline integration
 
@@ -206,7 +208,7 @@ No condition specified:
 
 ```bash
 $ echo '{}' | vrk assert
-usage error: assert: no condition specified
+usage error: assert: a condition expression is required
 $ echo $?
 2
 ```

@@ -140,7 +140,7 @@ $ echo $?
 1
 ```
 
-No input:
+No input, run on an interactive terminal:
 
 ```bash
 $ vrk jsonl

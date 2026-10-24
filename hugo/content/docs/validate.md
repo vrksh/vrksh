@@ -48,21 +48,21 @@ cat llm-output.jsonl | vrk validate --schema '{"sentiment":"string","confidence"
 
 ## Exit codes
 
-| Code | Meaning                                             |
-|------|-----------------------------------------------------|
-| 0    | All records passed                                  |
-| 1    | Record failed in --strict mode, or scanner error    |
-| 2    | --schema missing, schema JSON invalid, unknown flag |
+| Code | Meaning                                                                    |
+|------|----------------------------------------------------------------------------|
+| 0    | All records passed                                                         |
+| 1    | Record failed in --strict mode, or scanner error                           |
+| 2    | --schema missing, schema JSON invalid, schema is JSON Schema, unknown flag |
 
 ## Flags
 
-| Flag       | Short | Type   | Description                                         |
-|------------|-------|--------|-----------------------------------------------------|
-| `--schema` | -s    | string | JSON schema inline or path to .json file (required) |
-| `--strict` |       | bool   | Exit 1 on first invalid record                      |
-| `--fix`    |       | bool   | Send invalid records to vrk prompt for repair       |
-| `--json`   | -j    | bool   | Append metadata trailer after all output            |
-| `--quiet`  | -q    | bool   | Suppress stderr output                              |
+| Flag       | Short | Type   | Description                                                                                                                                |
+|------------|-------|--------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| `--schema` | -s    | string | Flat key-to-type map, inline or path to .json file (required). Types: string, number, boolean, array, object. JSON Schema is not supported |
+| `--strict` |       | bool   | Exit 1 on first invalid record                                                                                                             |
+| `--fix`    |       | bool   | Send invalid records to vrk prompt for repair                                                                                              |
+| `--json`   | -j    | bool   | Append metadata trailer after all output                                                                                                   |
+| `--quiet`  | -q    | bool   | Suppress stderr output                                                                                                                     |
 
 
 <!-- notes - edit in notes/validate.notes.md -->
@@ -98,7 +98,7 @@ $ printf '{"name":"Alice","age":30}\n{"name":"Bob"}\n' | \
 {"name":"Alice","age":30}
 ```
 
-Stderr shows: `warning: validation failed: age is missing`
+Stderr shows: `warning: validate: line 2: age is missing`
 
 Bob's record was missing `age`, so it was dropped. Alice's record passed through. The pipeline continues with only clean data.
 
@@ -112,7 +112,7 @@ $ echo $?
 1
 ```
 
-Stderr shows: `warning: validation failed: age is missing`
+Stderr shows: `warning: validate: line 2: age is missing`
 
 In strict mode, the first invalid record stops the pipeline with exit 1. Use this when partial results are worse than no results.
 

@@ -91,9 +91,9 @@ c4fd6dd9-c340-4f42-9929-7f0eae856230
 58cbbd73-e561-43de-b20a-ccd5f5f92222
 
 $ vrk uuid --v7 --count 3 --json
-{"version":7,"uuid":"019d3fdb-..."}
-{"version":7,"uuid":"019d3fdb-..."}
-{"version":7,"uuid":"019d3fdb-..."}
+{"uuid":"019d3fdb-...","version":7,"generated_at":1774891000}
+{"uuid":"019d3fdb-...","version":7,"generated_at":1774891000}
+{"uuid":"019d3fdb-...","version":7,"generated_at":1774891000}
 ```
 
 ## Pipeline integration
@@ -132,7 +132,7 @@ Invalid count:
 
 ```bash
 $ vrk uuid --count 0
-usage error: uuid: --count must be >= 1
+usage error: uuid: count must be >= 1
 $ echo $?
 2
 ```

@@ -19,7 +19,7 @@ A slugify function turns "Uber's $3.1B Q4 Revenue" into "uber-s--3-1b-q4-revenue
 
 ## The solution
 
-`vrk slug` converts any text to a URL-safe, filename-safe slug. Normalizes Unicode to ASCII, lowercases, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` truncates at word boundaries for length-limited contexts.
+`vrk slug` converts any text to a URL-safe, filename-safe slug. Folds Latin text to ASCII (`Straße` becomes `strasse`), keeps other scripts such as Devanagari and CJK as they are, lowercases, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` truncates at word boundaries for length-limited contexts.
 
 ## Before and after
 
@@ -52,12 +52,13 @@ echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
 
 ## Flags
 
-| Flag          | Short | Type   | Description                                                   |
-|---------------|-------|--------|---------------------------------------------------------------|
-| `--separator` |       | string | Word separator character or string                            |
-| `--max`       |       | int    | Max output length; truncated at last separator (0 = no limit) |
-| `--json`      | -j    | bool   | Emit JSON per line: {input, output}                           |
-| `--quiet`     | -q    | bool   | Suppress stderr output                                        |
+| Flag          | Short | Type   | Description                                                                               |
+|---------------|-------|--------|-------------------------------------------------------------------------------------------|
+| `--separator` |       | string | Word separator character or string                                                        |
+| `--max`       |       | int    | Max output length in characters; truncated at last separator (0 = no limit)               |
+| `--ascii`     |       | bool   | Keep only ASCII; other scripts are dropped (empty slug plus a warning if nothing is left) |
+| `--json`      | -j    | bool   | Emit JSON per line: {input, output}                                                       |
+| `--quiet`     | -q    | bool   | Suppress stderr output                                                                    |
 
 
 <!-- notes - edit in notes/slug.notes.md -->
@@ -97,6 +98,24 @@ $ printf 'First Post\nSecond Post\nThird Post\n' | vrk slug
 first-post
 second-post
 third-post
+```
+
+### Non-Latin text
+
+Latin letters fold to ASCII. Other scripts are kept as they are, so a Hindi or Japanese title still gets a slug:
+
+```bash
+$ printf 'Straße\nनमस्ते दुनिया\n東京 2026\n' | vrk slug
+strasse
+नमस्ते-दुनिया
+東京-2026
+```
+
+Every input line produces exactly one output line. If a line has nothing to keep, you get an empty line and a warning on stderr, so batch output stays aligned with the input. Use `--ascii` when the target needs strict ASCII:
+
+```bash
+$ echo '東京 2026' | vrk slug --ascii
+2026
 ```
 
 ### JSON output

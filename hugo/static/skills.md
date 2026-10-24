@@ -83,7 +83,7 @@ cat contract.pdf.txt | vrk chunk --size 4000 --overlap 200
 | `--json`        | -j    | Emit errors as JSON                                               |
 
 Exit 0: Command succeeded (first attempt or a retry)
-Exit 1: All retries exhausted (last exit code from wrapped command)
+Exit 1: Command not found, stdin over 64 MiB needed a replay, or the wrapped command's last exit code was 1
 Exit 2: Missing command after --, invalid --backoff spec
 
 ```bash
@@ -106,17 +106,17 @@ vrk completions bash > ~/.bash_completion.d/vrk
 
 ## digest - universal hasher - sha256/md5/sha512, --hmac, --compare
 
-| Flag        | Short | Description                                |
-|-------------|-------|--------------------------------------------|
-| `--algo`    | -a    | Hash algorithm: sha256, md5, sha512        |
-| `--bare`    | -b    | Output hex hash only, without algo: prefix |
-| `--file`    |       | Path to file to hash (repeatable)          |
-| `--compare` |       | Compare hashes of all --file inputs        |
-| `--hmac`    |       | Compute HMAC instead of plain hash         |
-| `--key`     | -k    | HMAC secret key (required with --hmac)     |
-| `--verify`  |       | Known HMAC hex to verify against           |
-| `--json`    | -j    | Emit JSON object instead of algo:hash line |
-| `--quiet`   | -q    | Suppress stderr output                     |
+| Flag        | Short | Description                                               |
+|-------------|-------|-----------------------------------------------------------|
+| `--algo`    | -a    | Hash algorithm: sha256, md5, sha512                       |
+| `--bare`    | -b    | Output hex hash only, without algo: prefix                |
+| `--file`    |       | Path to file to hash (repeatable)                         |
+| `--compare` |       | Compare hashes of all --file inputs                       |
+| `--hmac`    |       | Compute HMAC instead of plain hash                        |
+| `--key`     | -k    | HMAC secret key (required with --hmac)                    |
+| `--verify`  |       | Known HMAC to verify against, as <algo>:<hex> or bare hex |
+| `--json`    | -j    | Emit JSON object instead of algo:hash line                |
+| `--quiet`   | -q    | Suppress stderr output                                    |
 
 Exit 0: Success, hash written, or --verify matched
 Exit 1: File not found, read error, or --verify mismatch
@@ -155,8 +155,8 @@ run-pipeline 2>&1 | vrk emit --tag deploy --parse-level
 | `--quiet` | -q    | Suppress stderr output                                               |
 
 Exit 0: Success
-Exit 1: Runtime error (I/O failure)
-Exit 2: Unsupported format, ambiguous timezone, --tz without --iso/--json
+Exit 1: Invalid input value (unsupported format, invalid date, missing sign on a relative offset) or I/O failure
+Exit 2: No input, unknown flag, ambiguous timezone, --tz without --iso/--json
 
 ```bash
 vrk epoch '+3d' --iso
@@ -287,13 +287,13 @@ vrk moniker --count 5 --seed 42
 
 ## pct - percent encoder/decoder - RFC 3986, --encode, --decode, --form
 
-| Flag       | Short | Description                                              |
-|------------|-------|----------------------------------------------------------|
-| `--encode` |       | Percent-encode input (RFC 3986 unless --form)            |
-| `--decode` |       | Percent-decode input                                     |
-| `--form`   |       | Use application/x-www-form-urlencoded rules (spaces / +) |
-| `--json`   | -j    | Emit JSON per line: {input, output, op, mode}            |
-| `--quiet`  | -q    | Suppress stderr output                                   |
+| Flag       | Short | Description                                                                  |
+|------------|-------|------------------------------------------------------------------------------|
+| `--encode` |       | Percent-encode input (RFC 3986 unless --form)                                |
+| `--decode` |       | Percent-decode input                                                         |
+| `--form`   |       | Use application/x-www-form-urlencoded rules (spaces / +)                     |
+| `--json`   | -j    | Emit JSON per line: {input, output, op, mode}, where mode is percent or form |
+| `--quiet`  | -q    | Suppress stderr output                                                       |
 
 Exit 0: Success
 Exit 1: Invalid percent sequence during decode, I/O error
@@ -320,22 +320,22 @@ vrk grab https://example.com/docs | vrk plain | vrk tok
 
 ## prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
 
-| Flag         | Short | Description                                                     |
-|--------------|-------|-----------------------------------------------------------------|
-| `--model`    | -m    | LLM model (default from VRK_DEFAULT_MODEL or claude-sonnet-4-6) |
-| `--system`   |       | System prompt text, or @file.txt to read from file              |
-| `--field`    |       | Dot-path field in each JSONL line to use as prompt text         |
-| `--budget`   |       | Exit 1 if prompt exceeds N tokens                               |
-| `--fail`     | -f    | Fail on non-2xx API response or schema mismatch                 |
-| `--json`     | -j    | Emit response as JSON envelope with metadata                    |
-| `--quiet`    | -q    | Suppress stderr output                                          |
-| `--schema`   | -s    | JSON schema for response validation                             |
-| `--explain`  |       | Print equivalent curl command, no API call                      |
-| `--retry`    |       | Retry N times on schema mismatch (escalates temperature)        |
-| `--endpoint` |       | OpenAI-compatible API base URL                                  |
+| Flag         | Short | Description                                                                |
+|--------------|-------|----------------------------------------------------------------------------|
+| `--model`    | -m    | LLM model (default from VRK_DEFAULT_MODEL or claude-sonnet-4-6)            |
+| `--system`   |       | System prompt text, or @file.txt to read from file                         |
+| `--field`    |       | Dot-path field in each JSONL line to use as prompt text                    |
+| `--budget`   |       | Exit 1 if prompt exceeds N tokens                                          |
+| `--fail`     | -f    | Exit 1 on schema mismatch (API errors always exit 1)                       |
+| `--json`     | -j    | Emit response as JSON envelope with metadata                               |
+| `--quiet`    | -q    | Suppress stderr output                                                     |
+| `--schema`   | -s    | Flat key-to-type JSON schema (inline or file path) for response validation |
+| `--explain`  |       | Print equivalent curl command, no API call                                 |
+| `--retry`    |       | Retry N times on schema mismatch (escalates temperature), then exit 1      |
+| `--endpoint` |       | OpenAI-compatible API base URL                                             |
 
 Exit 0: Success
-Exit 1: API failure, budget exceeded, schema mismatch, invalid JSONL, field not found
+Exit 1: API failure, budget exceeded, empty prompt, schema mismatch with --fail or --retry, invalid JSONL, field not found
 Exit 2: Usage error - no input, missing flags, --field with --explain
 
 ```bash
@@ -380,12 +380,13 @@ cat access.log | vrk sip --count 1000 --seed 42
 
 ## slug - URL/filename slug generator - --separator, --max, --json
 
-| Flag          | Short | Description                                                   |
-|---------------|-------|---------------------------------------------------------------|
-| `--separator` |       | Word separator character or string                            |
-| `--max`       |       | Max output length; truncated at last separator (0 = no limit) |
-| `--json`      | -j    | Emit JSON per line: {input, output}                           |
-| `--quiet`     | -q    | Suppress stderr output                                        |
+| Flag          | Short | Description                                                                               |
+|---------------|-------|-------------------------------------------------------------------------------------------|
+| `--separator` |       | Word separator character or string                                                        |
+| `--max`       |       | Max output length in characters; truncated at last separator (0 = no limit)               |
+| `--ascii`     |       | Keep only ASCII; other scripts are dropped (empty slug plus a warning if nothing is left) |
+| `--json`      | -j    | Emit JSON per line: {input, output}                                                       |
+| `--quiet`     | -q    | Suppress stderr output                                                                    |
 
 Exit 0: Success
 Exit 1: Runtime error (I/O failure)
@@ -397,17 +398,18 @@ echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
 
 ## sse - SSE stream parser - text/event-stream to JSONL
 
-| Flag      | Short | Description                                      |
-|-----------|-------|--------------------------------------------------|
-| `--event` | -e    | Only emit events of this type                    |
-| `--field` | -F    | Extract dot-path field from record as plain text |
+| Flag      | Short | Description                                                                                                     |
+|-----------|-------|-----------------------------------------------------------------------------------------------------------------|
+| `--event` | -e    | Only emit events of this type                                                                                   |
+| `--field` | -F    | Extract dot-path field from record as plain text; arrays by index (data.choices[0].text or data.choices.0.text) |
+| `--raw`   |       | With --field, write each value exactly, with no newline after it                                                |
 
 Exit 0: Success, including clean [DONE] termination
-Exit 1: I/O error reading stdin
+Exit 1: I/O error reading stdin, or --field matched none of the events in a non-empty stream
 Exit 2: Usage error - interactive terminal with no piped input, unknown flag
 
 ```bash
-curl -sN $API_URL | vrk sse --field data.delta.text
+curl -sN $API_URL | vrk sse --field data.delta.text --raw
 ```
 
 ## throttle - rate limiter for pipes - --rate N/s or N/m
@@ -480,17 +482,17 @@ vrk uuid --v7 --count 5
 
 ## validate - JSONL schema validator - --schema, --strict, --fix, --json
 
-| Flag       | Short | Description                                         |
-|------------|-------|-----------------------------------------------------|
-| `--schema` | -s    | JSON schema inline or path to .json file (required) |
-| `--strict` |       | Exit 1 on first invalid record                      |
-| `--fix`    |       | Send invalid records to vrk prompt for repair       |
-| `--json`   | -j    | Append metadata trailer after all output            |
-| `--quiet`  | -q    | Suppress stderr output                              |
+| Flag       | Short | Description                                                                                                                                |
+|------------|-------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| `--schema` | -s    | Flat key-to-type map, inline or path to .json file (required). Types: string, number, boolean, array, object. JSON Schema is not supported |
+| `--strict` |       | Exit 1 on first invalid record                                                                                                             |
+| `--fix`    |       | Send invalid records to vrk prompt for repair                                                                                              |
+| `--json`   | -j    | Append metadata trailer after all output                                                                                                   |
+| `--quiet`  | -q    | Suppress stderr output                                                                                                                     |
 
 Exit 0: All records passed
 Exit 1: Record failed in --strict mode, or scanner error
-Exit 2: --schema missing, schema JSON invalid, unknown flag
+Exit 2: --schema missing, schema JSON invalid, schema is JSON Schema, unknown flag
 
 ```bash
 cat llm-output.jsonl | vrk validate --schema '{"sentiment":"string","confidence":"number"}' --strict

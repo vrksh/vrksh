@@ -53,17 +53,17 @@ vrk digest --file release.tar.gz --compare
 
 ## Flags
 
-| Flag        | Short | Type     | Description                                |
-|-------------|-------|----------|--------------------------------------------|
-| `--algo`    | -a    | string   | Hash algorithm: sha256, md5, sha512        |
-| `--bare`    | -b    | bool     | Output hex hash only, without algo: prefix |
-| `--file`    |       | []string | Path to file to hash (repeatable)          |
-| `--compare` |       | bool     | Compare hashes of all --file inputs        |
-| `--hmac`    |       | bool     | Compute HMAC instead of plain hash         |
-| `--key`     | -k    | string   | HMAC secret key (required with --hmac)     |
-| `--verify`  |       | string   | Known HMAC hex to verify against           |
-| `--json`    | -j    | bool     | Emit JSON object instead of algo:hash line |
-| `--quiet`   | -q    | bool     | Suppress stderr output                     |
+| Flag        | Short | Type     | Description                                               |
+|-------------|-------|----------|-----------------------------------------------------------|
+| `--algo`    | -a    | string   | Hash algorithm: sha256, md5, sha512                       |
+| `--bare`    | -b    | bool     | Output hex hash only, without algo: prefix                |
+| `--file`    |       | []string | Path to file to hash (repeatable)                         |
+| `--compare` |       | bool     | Compare hashes of all --file inputs                       |
+| `--hmac`    |       | bool     | Compute HMAC instead of plain hash                        |
+| `--key`     | -k    | string   | HMAC secret key (required with --hmac)                    |
+| `--verify`  |       | string   | Known HMAC to verify against, as <algo>:<hex> or bare hex |
+| `--json`    | -j    | bool     | Emit JSON object instead of algo:hash line                |
+| `--quiet`   | -q    | bool     | Suppress stderr output                                    |
 
 
 <!-- notes - edit in notes/digest.notes.md -->
@@ -122,14 +122,15 @@ vrk digest --file original.txt --file copy.txt --compare
 
 ```bash
 # Compute HMAC
-$ echo 'message' | vrk digest --hmac --key 'secret'
-sha256:...
+$ SIG=$(echo 'message' | vrk digest --hmac --key 'secret')
 
 # Verify HMAC (constant-time comparison)
-$ echo 'message' | vrk digest --hmac --key 'secret' --verify 'expected-hash'
+$ echo 'message' | vrk digest --hmac --key 'secret' --verify "$SIG"
 $ echo $?
 0
 ```
+
+`--verify` accepts the `sha256:<hex>` form that digest prints, or bare hex. If the prefix names a different algorithm than `--algo`, it exits 2.
 
 The `--verify` flag uses constant-time comparison to prevent timing attacks.
 
@@ -180,8 +181,8 @@ $ echo $?
 Verify mismatch:
 
 ```bash
-$ echo 'hello' | vrk digest --hmac --key 'secret' --verify 'wrong'
-error: digest: HMAC mismatch
+$ echo 'hello' | vrk digest --hmac --key 'secret' --verify 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+error: digest: hmac mismatch
 $ echo $?
 1
 ```

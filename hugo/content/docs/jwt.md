@@ -155,7 +155,7 @@ Invalid token format:
 
 ```bash
 $ echo "not.a.jwt" | vrk jwt
-error: jwt: invalid token: illegal base64 data
+error: jwt: invalid token: header is not base64url
 $ echo $?
 1
 ```

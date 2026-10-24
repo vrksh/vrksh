@@ -20,7 +20,7 @@ A 15,000-token document goes to a model with a 4,096-token window. No error. The
 
 ## The solution
 
-`vrk tok` counts tokens and gates pipelines in 5ms. Uses cl100k_base (exact for GPT-4, ~95% for Claude). Without `--check` it prints the count. With `--check N` it passes input through if within budget, or exits 1 with empty stdout if over, killing the pipeline before it wastes an API call.
+`vrk tok` counts tokens and gates pipelines in about 25 ms. Uses cl100k_base (exact for GPT-4, an estimate for Claude models). Without `--check` it prints the count. With `--check N` it passes input through if within budget, or exits 1 with empty stdout if over, killing the pipeline before it wastes an API call.
 
 ## Before and after
 

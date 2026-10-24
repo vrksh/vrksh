@@ -107,7 +107,7 @@ bright-amber-whisper
 
 ```bash
 $ vrk moniker --json
-{"name":"woven-vent","adjective":"woven","noun":"vent"}
+{"name":"woven-vent","words":["woven","vent"]}
 ```
 
 ## Pipeline integration
@@ -141,11 +141,11 @@ echo "Batch $BATCH started" | vrk emit --tag batch --level info
 
 ## When it fails
 
-Word pool exhausted (unlikely with default settings):
+More names than the word lists can make (unlikely with default settings):
 
 ```bash
 $ vrk moniker --count 100000
-error: moniker: word pool exhausted
+error: moniker: requested 100000 names but only 87024 unique 2-word combinations exist
 $ echo $?
 1
 ```
@@ -154,7 +154,7 @@ Invalid count:
 
 ```bash
 $ vrk moniker --count 0
-usage error: moniker: --count must be >= 1
+usage error: moniker: --count must be >= 1, got 0
 $ echo $?
 2
 ```

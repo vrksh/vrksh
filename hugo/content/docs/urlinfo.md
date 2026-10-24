@@ -153,7 +153,7 @@ Invalid URL:
 
 ```bash
 $ vrk urlinfo 'not a url'
-error: urlinfo: invalid URL
+error: urlinfo: invalid URL: not a url
 $ echo $?
 1
 ```
@@ -162,7 +162,7 @@ No input:
 
 ```bash
 $ vrk urlinfo
-usage error: urlinfo: no URL provided
+usage error: urlinfo: no input: pipe a URL to stdin
 $ echo $?
 2
 ```
