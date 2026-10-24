@@ -509,7 +509,7 @@
     find . -name '*.go' ! -name '*_test.go' -exec cat {} + | vrk tok
     ```
 
-    Each `vrk tok` call is a separate process, one per file. On a repo with thousands of files that adds up. Counting a typical source file takes under 50 ms.
+    Each `vrk tok` call is a separate process, one per file. On a repo with thousands of files that adds up. Counting a typical source file takes about 25 ms.
 - name: Preview LLM request
   why: You see the exact request, masked and complete, before any money or secrets leave the machine.
   description: Add --explain to vrk prompt to print the request instead of sending it.

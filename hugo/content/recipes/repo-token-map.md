@@ -41,5 +41,5 @@ Add up the whole tree to see if it fits at all:
 find . -name '*.go' ! -name '*_test.go' -exec cat {} + | vrk tok
 ```
 
-Each `vrk tok` call is a separate process, one per file. On a repo with thousands of files that adds up. Counting a typical source file takes under 50 ms.
+Each `vrk tok` call is a separate process, one per file. On a repo with thousands of files that adds up. Counting a typical source file takes about 25 ms.
 
