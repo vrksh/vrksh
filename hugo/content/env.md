@@ -21,6 +21,8 @@ Most vrk tools need zero configuration. Only two of 26 tools read environment va
 
 At least one of `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is required. Provider selection is automatic: `claude-*` models use Anthropic, `gpt-*` models use OpenAI. If only one key is set, that provider is used regardless of model name.
 
+When `VRK_LLM_URL` (or `--endpoint`) is set, there is no default model. Pass `--model` or set `VRK_DEFAULT_MODEL`, or prompt exits 2 with "--model is required when using --endpoint".
+
 ## vrk kv
 
 `vrk kv` works out of the box. The only env var changes where the database lives.
