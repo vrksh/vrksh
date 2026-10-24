@@ -76,7 +76,7 @@ For the full per-tool reference, the agent can call `vrk --skills <tool>` on dem
 
 ## MCP integration
 
-For agents that support [Model Context Protocol](https://modelcontextprotocol.io/), vrk includes an MCP server. This lets agents discover and call vrk tools through the standard MCP tool-use interface. See the [MCP page](/mcp/) for details.
+For agents that support [Model Context Protocol](https://modelcontextprotocol.io/), vrk includes an MCP server. This lets agents discover vrk tools through the standard MCP tool list. The server does discovery only. The agent runs the tools itself, as shell commands. See the [MCP page](/mcp/) for details.
 
 ```json
 {

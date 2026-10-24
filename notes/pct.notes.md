@@ -1,6 +1,6 @@
 ## How it works
 
-### Encode (path mode, default)
+### Encode (default)
 
 ```bash
 $ echo 'hello world' | vrk pct --encode
@@ -47,7 +47,7 @@ foo%20bar
 
 ```bash
 $ echo 'hello world' | vrk pct --encode --json
-{"input":"hello world","output":"hello%20world","op":"encode","mode":"path"}
+{"input":"hello world","output":"hello%20world","op":"encode","mode":"percent"}
 ```
 
 ## Pipeline integration
@@ -72,7 +72,7 @@ Both --encode and --decode:
 
 ```bash
 $ echo 'test' | vrk pct --encode --decode
-usage error: pct: specify --encode or --decode, not both
+usage error: pct: flags --encode and --decode are mutually exclusive
 $ echo $?
 2
 ```
@@ -81,7 +81,7 @@ Neither flag:
 
 ```bash
 $ echo 'test' | vrk pct
-usage error: pct: specify --encode or --decode
+usage error: pct: either --encode or --decode is required
 $ echo $?
 2
 ```
@@ -90,7 +90,7 @@ Invalid percent sequence:
 
 ```bash
 $ echo '%ZZ' | vrk pct --decode
-error: pct: invalid percent-encoding
+error: pct: invalid percent-encoded input: invalid URL escape "%ZZ"
 $ echo $?
 1
 ```

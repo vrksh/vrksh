@@ -40,9 +40,8 @@
 
     ```bash
     cat prompt.txt | vrk tok --check 4000 --json
-    # Over budget: {"error":"tok: 6201 tokens exceeds budget of 4000","code":1}
+    # Over budget: {"code":1,"error":"6201 tokens exceeds limit of 4000","limit":4000,"tokens":6201}
     ```
-
 - name: Fetch and summarise a page
   why: Catches oversized pages before the API call - no wasted request on a doc that won't fit in context.
   description: Grab a URL, check token count, then summarise with an LLM.
@@ -68,10 +67,10 @@
 
     ## Variations
 
-    Fetch and extract just the links:
+    Fetch and extract just the links. `links --bare` prints a URL every time it appears, so `sort -u` removes the duplicates:
 
     ```bash
-    vrk grab https://example.com | vrk links --bare
+    vrk grab https://example.com | vrk links --bare | sort -u
     ```
 
     Fetch, strip markdown formatting, then count tokens:
@@ -79,9 +78,6 @@
     ```bash
     vrk grab https://example.com | vrk plain | vrk tok
     ```
-
-# removed: Cache LLM response - request_hash field does not exist in prompt --json output
-
 - name: Chunked RAG pipeline
   why: Keeps every chunk within the embedding model's token limit - no silent truncation during indexing.
   description: Split a document into chunks and store each for retrieval.
@@ -121,14 +117,14 @@
     ```
 
     The `--overlap` flag controls how many tokens from the end of one chunk appear at the start of the next. This matters for retrieval quality - without overlap, a query that spans a chunk boundary might miss relevant content.
-
 - name: Retry flaky API call
   why: Transient 500s don't kill the pipeline - coax retries with backoff so one bad request doesn't stop the run.
   description: Wrap an LLM prompt in coax for exponential backoff retries.
   steps:
     - |-
       vrk coax --times 3 --backoff exp:1s --on 1 \
-        -- vrk prompt --system "Summarise this" < doc.txt
+        -- sh -c 'vrk prompt --system "Return JSON with a summary key" < doc.txt \
+          | vrk validate --schema "{\"summary\":\"string\"}" --strict'
   tags:
     - coax
     - prompt
@@ -141,7 +137,9 @@
 
     ## How the pipeline works
 
-    `vrk coax` runs the command after `--`. If it exits with code 1 (matching `--on 1`), coax waits and retries. The backoff is exponential starting at 1 second: first retry after 1s, second after 2s, third after 4s.
+    `vrk coax` runs the command after `--`. It runs the command directly, not through a shell, so pipes and redirects need `sh -c '...'`, as above.
+
+    Here the retried unit is the prompt plus the check. `vrk validate --strict` exits 1 when the response is not valid JSON with a string `summary` key. Without `--strict`, validate only warns and exits 0, and coax would never see a failure. If the command exits with code 1 (matching `--on 1`), coax waits and retries. The backoff is exponential starting at 1 second: first retry after 1s, second after 2s, third after 4s.
 
     If all retries fail, `vrk coax` exits with the last command's exit code. The pipeline stops cleanly.
 
@@ -158,9 +156,8 @@
       sh -c 'cat doc.txt \
         | vrk tok --check 8000 \
         | vrk prompt --system "Summarise" \
-        | vrk validate --schema out.json'
+        | vrk validate --schema out.json --strict'
     ```
-
 - name: SSE stream to text
   why: Raw SSE is unusable without parsing - sse extracts the content field so downstream tools get clean text, not protocol framing.
   description: Parse an SSE stream and extract text tokens.
@@ -168,8 +165,7 @@
     - |-
       curl -sN $API \
         | vrk sse --event content_block_delta \
-            --field data.delta.text \
-        | tr -d '\n'
+            --field data.delta.text --raw
   tags:
     - sse
   detail: |
@@ -189,24 +185,33 @@
 
     ## How the pipeline works
 
-    `vrk sse` reads the SSE stream from stdin, parses the `event:` and `data:` lines, and emits one JSONL record per event. `--event content_block_delta` filters to only that event type. `--field data.delta.text` extracts the nested text value and prints it directly.
+    `vrk sse` reads the SSE stream from stdin and parses the `event:` and `data:` lines. `--event content_block_delta` keeps only that event type. `--field data.delta.text` pulls the nested text value out of each event.
 
-    The `tr -d '\n'` at the end joins the text fragments into a continuous string. Without it, each token would be on its own line.
+    By default `sse` prints one value per line. `--raw` writes each value exactly as it is, with no separator added, so the fragments join into the model's real text, newlines and all. No `tr` needed.
+
+    ## OpenAI streams
+
+    OpenAI puts the text in an array, so use an index in the path:
+
+    ```bash
+    curl -sN $API | vrk sse --field 'data.choices[0].delta.content' --raw
+    ```
+
+    If events arrive but the field matches none of them, `vrk sse` exits 1 and says so on stderr. A wrong path no longer looks like an empty answer.
 
     ## Variations
 
-    Capture the full stream as JSONL for debugging:
+    Capture the events as JSONL for debugging:
 
     ```bash
-    curl -sN $API | vrk sse --json > stream.jsonl
+    curl -sN $API | vrk sse > stream.jsonl
     ```
 
     Filter for a specific event and count occurrences:
 
     ```bash
-    curl -sN $API | vrk sse --event content_block_delta --json | wc -l
+    curl -sN $API | vrk sse --event content_block_delta | wc -l
     ```
-
 - name: JWT-based key lookup
   why: Ties storage to identity without custom parsing - the JWT carries the key, so the lookup stays stateless and auditable.
   description: Extract a claim from a JWT and use it as a kv key.
@@ -229,10 +234,10 @@
 
     ## Variations
 
-    Check if the token is expired before using it:
+    Check if the token is expired before using it. `--expired` prints the payload when the token is still valid, so the check sends that to `/dev/null` and only uses the exit code:
 
     ```bash
-    if ! vrk jwt --expired "$TOKEN"; then
+    if ! vrk jwt --expired "$TOKEN" >/dev/null; then
       echo "Token expired" >&2
       exit 1
     fi
@@ -245,7 +250,6 @@
     ```bash
     vrk jwt "$TOKEN"
     ```
-
 - name: Scrub secrets from LLM output
   why: Catches secrets the model echoes back before they reach storage - one leaked API key in kv is a breach.
   description: Mask any accidentally leaked secrets before storing a result.
@@ -278,7 +282,6 @@
     ```bash
     cat deploy.log | vrk mask | vrk prompt --system "What errors occurred?" | vrk mask | vrk kv set analysis
     ```
-
 - name: Batch LLM with rate limiting
   why: Prevents failure at job 847 of 10,000 - throttle paces filenames so each API call respects the rate limit.
   description: Process a large document set without hitting API rate limits. Safe to rerun.
@@ -327,7 +330,6 @@
     ```
 
     If the script crashes at document 5,000, restart it. The first 4,999 documents are already in kv and get skipped in milliseconds.
-
 - name: Validate LLM output before it propagates
   why: Bad structured output exits 1 before reaching downstream systems - you catch schema drift at the source, not in production.
   description: Gate the pipeline on schema correctness. Exit 1 on mismatch stops the next stage from running.
@@ -335,7 +337,7 @@
     - |-
       cat doc.txt \
         | vrk prompt --system "Extract entities as JSON" \
-        | vrk validate --schema entities.json \
+        | vrk validate --schema '{"entities":"array"}' --strict \
         | vrk kv set entities
   tags:
     - prompt
@@ -350,33 +352,19 @@
 
     ## How the pipeline works
 
-    `vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against `entities.json` (a JSON Schema file). If it matches, the data passes through. If not, `vrk validate` exits 1 and `vrk kv set` never runs.
+    `vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against a flat schema. It checks top-level keys and their types, nothing deeper. If the response matches, the data passes through. If not, `--strict` makes `vrk validate` exit 1 and `vrk kv set` never runs. Without `--strict`, a bad line is only warned about on stderr.
 
     No bad data reaches storage. No downstream code processes an invalid response.
 
-    ## The schema file
+    ## The schema
 
-    A simple JSON Schema that defines what you expect:
+    The schema is a flat object: each key is a required top-level field, each value is a type (`string`, `number`, `boolean`, `array` or `object`). Extra keys in the response are ignored. Inline JSON works, or point `--schema` at a file. The retry example below keeps it in `entities.json` to avoid shell quoting.
 
     ```json
-    {
-      "type": "object",
-      "required": ["entities"],
-      "properties": {
-        "entities": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["name", "type"],
-            "properties": {
-              "name": { "type": "string" },
-              "type": { "type": "string" }
-            }
-          }
-        }
-      }
-    }
+    {"entities":"array"}
     ```
+
+    vrk validate does not read JSON Schema (`type`, `properties`, `$schema`). If you pass one it exits 2 and tells you so. It does not look inside arrays, so item shapes are not checked.
 
     ## Combining with retries
 
@@ -386,11 +374,10 @@
     vrk coax --times 3 --backoff exp:1s --on 1 -- \
       sh -c 'cat doc.txt \
           | vrk prompt --system "Extract entities as JSON" \
-          | vrk validate --schema entities.json'
+          | vrk validate --schema entities.json --strict'
     ```
 
     If validation fails (exit 1), `vrk coax` retries the entire sub-pipeline up to 3 times with exponential backoff.
-
 - name: Agent-safe pipeline with secret masking
   why: When agents handle user data, mask before any logging or storage - secrets should never reach an LLM or a kv store unredacted.
   description: Full guard pipeline - mask secrets, gate on token budget, prompt, validate output.
@@ -400,7 +387,7 @@
         | vrk mask \
         | vrk tok --check 6000 \
         | vrk prompt --system "Summarise" \
-        | vrk validate --schema summary.json
+        | vrk validate --schema summary.json --strict
   tags:
     - mask
     - tok
@@ -420,7 +407,7 @@
     1. `vrk mask` - scans the input for secrets (API keys, bearer tokens, passwords, high-entropy strings) and replaces them with `[REDACTED]`. The LLM never sees the raw credentials.
     2. `vrk tok --check 6000` - counts tokens and passes through only if the input fits. Prevents sending oversized documents that would be truncated.
     3. `vrk prompt` - sends the cleaned, size-checked input to the LLM.
-    4. `vrk validate --schema summary.json` - checks that the LLM's response matches your expected schema. If not, exit 1.
+    4. `vrk validate --schema summary.json --strict` - checks that the LLM's response has the keys and types in your flat schema. With `--strict`, a bad response exits 1.
 
     If any step fails, the pipeline stops. No partial results, no bad data downstream.
 
@@ -438,5 +425,332 @@
       | vrk tok --check 6000 \
       | vrk prompt --system "Summarise" \
       | vrk mask \
-      | vrk validate --schema summary.json
+      | vrk validate --schema summary.json --strict
     ```
+- name: Cache LLM response
+  why: Avoids duplicate API calls for identical prompts - the content hash keys the cache so reruns are free.
+  description: Hash the input, look it up in kv, call the model only on a miss.
+  steps:
+    - K="llm:$(vrk digest --bare < doc.txt)"
+    - |-
+      vrk kv get "$K" 2>/dev/null || {
+        R=$(vrk prompt < doc.txt) && printf '%s\n' "$R" | vrk kv set "$K" && echo "$R"
+      }
+  tags:
+    - prompt
+    - kv
+    - digest
+  detail: |
+    ## The problem
+
+    LLM API calls are slow and expensive. If you run the same prompt against the same document twice - during development, in a retry loop, or in a pipeline that restarts - you pay for a response you already have.
+
+    ## How the pipeline works
+
+    The cache key is the content hash. `vrk digest --bare` prints the SHA-256 of `doc.txt` with no `sha256:` prefix. Same bytes in, same key out. Change one character in the document and you get a new key.
+
+    `vrk kv get` looks the key up. On a hit it prints the stored answer and exits 0, so the `||` branch never runs. On a miss it exits 1, and the braces run: call `vrk prompt`, store the answer under the key, and print it.
+
+    ```bash
+    K="llm:$(vrk digest --bare < doc.txt)"
+    vrk kv get "$K" 2>/dev/null || {
+      R=$(vrk prompt < doc.txt) && printf '%s\n' "$R" | vrk kv set "$K" && echo "$R"
+    }
+    ```
+
+    If `vrk prompt` fails, `R` is never stored and the group exits non-zero. A failed call is never cached.
+
+    ## What the key covers
+
+    The key only hashes the document. If you change the `--system` text or the model, hash those in too:
+
+    ```bash
+    K="llm:$(cat doc.txt system.txt | vrk digest --bare)"
+    ```
+
+    ## Why this works
+
+    `vrk kv` is a SQLite-backed key-value store on disk. No Redis, no external service. The cache survives restarts and reruns. A lookup takes microseconds, an API call takes seconds. Add `--ttl 24h` to `kv set` if you want entries to expire.
+- name: Repo token map
+  why: Shows which files blow your context window before you paste them into a prompt.
+  description: Count tokens for every source file and list the biggest ones first.
+  steps:
+    - |-
+      find . -name '*.go' ! -name '*_test.go' \
+        | while read -r f; do printf '%7d  %s\n' "$(vrk tok < "$f")" "$f"; done \
+        | sort -rn | head
+  tags:
+    - tok
+  detail: |
+    ## The problem
+
+    You want to hand a model part of a codebase. You do not know which files are cheap and which ones eat half the window. Guessing from file size is bad. A 40 KB generated file and a 40 KB hand-written file do not tokenise the same.
+
+    ## How the pipeline works
+
+    `find` lists the source files and skips the tests. For each one, `vrk tok` prints the token count. `printf` puts the count next to the path, `sort -rn` puts the biggest first, and `head` keeps the top ten.
+
+    The output looks like this:
+
+    ```
+       1840  ./src/big.go
+         14  ./src/small.go
+    ```
+
+    `vrk tok` counts with cl100k_base. It is exact for GPT-4 and close for Claude, which is good enough for ranking files.
+
+    ## Variations
+
+    Change the glob for other languages: `-name '*.py'`, `-name '*.ts'`. Skip a folder with `-not -path './vendor/*'`.
+
+    Add up the whole tree to see if it fits at all:
+
+    ```bash
+    find . -name '*.go' ! -name '*_test.go' -exec cat {} + | vrk tok
+    ```
+
+    Each `vrk tok` call is a separate process, one per file. On a repo with thousands of files that adds up. Counting a typical source file takes under 50 ms.
+- name: Preview LLM request
+  why: You see the exact request, masked and complete, before any money or secrets leave the machine.
+  description: Add --explain to vrk prompt to print the request instead of sending it.
+  steps:
+    - cat deploy.log | vrk mask | vrk prompt --system "What failed?" --explain
+  tags:
+    - mask
+    - prompt
+  detail: |
+    ## The problem
+
+    A pipeline builds a prompt from files, logs and other tools. By the time it reaches the model you have lost sight of what is in it. Did the secret get masked? Did the system prompt land where you wanted? Is the log really in there? The only way to find out used to be sending it and reading the bill.
+
+    ## How the pipeline works
+
+    `vrk prompt --explain` builds the full request, prints it as a `curl` command, and stops. It makes no API call and needs no network. The key is shown as `$ANTHROPIC_API_KEY` or `$OPENAI_API_KEY`, never the real value.
+
+    Put `vrk mask` in front and the printed request shows the log with secrets replaced by `[REDACTED]`. That is the text the model would have received.
+
+    ```
+    curl https://api.anthropic.com/v1/messages \
+      -H "x-api-key: $ANTHROPIC_API_KEY" \
+      ...
+      -d '{"model":"claude-sonnet-4-6", ... "system":"What failed?", ... [REDACTED] ...}'
+    ```
+
+    ## Going live
+
+    Take `--explain` off the same command and it runs for real. Nothing else changes, so what you reviewed is what gets sent.
+
+    ```bash
+    cat deploy.log | vrk mask | vrk prompt --system "What failed?"
+    ```
+
+    ## When to use it
+
+    Use it the first time you wire up a pipeline, when you change the system prompt, and in CI to check that masking is still in the path. `--explain` also works with `--schema`, so you can see what the schema turns into for each provider.
+- name: Daily token budget
+  why: A runaway loop cannot burn through your API budget, because the counter says no.
+  description: Count tokens into a kv key named after today's date, then gate the call with assert.
+  steps:
+    - DAY=$(date +%F)
+    - N=$(vrk tok < prompt.txt)
+    - USED=$(vrk kv incr "budget:$DAY" --by "$N")
+    - echo "$USED" | vrk assert '. <= 100000' && vrk prompt < prompt.txt
+  tags:
+    - tok
+    - kv
+    - assert
+    - prompt
+  detail: |
+    ## The problem
+
+    An agent in a loop can call a model hundreds of times before anyone looks. Provider spend limits help, but they are per account and they fail after the money is gone. You want a limit that lives in your pipeline and fails the step.
+
+    ## How the pipeline works
+
+    The key is the date, so the budget resets itself at midnight. No cron job.
+
+    1. `vrk tok` counts the tokens in the prompt.
+    2. `vrk kv incr "budget:$DAY" --by "$N"` adds that count to today's total and prints the new total. A missing key starts at 0.
+    3. `vrk assert '. <= 100000'` reads that total from the pipe, passes it through, and exits 1 if it is over the limit. When that happens, `&&` skips `vrk prompt`.
+
+    The check runs after the add, so the call that crosses the line is the first one refused. The counter has already included it. If you would rather not count refused calls, subtract `N` again with `vrk kv decr`.
+
+    ## Reading the counter
+
+    ```bash
+    vrk kv get "budget:$(date +%F)"
+    ```
+
+    Add `--ns` to keep budgets for different agents apart:
+
+    ```bash
+    vrk kv incr --ns agent-a "budget:$DAY" --by "$N"
+    ```
+
+    ## What it counts
+
+    As written, only prompt tokens, counted by `vrk tok` before the call. Replies are not in the total. To include them, run `vrk prompt --json`, read `response_tokens` from the envelope, and add that to the same counter with a second `vrk kv incr --by`. The tokenizer is an estimate for non-OpenAI models, so set the limit a little under your real one.
+- name: Reproducible eval sample
+  why: Two eval runs see the same prompts, so a score change comes from your change and not from the sample.
+  description: Sample 50 lines from a JSONL file with a fixed seed.
+  steps:
+    - vrk sip --count 50 --seed 7 < prompts.jsonl
+  tags:
+    - sip
+  detail: |
+    ## The problem
+
+    You have thousands of test prompts and you can only afford to run a few dozen per change. A random sample is fine, until you compare two runs on different samples. The score moved, but was it your change or a luckier sample? You cannot tell.
+
+    ## How the pipeline works
+
+    `vrk sip --count 50` keeps 50 lines chosen at random from the stream. It reads one line at a time and holds only 50 in memory, so the file can be as large as you like.
+
+    `--seed 7` fixes the random generator. The same seed on the same file gives the same 50 lines. Change the seed to get a different sample. Zero is a valid seed too.
+
+    Keep the seed in your eval script or commit it next to the results. That is all the reproducibility you need.
+
+    ## Feeding it to a model
+
+    The sample is still JSONL, so it goes straight into `vrk prompt --field`:
+
+    ```bash
+    vrk sip --count 50 --seed 7 < prompts.jsonl \
+      | vrk prompt --field text --json > results.jsonl
+    ```
+
+    ## Notes
+
+    The sample is the same only while the input file is the same. Add a line and the sample can change. If the file grows over time, sample from a frozen copy.
+
+    `--json` adds a trailer record with the counts, so scripts can confirm they got 50 lines.
+- name: Page change detector
+  why: You get told when a page changes, with no scraper, no database and no diff tool.
+  description: Hash the page text and compare it with the hash stored on the last run.
+  steps:
+    - |-
+      NEW=$(vrk grab --text --allow-internal http://localhost:8099/pricing.html | vrk digest --bare)
+      OLD=$(vrk kv get --ns pages pricing 2>/dev/null || true)
+      if [ "$NEW" = "$OLD" ]; then echo unchanged; else echo changed; vrk kv set --ns pages pricing "$NEW"; fi
+  tags:
+    - grab
+    - digest
+    - kv
+  detail: |
+    ## The problem
+
+    You want to know when a pricing page, a changelog or a status page changes. Hashing the raw HTML does not work. Ads, timestamps and CSRF tokens change on every load, so the hash changes every time.
+
+    ## How the pipeline works
+
+    `vrk grab --text` fetches the page and keeps only the readable text. Navigation, scripts and markup are gone, so the noise that breaks an HTML hash goes with them.
+
+    `vrk digest --bare` hashes that text and prints the hex, with no `sha256:` prefix.
+
+    `vrk kv get --ns pages pricing` reads the hash from the last run. The first time there is none, so the page counts as changed and the new hash is saved. After that you only hear about real changes.
+
+    The example uses a page on localhost, so it needs `--allow-internal`. For a public URL, drop that flag. `grab` refuses private addresses unless you pass it.
+
+    ## Running it on a schedule
+
+    Wrap the three lines in a script and run it from cron. Make the script print only when the page changed, and cron will email you.
+
+    ```bash
+    0 * * * * /home/me/bin/check-pricing.sh
+    ```
+
+    ## Seeing what changed
+
+    The hash says that something changed, not what. Store the text instead of the hash if you want a diff:
+
+    ```bash
+    vrk grab --text "$URL" > new.txt
+    diff old.txt new.txt && echo unchanged
+    mv new.txt old.txt
+    ```
+
+    Or send both versions to `vrk prompt` and ask what changed.
+
+    ## Limits
+
+    `grab` does not run JavaScript. A page that builds its content in the browser gives you an empty or partial text, and the hash will not move when the real content does.
+- name: Structured secret-free logs
+  why: Plain script output becomes searchable JSON logs, and the secrets never reach the log file.
+  description: Mask the output of a script, then wrap each line as a JSON record with a level and a tag.
+  steps:
+    - ./deploy.sh 2>&1 | vrk mask | vrk emit --tag deploy --parse-level
+  tags:
+    - mask
+    - emit
+  detail: |
+    ## The problem
+
+    Deploy scripts, cron jobs and build steps print plain text. You want it in a log system as JSON with a level and a source. You also know that somewhere in that text there is a token or a password, and that log files live longer and travel further than you think.
+
+    ## How the pipeline works
+
+    `2>&1` joins stderr into the stream so errors are logged too. `vrk mask` replaces secrets with `[REDACTED]` before the text goes anywhere else. `vrk emit` turns each line into one JSON record.
+
+    `--tag deploy` adds `"tag":"deploy"` to every record. `--parse-level` reads the level from the start of each line (`ERROR`, `WARN`, `WARNING`, `INFO`, `DEBUG`), sets the `level` field, and removes the prefix from the message. Lines with no prefix get `info`.
+
+    The output:
+
+    ```
+    {"ts":"2026-10-24T10:01:02.118Z","level":"info","tag":"deploy","msg":"starting deploy of web-7"}
+    {"ts":"2026-10-24T10:01:02.119Z","level":"info","tag":"deploy","msg":"api_key=[REDACTED] loaded"}
+    {"ts":"2026-10-24T10:01:02.119Z","level":"warn","tag":"deploy","msg":"health check slow"}
+    {"ts":"2026-10-24T10:01:02.120Z","level":"error","tag":"deploy","msg":"migration 0042 failed"}
+    ```
+
+    ## Order matters
+
+    Mask first, then wrap. If `emit` ran first, the secret would sit inside a JSON string, and you would be relying on the masker to find it there.
+
+    ## Keeping the exit code
+
+    A pipe returns the exit code of its last command. `./deploy.sh` can fail and the pipeline still exits 0. In bash, turn on `pipefail` if the script's status matters:
+
+    ```bash
+    set -o pipefail
+    ./deploy.sh 2>&1 | vrk mask | vrk emit --tag deploy --parse-level >> deploy.jsonl
+    ```
+- name: Diff review budget
+  why: A huge diff fails fast and cheap, instead of getting cut off halfway through the review.
+  description: Gate a git diff on token count before it goes to the model.
+  steps:
+    - git diff main | vrk tok --check 20000 | vrk prompt --system "Review this diff"
+  tags:
+    - tok
+    - prompt
+  detail: |
+    ## The problem
+
+    Asking a model to review a diff is one of the most useful things you can do with one. The trouble is the diff nobody planned for: a lockfile update, a generated file, a rename across the tree. It may be 80,000 tokens. The model either refuses, truncates it, or reviews the first part and sounds confident about the rest.
+
+    ## How the pipeline works
+
+    `git diff main` prints your changes against `main`. `vrk tok --check 20000` counts the tokens. At 20,000 or fewer, it passes the diff through unchanged. Over that, it exits 1 with nothing on stdout, and `vrk prompt` has nothing to send.
+
+    `vrk prompt` sends the diff with the system prompt `Review this diff`. Put your own review rules in the system prompt, or load them from a file with `--system @review-rules.txt`.
+
+    ## When the diff is too big
+
+    Pick one of these:
+
+    - Review part of it: `git diff main -- src/`, or look at `git diff main --stat` first.
+    - Leave out noise: `git diff main -- . ':!package-lock.json'`.
+    - Split it with `vrk chunk` and review each piece.
+
+    In a script, test the exit code:
+
+    ```bash
+    if ! git diff main | vrk tok --check 20000 > review-input.diff; then
+      echo "diff too big for one review, see git diff --stat" >&2
+      exit 1
+    fi
+    vrk prompt --system "Review this diff" < review-input.diff
+    ```
+
+    ## Set the number from your model
+
+    20,000 is an example. Use your model's context window, minus room for the system prompt and the reply.

@@ -45,6 +45,6 @@ Use `--json` for structured error reporting:
 
 ```bash
 cat prompt.txt | vrk tok --check 4000 --json
-# Over budget: {"error":"tok: 6201 tokens exceeds budget of 4000","code":1}
+# Over budget: {"code":1,"error":"6201 tokens exceeds limit of 4000","limit":4000,"tokens":6201}
 ```
 

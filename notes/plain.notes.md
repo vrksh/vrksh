@@ -27,7 +27,8 @@ print("hello")
 ### JSON output
 
 ```bash
-echo '**hello** world' | vrk plain --json
+$ echo '**hello** world' | vrk plain --json
+{"text":"hello world","input_bytes":16,"output_bytes":11}
 ```
 
 Wraps the plain text in a JSON envelope with byte counts.
@@ -68,7 +69,7 @@ No input:
 
 ```bash
 $ vrk plain
-usage error: plain: no input: pipe text to stdin
+usage error: plain: no input: pipe markdown to stdin
 $ echo $?
 2
 ```

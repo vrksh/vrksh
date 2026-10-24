@@ -74,7 +74,7 @@ done
 
 ## When it fails
 
-No input:
+No input, run on an interactive terminal:
 
 ```bash
 $ vrk links

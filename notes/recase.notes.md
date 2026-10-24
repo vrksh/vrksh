@@ -44,7 +44,7 @@ emailAddress
 
 ```bash
 $ echo 'hello_world' | vrk recase --to camel --json
-{"input":"hello_world","output":"helloWorld","from":"snake","to":"camel"}
+{"from":"snake","input":"hello_world","output":"helloWorld","to":"camel"}
 ```
 
 ## Pipeline integration
@@ -73,7 +73,7 @@ Missing --to flag:
 
 ```bash
 $ echo 'hello' | vrk recase
-usage error: recase: --to is required
+usage error: --to is required
 $ echo $?
 2
 ```
@@ -82,7 +82,7 @@ Invalid convention:
 
 ```bash
 $ echo 'hello' | vrk recase --to unknown
-usage error: recase: unsupported convention "unknown"
+usage error: recase: unknown convention: "unknown"; valid: camel, pascal, snake, kebab, screaming, title, lower, upper
 $ echo $?
 2
 ```
