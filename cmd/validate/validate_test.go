@@ -340,11 +340,14 @@ func TestLineNotJSON(t *testing.T) {
 func TestStrictMode(t *testing.T) {
 	// First invalid line → exit 1, processing stops.
 	input := `{"name":"alice","age":"wrong"}` + "\n" + `{"name":"bob","age":30}`
-	stdout, _, code := runValidate(t, input,
+	stdout, stderr, code := runValidate(t, input,
 		[]string{"--schema", `{"name":"string","age":"number"}`, "--strict"},
 	)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (strict mode hit invalid)", code)
+	}
+	if !strings.HasPrefix(stderr, "error: validate: line 1:") {
+		t.Errorf("strict failure should be labelled error, got stderr %q", stderr)
 	}
 	// The second (valid) record must not appear on stdout.
 	if strings.Contains(stdout, "bob") {

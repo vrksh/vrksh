@@ -90,6 +90,12 @@ func Run() int {
 	bw := bufio.NewWriter(os.Stdout)
 	defer func() { _ = bw.Flush() }()
 
+	// Under --strict a bad line ends the run with exit 1, so label it an error.
+	report := shared.Warn
+	if strict {
+		report = func(format string, args ...any) { _ = shared.Errorf(format, args...) }
+	}
+
 	scanner := shared.ScanLines(newStdinReader())
 	var total, passed, failed, lineNo int
 
@@ -115,7 +121,7 @@ func Run() int {
 				passed++
 			} else {
 				for _, f := range failures {
-					shared.Warn("validate: line %d: %s", lineNo, f)
+					report("validate: line %d: %s", lineNo, f)
 				}
 				failed++
 				if strict {
@@ -124,7 +130,7 @@ func Run() int {
 			}
 		} else {
 			for _, f := range failures {
-				shared.Warn("validate: line %d: %s", lineNo, f)
+				report("validate: line %d: %s", lineNo, f)
 			}
 			failed++
 			if strict {

@@ -39,13 +39,13 @@ Bob's record was missing `age`, so it was dropped. Alice's record passed through
 ```bash
 $ printf '{"name":"Alice","age":30}\n{"name":"Bob"}\n' | \
     vrk validate --schema '{"name":"string","age":"number"}' --strict
-warning: validate: line 2: age is missing
+error: validate: line 2: age is missing
 {"name":"Alice","age":30}
 $ echo $?
 1
 ```
 
-Stderr shows: `warning: validate: line 2: age is missing`
+Stderr shows: `error: validate: line 2: age is missing`
 
 In strict mode, the first invalid record stops the pipeline with exit 1. Use this when partial results are worse than no results.
 
@@ -124,7 +124,7 @@ Strict mode on invalid record:
 
 ```bash
 $ printf '{"name":"Alice"}\n' | vrk validate --schema '{"name":"string","age":"number"}' --strict
-warning: validate: line 1: age is missing
+error: validate: line 1: age is missing
 $ echo $?
 1
 ```
