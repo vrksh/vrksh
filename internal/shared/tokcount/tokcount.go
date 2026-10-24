@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"strconv"
 	"strings"
+	"sync"
 
 	_ "embed"
 
@@ -44,12 +45,23 @@ func (embeddedBpeLoader) LoadTiktokenBpe(_ string) (map[string]int, error) {
 	return ranks, sc.Err()
 }
 
-// getEncoder returns a cl100k_base encoder backed by the embedded vocabulary.
-// tiktoken.SetBpeLoader is package-global state; calling it here is safe
-// because this is the only package that manages the BPE loader.
+var (
+	encOnce   sync.Once
+	cachedEnc *tiktoken.Tiktoken
+	encErr    error
+)
+
+// getEncoder returns the cl100k_base encoder backed by the embedded vocabulary.
+// It is built once per process: building it means parsing 100k vocab entries,
+// sorting them and compiling the split regex, which is far too slow to repeat
+// per call. tiktoken.SetBpeLoader is package-global state; this is the only
+// package that sets it.
 func getEncoder() (*tiktoken.Tiktoken, error) {
-	tiktoken.SetBpeLoader(embeddedBpeLoader{})
-	return tiktoken.GetEncoding("cl100k_base")
+	encOnce.Do(func() {
+		tiktoken.SetBpeLoader(embeddedBpeLoader{})
+		cachedEnc, encErr = tiktoken.GetEncoding("cl100k_base")
+	})
+	return cachedEnc, encErr
 }
 
 // CountTokens returns the number of cl100k_base tokens in text. Empty text
@@ -80,15 +92,22 @@ func EncodeTokens(text string) ([]int, error) {
 }
 
 // DecodeTokens converts a slice of cl100k_base token IDs back to text.
-// Returns "" for an empty slice. Decode is always valid for IDs produced by
-// EncodeTokens — no error is possible.
+// Returns "" for an empty slice. A window of tokens can end inside a
+// multi-byte character; use DecodeBytes and utf8.Valid when that matters.
 func DecodeTokens(ids []int) string {
+	return string(DecodeBytes(ids))
+}
+
+// DecodeBytes returns the raw bytes for a slice of cl100k_base token IDs.
+// The bytes are not always valid UTF-8: one token can hold part of a
+// character. Returns nil for an empty slice.
+func DecodeBytes(ids []int) []byte {
 	if len(ids) == 0 {
-		return ""
+		return nil
 	}
-	enc, err := getEncoder()
+	e, err := getEncoder()
 	if err != nil {
-		return ""
+		return nil
 	}
-	return string(enc.Decode(ids))
+	return []byte(e.Decode(ids))
 }
