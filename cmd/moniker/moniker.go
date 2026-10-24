@@ -38,7 +38,7 @@ func init() {
 			{Name: "separator", Usage: `word separator (default "-")`},
 			{Name: "words", Usage: "number of words per name, minimum 2 (default 2)"},
 			{Name: "seed", Usage: "fix random seed for deterministic output"},
-			{Name: "json", Shorthand: "j", Usage: `emit {"name":"...","adjective":"...","noun":"..."} per name`},
+			{Name: "json", Shorthand: "j", Usage: `emit {"name":"...","words":[...]} per name`},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr error messages; exit codes unchanged"},
 		},
 	})
@@ -90,7 +90,7 @@ func Run() int {
 	fs.StringVar(&separator, "separator", "-", "word separator (default \"-\")")
 	fs.IntVar(&numWords, "words", 2, "number of words per name, minimum 2 (default 2)")
 	fs.Int64Var(&seed, "seed", 0, "fix random seed for deterministic output")
-	fs.BoolVarP(&jsonFlag, "json", "j", false, `emit {"name":"...","adjective":"...","noun":"..."} per name`)
+	fs.BoolVarP(&jsonFlag, "json", "j", false, `emit {"name":"...","words":[...]} per name`)
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr error messages; exit codes unchanged")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -229,7 +229,7 @@ func Flags() *pflag.FlagSet {
 	fs.String("separator", "-", "word separator (default \"-\")")
 	fs.Int("words", 2, "number of words per name, minimum 2 (default 2)")
 	fs.Int64("seed", 0, "fix random seed for deterministic output")
-	fs.BoolP("json", "j", false, `emit {"name":"...","adjective":"...","noun":"..."} per name`)
+	fs.BoolP("json", "j", false, `emit {"name":"...","words":[...]} per name`)
 	fs.BoolP("quiet", "q", false, "suppress stderr error messages; exit codes unchanged")
 	return fs
 }

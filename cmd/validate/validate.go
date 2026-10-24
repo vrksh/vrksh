@@ -90,10 +90,17 @@ func Run() int {
 	bw := bufio.NewWriter(os.Stdout)
 	defer func() { _ = bw.Flush() }()
 
+	// Under --strict a bad line ends the run with exit 1, so label it an error.
+	report := shared.Warn
+	if strict {
+		report = func(format string, args ...any) { _ = shared.Errorf(format, args...) }
+	}
+
 	scanner := shared.ScanLines(newStdinReader())
-	var total, passed, failed int
+	var total, passed, failed, lineNo int
 
 	for scanner.Scan() {
+		lineNo++
 		line := scanner.Text()
 		if line == "" {
 			continue
@@ -114,7 +121,7 @@ func Run() int {
 				passed++
 			} else {
 				for _, f := range failures {
-					shared.Warn("validation failed: %s", f)
+					report("validate: line %d: %s", lineNo, f)
 				}
 				failed++
 				if strict {
@@ -123,7 +130,7 @@ func Run() int {
 			}
 		} else {
 			for _, f := range failures {
-				shared.Warn("validation failed: %s", f)
+				report("validate: line %d: %s", lineNo, f)
 			}
 			failed++
 			if strict {
@@ -169,17 +176,40 @@ func strictReturn(bw *bufio.Writer, jsonOut bool, total, passed, failed int) int
 // or reads it as a file path. Returns a validated map of field→type.
 func loadSchema(value string) (map[string]string, error) {
 	if strings.HasPrefix(strings.TrimSpace(value), "{") {
-		var schema map[string]string
-		if err := json.Unmarshal([]byte(value), &schema); err != nil {
-			return nil, fmt.Errorf("invalid schema JSON: %w", err)
-		}
-		return validateSchemaTypes(schema)
+		return parseSchema([]byte(value))
 	}
 
 	// File path.
 	data, err := os.ReadFile(value)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read schema file: %w", err)
+	}
+	return parseSchema(data)
+}
+
+var errJSONSchema = errors.New("--schema looks like JSON Schema; vrk validate takes a flat {\"key\":\"type\"} map. Types: string, number, boolean, array, object")
+
+// parseSchema decodes a flat field->type map. JSON Schema documents (top-level
+// type, properties, required or $schema with non type-name values) get a
+// dedicated error instead of a confusing decode failure.
+func parseSchema(data []byte) (map[string]string, error) {
+	var generic map[string]any
+	if err := json.Unmarshal(data, &generic); err != nil {
+		return nil, fmt.Errorf("invalid schema JSON: %w", err)
+	}
+	flat := true
+	for _, v := range generic {
+		if s, ok := v.(string); !ok || !allowedTypes[s] {
+			flat = false
+			break
+		}
+	}
+	if !flat {
+		for _, k := range []string{"type", "properties", "required", "$schema"} {
+			if _, ok := generic[k]; ok {
+				return nil, errJSONSchema
+			}
+		}
 	}
 	var schema map[string]string
 	if err := json.Unmarshal(data, &schema); err != nil {

@@ -26,11 +26,11 @@ type tokOutput struct {
 func init() {
 	shared.Register(shared.ToolMeta{
 		Name:  "tok",
-		Short: "Token counter - cl100k_base, --check gate",
+		Short: "Token counter - o200k_base or cl100k_base, --check gate",
 		Flags: []shared.FlagMeta{
 			{Name: "json", Shorthand: "j", Usage: "emit output as JSON"},
 			{Name: "check", Usage: "pass input through if within N tokens; exit 1 if over"},
-			{Name: "model", Shorthand: "m", Usage: "tokenizer model (currently only cl100k_base is supported)"},
+			{Name: "model", Shorthand: "m", Usage: "tokenizer: an OpenAI model (gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo) or encoding (default o200k_base)"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
 	})
@@ -46,7 +46,7 @@ func Run() int {
 	var quietFlag bool
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit output as JSON")
 	fs.IntVar(&check, "check", 0, "pass input through if within N tokens; exit 1 if over")
-	fs.StringVarP(&model, "model", "m", "cl100k_base", "tokenizer model (currently only cl100k_base is supported)")
+	fs.StringVarP(&model, "model", "m", "", "tokenizer: an OpenAI model (gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo) or encoding (default o200k_base)")
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	// Suppress pflag's automatic printing so all output goes through shared helpers.
@@ -66,10 +66,12 @@ func Run() int {
 	// --quiet: suppress all stderr output (including errors) - callers get exit codes only.
 	defer shared.SilenceStderr(quietFlag)()
 
-	// Resolve the effective model name for output. --model affects the label
-	// in --json output; all models currently count with cl100k_base.
-	if model == "" {
-		model = "cl100k_base"
+	enc, err := tokcount.ForModel(model)
+	if err != nil {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": "tok: " + err.Error(), "code": 2})
+		}
+		return shared.UsageErrorf("tok: %v", err)
 	}
 
 	checkSet := fs.Changed("check")
@@ -81,27 +83,27 @@ func Run() int {
 	}
 
 	if checkSet {
-		return runCheck(fs.Args(), check, jsonFlag, quietFlag, model)
+		return runCheck(fs.Args(), check, jsonFlag, quietFlag, enc)
 	}
 
-	return runMeasure(fs.Args(), jsonFlag, model)
+	return runMeasure(fs.Args(), jsonFlag, enc)
 }
 
 // runMeasure is the measurement mode (no --check). Counts tokens and prints
 // the count or JSON to stdout. Always exits 0 on success.
-func runMeasure(args []string, jsonFlag bool, model string) int {
+func runMeasure(args []string, jsonFlag bool, enc *tokcount.Encoding) int {
 	input, err := shared.ReadInputOptional(args)
 	if err != nil {
 		return shared.Errorf("tok: %v", err)
 	}
 
-	count, err := tokcount.CountTokens(input)
+	count, err := enc.Count(input)
 	if err != nil {
 		return shared.Errorf("tok: initialising tokeniser: %v", err)
 	}
 
 	if jsonFlag {
-		if err := shared.PrintJSON(tokOutput{Tokens: count, Model: model}); err != nil {
+		if err := shared.PrintJSON(tokOutput{Tokens: count, Model: enc.Name}); err != nil {
 			return shared.Errorf("tok: %v", err)
 		}
 		return 0
@@ -115,7 +117,7 @@ func runMeasure(args []string, jsonFlag bool, model string) int {
 
 // runCheck is the --check mode. Reads all input, counts tokens, and either
 // passes the raw input through to stdout (within limit) or exits 1 (over limit).
-func runCheck(args []string, limit int, jsonFlag, quietFlag bool, model string) int {
+func runCheck(args []string, limit int, jsonFlag, quietFlag bool, enc *tokcount.Encoding) int {
 	// Read raw input. Two paths:
 	// - Positional args: join with space, no trailing newline.
 	// - Stdin: read raw bytes, preserve byte-for-byte.
@@ -140,7 +142,7 @@ func runCheck(args []string, limit int, jsonFlag, quietFlag bool, model string) 
 	// Raw bytes are preserved for passthrough.
 	countInput := strings.TrimSuffix(string(raw), "\n")
 
-	count, err := tokcount.CountTokens(countInput)
+	count, err := enc.Count(countInput)
 	if err != nil {
 		if jsonFlag {
 			return shared.PrintJSONError(map[string]any{
@@ -187,7 +189,7 @@ func Flags() *pflag.FlagSet {
 	fs.SetOutput(io.Discard)
 	fs.BoolP("json", "j", false, "emit output as JSON")
 	fs.Int("check", 0, "pass input through if within N tokens; exit 1 if over")
-	fs.StringP("model", "m", "cl100k_base", "tokenizer model (currently only cl100k_base is supported)")
+	fs.StringP("model", "m", "", "tokenizer: an OpenAI model (gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo) or encoding (default o200k_base)")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs
 }
@@ -198,8 +200,9 @@ func printUsage(fs *pflag.FlagSet) int {
 		"usage: tok [flags] [text]",
 		"       echo <text> | tok [flags]",
 		"",
-		"Token counter - counts tokens using cl100k_base (exact for GPT-4,",
-		"~95% accurate for Claude).",
+		"Token counter. Counts with o200k_base by default, the tokenizer of",
+		"GPT-4o, GPT-4.1, GPT-5 and the o-series. --model gpt-4 or gpt-3.5-turbo",
+		"counts with cl100k_base. Exact for OpenAI models, approximate for Claude.",
 		"",
 		"Without --check: prints the token count to stdout.",
 		"With --check N: passes input through if within N tokens, exits 1 if over.",

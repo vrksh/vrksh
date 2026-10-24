@@ -4,12 +4,12 @@ Every record contains three fields:
 
 - `index` - zero-based chunk number, sequential
 - `text` - the chunk content as a string
-- `tokens` - exact token count for this chunk (always <= `--size`)
+- `tokens` - exact token count of `text`, the same number `vrk tok` gives for it (at most `--size`, see below for the one exception)
 
 ```bash
 $ cat technical-spec.md | vrk chunk --size 30
-{"index":0,"text":"Section one covers the system architecture. The platform uses a microservices pattern with...","tokens":30}
-{"index":1,"text":"event-driven communication between services. Each service maintains its own database...","tokens":28}
+{"index":0,"text":"# Title\n\nvrk is a set of small Unix tools for AI pipelines. Each tool reads stdin, writes stdout, and uses exit codes to report","tokens":30}
+{"index":1,"text":" failure. The tools compose with pipes.\n\n## Details\n\nSee [the docs](https://vrk.sh/docs) for more.","tokens":26}
 ```
 
 ## Flag details
@@ -32,19 +32,19 @@ Without overlap, a sentence that spans a chunk boundary gets split:
 
 ```bash
 $ printf 'The vendor shall deliver all components within 30 calendar days of the signed agreement.' | vrk chunk --size 10
-{"index":0,"text":"The vendor shall deliver all components within 30 calendar days","tokens":10}
-{"index":1,"text":" of the signed agreement.","tokens":5}
+{"index":0,"text":"The vendor shall deliver all components within 30 calendar","tokens":10}
+{"index":1,"text":" days of the signed agreement.","tokens":6}
 ```
 
 With overlap, the boundary region appears in both chunks:
 
 ```bash
 $ printf 'The vendor shall deliver all components within 30 calendar days of the signed agreement.' | vrk chunk --size 10 --overlap 4
-{"index":0,"text":"The vendor shall deliver all components within 30 calendar days","tokens":10}
-{"index":1,"text":" within 30 calendar days of the signed agreement.","tokens":9}
+{"index":0,"text":"The vendor shall deliver all components within 30 calendar","tokens":10}
+{"index":1,"text":" within 30 calendar days of the signed agreement.","tokens":10}
 ```
 
-Now "within 30 calendar days" appears in both chunks. An LLM processing either chunk sees the complete obligation.
+Now "within 30 calendar" appears in both chunks, and the second chunk holds the complete obligation.
 
 **Rule of thumb:** set `--overlap` to 5-10% of `--size`. For `--size 4000`, use `--overlap 200`.
 
@@ -56,7 +56,13 @@ Splits at paragraph breaks (double newlines) and never breaks a paragraph across
 cat article.md | vrk chunk --size 4000 --by paragraph
 ```
 
-Use `--by paragraph` when your content has natural paragraph structure and you want each chunk to contain complete paragraphs. If a single paragraph exceeds `--size`, it falls back to token-level splitting for that paragraph.
+Use `--by paragraph` when your content has natural paragraph structure and you want each chunk to contain complete paragraphs. Paragraphs packed into one chunk keep the blank line between them. If a single paragraph exceeds `--size`, it falls back to token-level splitting for that paragraph.
+
+## Multi-byte text
+
+One token can hold part of a character (Hindi, emoji, Greek, CJK). `chunk` never cuts a character in half: each chunk ends and starts on a character boundary, so every `text` is valid UTF-8. With `--overlap 0`, joining every `text` in order gives back the input exactly.
+
+To stay on a boundary, a chunk ends a token or two early. In the rare case where one character spans more tokens than `--size` allows (for example `--size 1` on an emoji), the chunk grows to fit that character, up to 3 tokens over `--size`. The `tokens` field always reports the real count.
 
 ## Processing chunks through an LLM
 
@@ -127,7 +133,7 @@ Missing `--size`:
 
 ```bash
 $ cat document.txt | vrk chunk
-usage error: chunk: --size is required (>= 1)
+usage error: chunk: --size is required
 $ echo $?
 2
 ```
@@ -136,7 +142,7 @@ Overlap >= size:
 
 ```bash
 $ cat document.txt | vrk chunk --size 100 --overlap 100
-usage error: chunk: --overlap (100) must be less than --size (100)
+usage error: chunk: --overlap must be less than --size
 $ echo $?
 2
 ```

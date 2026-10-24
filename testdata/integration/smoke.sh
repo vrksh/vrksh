@@ -465,8 +465,8 @@ unset VRK_KV_PATH
 # tok over limit: stdout empty, exit 1 (runtime error - check exceeded)
 check_empty_stdout "tok --check exceeded" 1 sh -c "echo 'hello world' | $VRK tok --check 1"
 
-# epoch bad input (natural language): stdout empty, exit 2 (usage error — unparseable input)
-check_empty_stdout "epoch bad input" 2 sh -c "echo 'next tuesday' | $VRK epoch"
+# epoch bad input (natural language): stdout empty, exit 1 (runtime error - unparseable input)
+check_empty_stdout "epoch bad input" 1 sh -c "echo 'next tuesday' | $VRK epoch"
 
 # prompt with no API key: stdout empty, exit 1 (runtime error — missing credentials)
 check_empty_stdout "prompt no-API-key" 1 sh -c "ANTHROPIC_API_KEY='' OPENAI_API_KEY='' $VRK prompt 'hello'"
@@ -592,17 +592,17 @@ for tool in jwt tok kv links; do
     || { echo "PASS: --skills $tool does not bleed into $other"; PASS=$((PASS+1)); }
 done
 
-# vrk (no args): must exit 2 and print usage to stderr, nothing to stdout
-ec=$(set +e; $VRK 2>/dev/null; echo $?)
-assert_exit "vrk no-args exits 2" 2 "$ec"
-stdout_no_args=$(set +e; $VRK 2>/dev/null; true)
-[ -z "$stdout_no_args" ] \
-  && { echo "PASS: vrk no-args stdout is empty"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: vrk no-args leaked to stdout: $stdout_no_args"; FAIL=$((FAIL+1)); }
+# vrk (no args): exits 0 and prints the tool list to stdout, nothing to stderr
+ec=$(set +e; $VRK >/dev/null 2>&1; echo $?)
+assert_exit "vrk no-args exits 0" 0 "$ec"
+stdout_no_args=$($VRK 2>/dev/null || true)
+echo "$stdout_no_args" | grep -q "^tools:" \
+  && { echo "PASS: vrk no-args stdout lists tools"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: vrk no-args stdout missing tool list: $stdout_no_args"; FAIL=$((FAIL+1)); }
 stderr_no_args=$($VRK 2>&1 >/dev/null || true)
-echo "$stderr_no_args" | grep -q "usage" \
-  && { echo "PASS: vrk no-args stderr contains usage"; PASS=$((PASS+1)); } \
-  || { echo "FAIL: vrk no-args stderr missing usage: $stderr_no_args"; FAIL=$((FAIL+1)); }
+[ -z "$stderr_no_args" ] \
+  && { echo "PASS: vrk no-args stderr is empty"; PASS=$((PASS+1)); } \
+  || { echo "FAIL: vrk no-args wrote to stderr: $stderr_no_args"; FAIL=$((FAIL+1)); }
 
 # vrk unknown-tool: must exit 2
 ec=$(set +e; $VRK not_a_real_tool 2>/dev/null; echo $?)
@@ -823,9 +823,15 @@ grab_err_stdout=$(set +e; $VRK grab not-a-url 2>/dev/null; true)
 # ---------------------------------------------------------------------------
 echo "--- Section 18: links pipelines ---"
 
+# example.com no longer has links, so feed links a fixed page in grab's
+# markdown output shape instead of fetching over the network.
+grab_page() {
+  printf '# Example Domain\n\nSee [the docs](https://www.iana.org/domains/example) and [RFC 2606](https://www.rfc-editor.org/rfc/rfc2606).\n'
+}
+
 # ── grab | links: produces at least one link record ───────────────────────
-links_out=$($VRK grab https://example.com 2>/dev/null | $VRK links 2>/dev/null)
-links_count=$(echo "$links_out" | grep -c '^{' 2>/dev/null || echo 0)
+links_out=$(grab_page | $VRK links 2>/dev/null)
+links_count=$(echo "$links_out" | grep -c '^{' 2>/dev/null || true)
 [ "$links_count" -ge 1 ] \
   && { echo "PASS: grab | links: produced $links_count link(s)"; PASS=$((PASS+1)); } \
   || { echo "FAIL: grab | links: expected >= 1 link, got $links_count"; FAIL=$((FAIL+1)); }
@@ -849,10 +855,10 @@ print(bad)
 
 # ── grab | links --bare and --json from same fetch (cache avoids two fetches) ─
 grab_cache=$(mktemp)
-$VRK grab https://example.com 2>/dev/null > "$grab_cache"
+grab_page > "$grab_cache"
 
 bare_out=$($VRK links --bare < "$grab_cache" 2>/dev/null)
-bare_count=$(echo "$bare_out" | grep -c 'http' 2>/dev/null || echo 0)
+bare_count=$(echo "$bare_out" | grep -c 'http' 2>/dev/null || true)
 [ "$bare_count" -ge 1 ] \
   && { echo "PASS: grab | links --bare: produced $bare_count URL(s)"; PASS=$((PASS+1)); } \
   || { echo "FAIL: grab | links --bare: expected >= 1 URL"; FAIL=$((FAIL+1)); }

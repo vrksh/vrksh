@@ -380,8 +380,8 @@ func GenerateRecipePages(dataDir, contentDir, staticDir string) error {
 		// Steps as YAML list
 		b.WriteString("steps:\n")
 		for _, s := range r.Steps {
-			if strings.Contains(s, "\n") || strings.HasSuffix(s, "\\") {
-				// Use literal block scalar (strip trailing newline) for multiline or trailing-backslash steps
+			if strings.ContainsAny(s, "\n\\") {
+				// Literal block scalar for multiline steps and any backslash, which double quotes would mangle
 				b.WriteString("  - |-\n")
 				for _, line := range strings.Split(s, "\n") {
 					fmt.Fprintf(&b, "    %s\n", line)

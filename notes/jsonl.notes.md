@@ -78,8 +78,9 @@ $ echo $?
 1
 ```
 
-No input:
+No input, run on an interactive terminal:
 
+<!-- doccheck: skip (only fails on an interactive terminal, doccheck stdin is not a TTY) -->
 ```bash
 $ vrk jsonl
 usage error: jsonl: no input: pipe JSON to stdin

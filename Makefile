@@ -1,10 +1,13 @@
 export CGO_ENABLED=0
 
-.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate generate-og validate-schemas validate-manifest test-site
+.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate generate-og validate-schemas validate-manifest test-site doccheck recipecheck acceptance
 
 # Build the binary. CGO_ENABLED=0 is mandatory - static binary promise depends on it.
+# git describe gives 0.2.0 on a tag, 0.1.1-78-gabc1234 between tags.
+VERSION ?= $(or $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//'),dev)
+
 build:
-	go build -o vrk .
+	go build -ldflags "-X main.version=$(VERSION)" -o vrk .
 
 # Run all tests. Use before every commit.
 test:
@@ -38,6 +41,8 @@ fuzz:
 	go test -fuzz=FuzzEpoch -fuzztime=60s ./cmd/epoch/
 	go test -fuzz=FuzzTok   -fuzztime=60s ./cmd/tok/
 	go test -fuzz=FuzzSse   -fuzztime=60s ./cmd/sse/
+	go test -fuzz=FuzzChunk -fuzztime=60s ./cmd/chunk/
+	go test -fuzz=FuzzMatchesTiktokenGo -fuzztime=60s ./internal/shared/tokcount/
 
 # Verify cross-compilation works. Run after every Claude Code session.
 # If this fails, CGO crept in. Most common cause: mattn/go-sqlite3.
@@ -48,7 +53,7 @@ cross:
 	@GOOS=darwin GOARCH=arm64 go build -o /dev/null . && echo "ok  darwin/arm64"
 
 # Full pre-commit check. Run before every commit. Takes ~30 seconds.
-check: build test lint cross smoke validate-schemas
+check: build test lint cross smoke validate-schemas doccheck recipecheck
 	@echo ""
 	@echo "all checks passed"
 
@@ -85,6 +90,19 @@ test-site: build generate-og validate-manifest
 	bash -n hugo/static/install.sh
 	hugo --minify --source hugo
 	./vrk tok < hugo/static/skills.md | awk '{if($$1+0 > 4000) {print "skills.md over 4000 tokens"; exit 1}}'
+
+# Run the `$ command` examples in docs and recipe pages against ./vrk and a mock LLM.
+# Not part of check yet. Docs are generated: run `make generate` first if schemas changed.
+doccheck: build
+	go run ./internal/doccheck
+
+# Run each recipe's steps and its testdata/recipes/<slug>/expect.sh. Not part of check yet.
+recipecheck: build
+	go test -tags recipes -count=1 -timeout 300s ./internal/recipecheck/...
+
+# The v0.2.0 acceptance list (scripts/acceptance.sh). Not part of check yet.
+acceptance: build
+	bash scripts/acceptance.sh
 
 # Remove build artifacts
 clean:

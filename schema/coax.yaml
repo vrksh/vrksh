@@ -5,6 +5,10 @@ meta_lead: "vrk coax retries a command with configurable backoff, buffering stdi
 og_title: "vrk coax - retry wrapper with backoff for flaky commands"
 description: |
   `vrk coax` retries a command with configurable backoff. It buffers stdin so each attempt gets the same input. Fixed or exponential backoff, retry count caps, and exit-code filtering are all built in. It solves the three things bash retry loops always get wrong: stdin replay, backoff strategy, and retry limits.
+
+  coax runs the command directly, not through a shell. For pipes or redirects, use `-- sh -c '...'`.
+
+  Any other exit code is the wrapped command's own last exit code. A command killed by a signal gives 128 + the signal number.
 problem: >
   A bash retry loop around a flaky API call works until the API starts returning
   500s. The loop hammers it with no backoff, making the outage worse. Stdin was
@@ -52,7 +56,7 @@ exit_codes:
   - code: 0
     meaning: Command succeeded (first attempt or a retry)
   - code: 1
-    meaning: All retries exhausted (last exit code from wrapped command)
+    meaning: Command not found, stdin over 64 MiB needed a replay, or the wrapped command's last exit code was 1
   - code: 2
     meaning: Missing command after --, invalid --backoff spec
 og_image:

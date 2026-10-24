@@ -4,14 +4,39 @@ Built-in patterns detect:
 
 - **Bearer tokens**: `Bearer eyJ...`, `Bearer ghp_...`
 - **Passwords**: `password=...`, `passwd:...` and similar patterns
-- **High-entropy strings**: any token with Shannon entropy above the threshold (default 4.0) that looks like a secret - API keys, connection strings, hex tokens
+- **Known key prefixes**: AWS (`AKIA`, `ASIA`), OpenAI and Anthropic (`sk-`), Stripe (`sk_live_`, `rk_test_`), GitHub (`ghp_`, `github_pat_`), Slack (`xoxb-`), Google (`AIza`), Hugging Face (`hf_`), npm (`npm_`), SendGrid (`SG.`), and JWTs (`eyJ...`). These match anywhere in a line, including inside URLs and paths
+- **High-entropy strings**: any token with Shannon entropy at or above the threshold (default 4.0) that looks like a secret - API keys, connection strings, hex tokens
 
 ```bash
-$ printf 'API key: sk-proj-abc123def456ghi789jkl012mno345pqr678stu901vwx234yz\nBearer ghp_xK9mN2pL4qR7sT0uW3yZ5bD8fH1jM6nP9rV2\nPassword: s3cr3t-p4ssw0rd-v3ry-l0ng\nNormal text stays untouched\n' | vrk mask
+$ printf 'API key: sk-proj-abc123def456ghi789jkl012mno345pqr678stu901vwx234yz\nBearer ghp_FAKE0000example0000notreal0000000000\nPassword: s3cr3t-p4ssw0rd-v3ry-l0ng\nNormal text stays untouched\n' | vrk mask
 API key: [REDACTED]
 Bearer [REDACTED]
 Password: [REDACTED]
 Normal text stays untouched
+```
+
+### What entropy scanning leaves alone
+
+An LLM reading a log needs its URLs, paths, and IDs. These are never redacted as a whole by entropy:
+
+- URLs with no userinfo (`user@` or `user:pass@`). A URL with userinfo is entropy-checked as one token.
+- Paths that start with `/`, `./`, `../`, or `~/`
+- Canonical UUIDs (`7cbc81bf-c747-466a-a777-f3f88dcdfe38`)
+- Digests with an algorithm prefix (`sha256:...`, `sha1:...`, `md5:...`)
+- Container image refs (`registry.example.com/api-gateway:2.31.4`)
+- `name=value` tokens whose value is one of the above (`request_id=<uuid>`)
+
+Each `/` segment of a URL, path, or image ref is still checked on its own, so a random segment such as a webhook secret becomes `[REDACTED]` while the rest stays. Query and fragment values are checked only when the parameter name looks secret (`key`, `api_key`, `apikey`, `token`, `access_token`, `secret`, `code`, `sig`, `signature`, `password`, `pass`, `auth`, or a name ending in one of them, like `client_secret`). The built-in patterns above always apply to the whole line.
+
+Punctuation around a secret is kept: a trailing `,.;:)]}'"` and one leading `('"[{` stay in place.
+
+```bash
+$ printf '2026-10-15T05:31:15Z deploy api-gateway v2.31.4\npulling image registry.example.com/api-gateway:2.31.4\nGET https://payments.internal/v1/charges failed: 503 after 3 retries\nretrying with STRIPE_KEY=sk_test_FAKE0000example0000notreal, request_id=7cbc81bf-c747-466a-a777-f3f88dcdfe38\nconfig loaded from /etc/payments/config.yaml\n' | vrk mask
+2026-10-15T05:31:15Z deploy api-gateway v2.31.4
+pulling image registry.example.com/api-gateway:2.31.4
+GET https://payments.internal/v1/charges failed: 503 after 3 retries
+retrying with STRIPE_KEY=[REDACTED], request_id=7cbc81bf-c747-466a-a777-f3f88dcdfe38
+config loaded from /etc/payments/config.yaml
 ```
 
 ### The --json flag
@@ -19,10 +44,10 @@ Normal text stays untouched
 Appends a metadata trailer showing what was redacted:
 
 ```bash
-$ printf 'Bearer ghp_xK9mN2pL4qR7sT0uW3yZ5bD8fH1jM6nP9rV2\nNormal line\n' | vrk mask --json
-Bearer [REDACTED] [REDACTED]
+$ printf 'Bearer ghp_FAKE0000example0000notreal0000000000\nNormal line\n' | vrk mask --json
+Bearer [REDACTED]
 Normal line
-{"_vrk":"mask","lines":2,"redacted":1,"patterns_matched":["bearer","entropy"]}
+{"_vrk":"mask","lines":2,"redacted":1,"patterns_matched":["bearer"]}
 ```
 
 ### Custom patterns (--pattern)
@@ -92,6 +117,7 @@ cat large-debug.log | vrk mask | vrk chunk --size 4000 | \
 
 Interactive terminal with no input:
 
+<!-- doccheck: skip (only fails on an interactive terminal, doccheck stdin is not a TTY) -->
 ```bash
 $ vrk mask
 usage error: mask: no input: pipe text to stdin
@@ -103,7 +129,7 @@ Invalid regex in --pattern:
 
 ```bash
 $ echo 'test' | vrk mask --pattern '[invalid'
-usage error: mask: invalid regex: error parsing regexp: missing closing ]
+usage error: mask: invalid pattern "[invalid": error parsing regexp: missing closing ]: `[invalid`
 $ echo $?
 2
 ```

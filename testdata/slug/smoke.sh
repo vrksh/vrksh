@@ -129,6 +129,14 @@ out=$(echo 'abcdefghij' | "$VRK" slug --max 3)
 assert_exit "--max no boundary exits 0" 0 "$?"
 assert_eq "--max no boundary: empty output" "" "$out"
 
+# Smoke 18: non-Latin text keeps one line per input line (D5)
+out=$(printf 'a\nनमस्ते दुनिया\nStraße\n東京 2026\n' | "$VRK" slug)
+assert_eq "non-Latin lines kept" "$(printf 'a\nनमस्ते-दुनिया\nstrasse\n東京-2026')" "$out"
+
+# Smoke 19: --ascii drops other scripts, still one line per input line
+out=$(printf '東京 2026\nनमस्ते\n' | "$VRK" slug --ascii 2>/dev/null)
+assert_eq "--ascii keeps line count" "$(printf '2026\n')" "$out"
+
 # --- summary ---
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

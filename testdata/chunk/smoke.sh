@@ -225,6 +225,66 @@ else
 fi
 
 # ------------------------------------------------------------
+# Multi-byte text: no split characters, rejoin equals input
+# ------------------------------------------------------------
+echo ""
+echo "--- multi-byte ---"
+
+TMPD=$(mktemp -d)
+trap 'rm -rf "$TMPD"' EXIT
+FFFD=$(printf '\xef\xbf\xbd')
+i=0
+for s in "यह एक साधारण वाक्य है। " "Emoji party 🎉🚀🔥 time. " "Ελληνικά κείμενο εδώ. " "東京は日本の首都です。"; do
+  for _ in $(seq 60); do printf '%s' "$s"; done > "$TMPD/u.txt"
+  i=$((i + 1))
+  label="sample $i ($(printf '%s' "$s" | wc -c | tr -d ' ') bytes)"
+  n=$("$VRK" chunk --size 20 < "$TMPD/u.txt" | jq -r '.text' | grep -c "$FFFD")
+  if [ "$n" = 0 ]; then
+    ok "no U+FFFD in chunks: $label"
+  else
+    fail "no U+FFFD in chunks: $label" "$n chunks contain U+FFFD"
+  fi
+  "$VRK" chunk --size 20 --overlap 0 < "$TMPD/u.txt" | jq -j '.text' > "$TMPD/joined.txt"
+  if cmp -s "$TMPD/joined.txt" "$TMPD/u.txt"; then
+    ok "--overlap 0 rejoin equals input: $label"
+  else
+    fail "--overlap 0 rejoin equals input: $label" "joined text differs"
+  fi
+done
+
+# tokens field matches what vrk tok counts for the same text
+bad=0
+while IFS= read -r line; do
+  want=$(printf '%s' "$line" | jq -j '.text' | "$VRK" tok)
+  got=$(printf '%s' "$line" | jq -r '.tokens')
+  [ "$want" = "$got" ] || bad=$((bad + 1))
+done < <("$VRK" chunk --size 7 --overlap 2 < "$TMPD/u.txt")
+if [ "$bad" = 0 ]; then
+  ok "tokens field equals vrk tok count of text"
+else
+  fail "tokens field equals vrk tok count of text" "$bad chunks disagree"
+fi
+
+# 1 MiB of English in under 2 seconds (encoder is built once)
+for _ in $(seq 30000); do printf 'the quick brown fox jumps over the lazy dog '; done | head -c 1048576 > "$TMPD/1mb.txt"
+start=$(date +%s)
+"$VRK" chunk --size 500 < "$TMPD/1mb.txt" > /dev/null
+elapsed=$(( $(date +%s) - start ))
+if [ "$elapsed" -le 5 ]; then
+  ok "chunk 1 MiB --size 500 in ${elapsed}s"
+else
+  fail "chunk 1 MiB --size 500" "took ${elapsed}s, want under 5s here (target 2s on CI)"
+fi
+
+# --by paragraph keeps the blank line between packed paragraphs
+got=$(printf 'First para.\n\nSecond para.' | "$VRK" chunk --size 100 --by paragraph | jq -j '.text')
+if [ "$got" = "$(printf 'First para.\n\nSecond para.')" ]; then
+  ok "--by paragraph keeps blank line separator"
+else
+  fail "--by paragraph keeps blank line separator" "got: $got"
+fi
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

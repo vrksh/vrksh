@@ -67,13 +67,8 @@ vrk moniker --count 5 --seed 42
 ## How it works
 
 ```bash
-$ vrk moniker
-woven-vent
-
-$ vrk moniker --count 3
+$ vrk moniker --seed 42
 distant-shore
-slate-contour
-northern-brine
 ```
 
 ### Deterministic output (--seed)
@@ -90,8 +85,8 @@ Same seed always produces the same names. Use this in tests or when you need rep
 ### Custom separator
 
 ```bash
-$ vrk moniker --separator _
-bold_falcon
+$ vrk moniker --separator _ --seed 42
+distant_shore
 ```
 
 ### Longer names (--words)
@@ -99,15 +94,15 @@ bold_falcon
 More words means more uniqueness. Use `--words 3` when two-word names aren't enough:
 
 ```bash
-$ vrk moniker --words 3
-bright-amber-whisper
+$ vrk moniker --words 3 --seed 42
+foggy-hazy-furrow
 ```
 
 ### JSON output
 
 ```bash
-$ vrk moniker --json
-{"name":"woven-vent","adjective":"woven","noun":"vent"}
+$ vrk moniker --json --seed 42
+{"name":"distant-shore","words":["distant","shore"]}
 ```
 
 ## Pipeline integration
@@ -141,11 +136,11 @@ echo "Batch $BATCH started" | vrk emit --tag batch --level info
 
 ## When it fails
 
-Word pool exhausted (unlikely with default settings):
+More names than the word lists can make (unlikely with default settings):
 
 ```bash
 $ vrk moniker --count 100000
-error: moniker: word pool exhausted
+error: moniker: requested 100000 names but only 87024 unique 2-word combinations exist
 $ echo $?
 1
 ```
@@ -154,7 +149,7 @@ Invalid count:
 
 ```bash
 $ vrk moniker --count 0
-usage error: moniker: --count must be >= 1
+usage error: moniker: --count must be >= 1, got 0
 $ echo $?
 2
 ```

@@ -4,9 +4,11 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/cmd/assert"
@@ -38,6 +40,7 @@ import (
 	"github.com/vrksh/vrksh/internal/bare"
 	"github.com/vrksh/vrksh/internal/completions"
 	mcppkg "github.com/vrksh/vrksh/internal/mcp"
+	"github.com/vrksh/vrksh/internal/shared"
 )
 
 //go:embed integrations/skills/SKILLS.md
@@ -48,6 +51,9 @@ var skillsFS embed.FS
 
 //go:embed manifest.json
 var manifestJSON string
+
+// version is set at release time via -ldflags "-X main.version=...".
+var version = "dev"
 
 var tools = map[string]func() int{
 	"assert":   assert.Run,
@@ -98,24 +104,24 @@ func main() {
 			os.Exit(0)
 		case "mcp":
 			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+			mcppkg.Version = version
 			desc, flagsFn, stdinReq := mcpMaps()
 			os.Exit(mcppkg.Run(desc, flagsFn, stdinReq))
 		case "completions":
 			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 			os.Exit(completions.Run())
-		case "--bare":
+		case "--bare", "bare":
 			names := make([]string, 0, len(tools))
 			for name := range tools {
 				names = append(names, name)
 			}
 			sort.Strings(names)
 			os.Exit(bare.Run(os.Args[2:], names))
-		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "usage: vrk <tool> [args]\n")
-			fmt.Fprintf(os.Stderr, "       vrk --bare [--force] [--remove] [--list] [--dry-run] [tools...]\n")
-			fmt.Fprintf(os.Stderr, "       vrk --manifest\n")
-			fmt.Fprintf(os.Stderr, "       vrk --skills [tool]\n")
-			fmt.Fprintf(os.Stderr, "\nrun 'vrk <tool> --help' for tool-specific help\n")
+		case "--help", "-h", "help":
+			printHelp(os.Stdout)
+			os.Exit(0)
+		case "--version", "version":
+			fmt.Printf("vrk %s\n", version)
 			os.Exit(0)
 		}
 	}
@@ -127,12 +133,8 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: vrk <tool> [args]\n")
-		fmt.Fprintf(os.Stderr, "       vrk --bare [--force] [--remove] [--list] [--dry-run] [tools...]\n")
-		fmt.Fprintf(os.Stderr, "       vrk --manifest\n")
-		fmt.Fprintf(os.Stderr, "       vrk --skills [tool]\n")
-		fmt.Fprintf(os.Stderr, "\nrun 'vrk <tool> --help' for tool-specific help\n")
-		os.Exit(2)
+		printHelp(os.Stdout)
+		os.Exit(0)
 	}
 
 	name = os.Args[1]
@@ -140,9 +142,30 @@ func main() {
 	fn, ok := tools[name]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "vrk: unknown tool %q\n", name)
+		fmt.Fprintf(os.Stderr, "run 'vrk help' for the tool list\n")
 		os.Exit(2)
 	}
 	os.Exit(fn())
+}
+
+// printHelp writes the tool list and meta commands.
+func printHelp(w io.Writer) {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "vrk %s - Unix tools for LLM pipelines\n\n", version)
+	fmt.Fprintf(&sb, "usage: vrk <tool> [args]      run 'vrk <tool> --help' for details\n\ntools:\n")
+	for _, t := range shared.Registry() {
+		fmt.Fprintf(&sb, "  %-12s %s\n", t.Name, t.Short)
+	}
+	fmt.Fprint(&sb, `
+meta:
+  vrk --bare | bare     symlink tools so you can call them without 'vrk'
+  vrk completions       shell completion scripts
+  vrk mcp               MCP server (tool discovery)
+  vrk --manifest        tool manifest as JSON
+  vrk --skills [tool]   agent skill docs
+  vrk --version         print version
+`)
+	_, _ = io.WriteString(w, sb.String())
 }
 
 // printSkillFiles reads per-tool skill files from the embedded skillsFS and

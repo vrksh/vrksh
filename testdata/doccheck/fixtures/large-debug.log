@@ -1,0 +1,3 @@
+2026-10-01T10:00:00Z INFO server started
+2026-10-01T10:00:05Z WARN slow request id=42
+2026-10-01T10:00:09Z ERROR upstream timeout id=43

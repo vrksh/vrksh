@@ -4,7 +4,7 @@ meta_description: "Parse Server-Sent Event streams into JSONL. Turns text/event-
 meta_lead: "vrk sse parses Server-Sent Event streams into clean JSONL records for pipeline processing."
 og_title: "vrk sse - parse SSE streams into structured JSONL"
 description: |
-  `vrk sse` parses `text/event-stream` into clean JSONL records. It handles `data:` prefixes, blank-line event delimiters, multi-line data concatenation, and `[DONE]` sentinel detection used by both Anthropic and OpenAI. `--field` with dot-path syntax drills into nested JSON to extract just the text fragments.
+  `vrk sse` parses `text/event-stream` into clean JSONL records. It handles `data:` prefixes, blank-line event delimiters, multi-line data concatenation, and `[DONE]` sentinel detection used by both Anthropic and OpenAI. `--field` with dot-path syntax (arrays as `[0]` or `.0`) drills into nested JSON to extract just the text fragments, and `--raw` writes them with no newline so streamed text reassembles exactly.
 problem: >
   A streaming LLM endpoint returns raw Server-Sent Events: `data:` prefixes, blank
   lines as delimiters, `[DONE]` sentinels. `grep '^data:' | sed 's/^data: //'`
@@ -18,7 +18,7 @@ before: |
 after: "curl -sN https://api.example.com/stream | vrk sse"
 group: v1
 category: pipeline
-example: "curl -sN $API_URL | vrk sse --field data.delta.text"
+example: "curl -sN $API_URL | vrk sse --field data.delta.text --raw"
 flags:
   - flag: --event
     short: "-e"
@@ -27,12 +27,16 @@ flags:
   - flag: --field
     short: "-F"
     type: string
-    description: Extract dot-path field from record as plain text
+    description: "Extract dot-path field from record as plain text; arrays by index (data.choices[0].text or data.choices.0.text)"
+  - flag: --raw
+    short: ""
+    type: bool
+    description: With --field, write each value exactly, with no newline after it
 exit_codes:
   - code: 0
     meaning: Success, including clean [DONE] termination
   - code: 1
-    meaning: I/O error reading stdin
+    meaning: I/O error reading stdin, or --field matched none of the events in a non-empty stream
   - code: 2
     meaning: Usage error - interactive terminal with no piped input, unknown flag
 og_image:

@@ -11,8 +11,8 @@ steps:
     cat doc.txt \
       | vrk chunk --size 512 --overlap 64 \
       | while read -r chunk; do
-          idx=$(echo "$chunk" | jq -r '.index')
-          text=$(echo "$chunk" | jq -r '.text')
+          idx=$(printf '%s\n' "$chunk" | jq -r '.index')
+          text=$(printf '%s\n' "$chunk" | jq -r '.text')
           vrk kv set "doc:${DOC_ID}:chunk:${idx}" "$text"
         done
 tags:

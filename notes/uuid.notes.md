@@ -2,6 +2,7 @@
 
 ### v4 (random, default)
 
+<!-- doccheck: skip (random output) -->
 ```bash
 $ vrk uuid
 98d06ca5-e747-4a63-8fc9-045f0e02f8d4
@@ -11,6 +12,7 @@ Standard random UUID. Good for correlation IDs, file names, and anywhere uniquen
 
 ### v7 (time-ordered)
 
+<!-- doccheck: skip (random output) -->
 ```bash
 $ vrk uuid --v7
 019d3fdb-2de7-756e-a340-de561cfa43ab
@@ -20,6 +22,7 @@ The first 48 bits encode a millisecond timestamp. v7 UUIDs sort chronologically 
 
 ### Batch generation
 
+<!-- doccheck: skip (random output) -->
 ```bash
 $ vrk uuid --count 3
 c00bb1e4-51fd-4cfc-96b2-2c0123268c80
@@ -27,9 +30,9 @@ c4fd6dd9-c340-4f42-9929-7f0eae856230
 58cbbd73-e561-43de-b20a-ccd5f5f92222
 
 $ vrk uuid --v7 --count 3 --json
-{"version":7,"uuid":"019d3fdb-..."}
-{"version":7,"uuid":"019d3fdb-..."}
-{"version":7,"uuid":"019d3fdb-..."}
+{"uuid":"019d3fdb-...","version":7,"generated_at":1774891000}
+{"uuid":"019d3fdb-...","version":7,"generated_at":1774891000}
+{"uuid":"019d3fdb-...","version":7,"generated_at":1774891000}
 ```
 
 ## Pipeline integration
@@ -68,7 +71,7 @@ Invalid count:
 
 ```bash
 $ vrk uuid --count 0
-usage error: uuid: --count must be >= 1
+usage error: uuid: count must be >= 1
 $ echo $?
 2
 ```

@@ -1,15 +1,43 @@
 #!/bin/sh
 # vrksh installer - detects OS/arch, downloads binary, verifies SHA256, installs.
 # Usage: curl -sSL https://vrk.sh/install.sh | sh
+#
+# Environment:
+#   VRK_VERSION      version to install, e.g. 0.2.0 (default: latest release)
+#   VRK_INSTALL_DIR  install directory (default: /usr/local/bin, else ~/.local/bin)
 set -e
 
-VERSION="0.1.0"
+# Used only when VRK_VERSION is unset and the GitHub API is unreachable.
+# The release workflow fails if this does not match the tag being released.
+FALLBACK_VERSION="0.2.0"
 REPO="vrksh/vrksh"
 
 fail() {
   printf 'error: %s\n' "$1" >&2
   exit 1
 }
+
+# fetch URL: print the body to stdout
+fetch() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$1"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O - "$1"
+  else
+    fail "neither curl nor wget found"
+  fi
+}
+
+# Version order: $VRK_VERSION, latest GitHub release, pinned fallback.
+VERSION="${VRK_VERSION#v}"
+if [ -z "$VERSION" ]; then
+  VERSION="$(fetch "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
+    | grep '"tag_name"' | head -n 1 | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v?([^"]+)".*/\1/')" || VERSION=""
+fi
+if [ -z "$VERSION" ]; then
+  VERSION="$FALLBACK_VERSION"
+  printf 'note: could not look up the latest release, using %s\n' "$VERSION" >&2
+fi
 
 # Detect OS
 OS="$(uname -s)"
@@ -73,16 +101,21 @@ fi
 tar -xzf "${TMPDIR}/${TARBALL}" -C "$TMPDIR" || fail "extraction failed"
 
 # Install
-INSTALL_DIR="/usr/local/bin"
-if [ ! -w "$INSTALL_DIR" ]; then
-  INSTALL_DIR="${HOME}/.local/bin"
-  mkdir -p "$INSTALL_DIR"
+if [ -n "$VRK_INSTALL_DIR" ]; then
+  INSTALL_DIR="$VRK_INSTALL_DIR"
+  mkdir -p "$INSTALL_DIR" || fail "cannot create $INSTALL_DIR"
+else
+  INSTALL_DIR="/usr/local/bin"
+  if [ ! -w "$INSTALL_DIR" ]; then
+    INSTALL_DIR="${HOME}/.local/bin"
+    mkdir -p "$INSTALL_DIR"
+  fi
 fi
 
 mv "${TMPDIR}/vrk" "${INSTALL_DIR}/vrk" || fail "install failed: could not move binary to ${INSTALL_DIR}"
 chmod +x "${INSTALL_DIR}/vrk"
 
-printf 'vrk v%s installed to %s/vrk\n' "$VERSION" "$INSTALL_DIR"
+printf 'installed vrk %s to %s/vrk\n' "$VERSION" "$INSTALL_DIR"
 
 # Check if install dir is in PATH
 case ":${PATH}:" in

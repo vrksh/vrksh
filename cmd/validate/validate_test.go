@@ -340,11 +340,14 @@ func TestLineNotJSON(t *testing.T) {
 func TestStrictMode(t *testing.T) {
 	// First invalid line → exit 1, processing stops.
 	input := `{"name":"alice","age":"wrong"}` + "\n" + `{"name":"bob","age":30}`
-	stdout, _, code := runValidate(t, input,
+	stdout, stderr, code := runValidate(t, input,
 		[]string{"--schema", `{"name":"string","age":"number"}`, "--strict"},
 	)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (strict mode hit invalid)", code)
+	}
+	if !strings.HasPrefix(stderr, "error: validate: line 1:") {
+		t.Errorf("strict failure should be labelled error, got stderr %q", stderr)
 	}
 	// The second (valid) record must not appear on stdout.
 	if strings.Contains(stdout, "bob") {
@@ -762,5 +765,33 @@ func TestQuietDoesNotAffectStdout(t *testing.T) {
 	}
 	if !strings.Contains(stdout, `"x"`) {
 		t.Errorf("stdout = %q, want the valid record passed through", stdout)
+	}
+}
+
+func TestWarningHasLineNumber(t *testing.T) {
+	// Blank lines still count toward the input line number.
+	in := "{\"a\":\"x\"}\n\n{\"b\":1}\n"
+	_, stderr, code := runValidate(t, in, []string{"--schema", `{"a":"string"}`})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stderr, "validate: line 3: a is missing") {
+		t.Errorf("stderr = %q, want line 3 warning", stderr)
+	}
+}
+
+func TestJSONSchemaDetected(t *testing.T) {
+	for _, sch := range []string{
+		`{"type":"object","properties":{"a":{"type":"string"}}}`,
+		`{"type":"object","required":["a"]}`,
+		`{"$schema":"http://json-schema.org/draft-07/schema#"}`,
+	} {
+		_, stderr, code := runValidate(t, "{}\n", []string{"--schema", sch})
+		if code != 2 {
+			t.Errorf("%s: exit code = %d, want 2", sch, code)
+		}
+		if !strings.Contains(stderr, "looks like JSON Schema") {
+			t.Errorf("%s: stderr = %q", sch, stderr)
+		}
 	}
 }

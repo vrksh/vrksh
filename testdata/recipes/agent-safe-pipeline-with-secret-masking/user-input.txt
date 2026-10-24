@@ -1,0 +1,2 @@
+Customer report. My api key is sk-test-FAKE0000example0000notreal0000 and it fails on login.
+Please summarise the issue.

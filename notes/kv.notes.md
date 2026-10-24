@@ -40,6 +40,9 @@ Silent if the key doesn't exist. Always exits 0.
 ### list - show all keys
 
 ```bash
+$ vrk kv set --ns cache api_response "..."
+$ vrk kv set --ns cache last_fetch "..."
+$ vrk kv set --ns cache status ok
 $ vrk kv list --ns cache
 api_response
 last_fetch
@@ -51,6 +54,7 @@ Lists all keys in the namespace, sorted alphabetically. Expired keys are not sho
 ### incr / decr - atomic counters
 
 ```bash
+# counters start at 0, so the first incr on a new key returns 1
 $ vrk kv incr counter
 1
 $ vrk kv incr counter
@@ -93,7 +97,7 @@ Shows what `set` would do without writing:
 
 ```bash
 $ vrk kv set --ns prod important_key "value" --dry-run
-kv: would set important_key = "value" (ns: prod, ttl: 0s)
+would set important_key = value
 ```
 
 ## A complete agent loop
@@ -179,7 +183,7 @@ Missing subcommand:
 
 ```bash
 $ vrk kv
-usage error: kv: subcommand required (set, get, del, list, incr, decr)
+usage error: usage: vrk kv <set|get|del|list|incr|decr>
 $ echo $?
 2
 ```
@@ -189,7 +193,7 @@ Increment on a non-numeric value:
 ```bash
 $ vrk kv set mykey "not a number"
 $ vrk kv incr mykey
-error: kv incr: value is not an integer
+error: kv incr: value is not a number
 $ echo $?
 1
 ```

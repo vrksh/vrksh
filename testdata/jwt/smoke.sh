@@ -291,26 +291,26 @@ echo "--- invalid tokens ---"
 stderr=$(set +e; "$VRK" jwt "notajwt" 2>&1 >/dev/null; true)
 exit_code=$(set +e; "$VRK" jwt "notajwt" > /dev/null 2>&1; echo $?)
 assert_exit            "invalid notajwt: exit 1"                1             "$exit_code"
-assert_stderr_contains "invalid notajwt: stderr invalid JWT"    "invalid JWT"  "$stderr"
+assert_stderr_contains "invalid notajwt: stderr invalid token"    "invalid token" "$stderr"
 
 # two parts only
 stderr=$(set +e; "$VRK" jwt "header.payload" 2>&1 >/dev/null; true)
 exit_code=$(set +e; "$VRK" jwt "header.payload" > /dev/null 2>&1; echo $?)
 assert_exit            "invalid two parts: exit 1"              1             "$exit_code"
-assert_stderr_contains "invalid two parts: stderr invalid JWT"  "invalid JWT"  "$stderr"
+assert_stderr_contains "invalid two parts: stderr invalid token"  "invalid token" "$stderr"
 
 # bad base64 in payload
 stderr=$(set +e; "$VRK" jwt "eyJhbGciOiJIUzI1NiJ9.!!!invalid!!!.sig" 2>&1 >/dev/null; true)
 exit_code=$(set +e; "$VRK" jwt "eyJhbGciOiJIUzI1NiJ9.!!!invalid!!!.sig" > /dev/null 2>&1; echo $?)
 assert_exit            "invalid bad base64: exit 1"             1             "$exit_code"
-assert_stderr_contains "invalid bad base64: stderr invalid JWT" "invalid JWT"  "$stderr"
+assert_stderr_contains "invalid bad base64: stderr invalid token" "invalid token" "$stderr"
 
 # valid base64 but not JSON in payload
 # "aGVsbG8=" = base64("hello") — valid base64, not JSON
 stderr=$(set +e; "$VRK" jwt "eyJhbGciOiJIUzI1NiJ9.aGVsbG8.sig" 2>&1 >/dev/null; true)
 exit_code=$(set +e; "$VRK" jwt "eyJhbGciOiJIUzI1NiJ9.aGVsbG8.sig" > /dev/null 2>&1; echo $?)
 assert_exit            "invalid not JSON: exit 1"               1             "$exit_code"
-assert_stderr_contains "invalid not JSON: stderr invalid JWT"   "invalid JWT"  "$stderr"
+assert_stderr_contains "invalid not JSON: stderr invalid token"   "invalid token" "$stderr"
 
 # empty string
 stderr=$(set +e; "$VRK" jwt "" 2>&1 >/dev/null; true)

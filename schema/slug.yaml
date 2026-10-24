@@ -4,7 +4,7 @@ meta_description: "Generate URL-safe slugs from any text. Handles unicode, custo
 meta_lead: "vrk slug converts any text to a URL-safe, filename-safe slug with Unicode normalization."
 og_title: "vrk slug - URL and filename slug generator"
 description: |
-  `vrk slug` converts any text to a URL-safe, filename-safe slug. Normalizes Unicode to ASCII, lowercases, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` truncates at word boundaries for length-limited contexts.
+  `vrk slug` converts any text to a URL-safe, filename-safe slug. Folds Latin text to ASCII (`Straße` becomes `strasse`), keeps other scripts such as Devanagari and CJK as they are, lowercases, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` truncates at word boundaries for length-limited contexts.
 problem: >
   A slugify function turns "Uber's $3.1B Q4 Revenue" into "uber-s--3-1b-q4-revenue"
   with a double hyphen. Another title has Unicode characters that pass through
@@ -25,7 +25,11 @@ flags:
   - flag: --max
     short: ""
     type: int
-    description: Max output length; truncated at last separator (0 = no limit)
+    description: Max output length in characters; truncated at last separator (0 = no limit)
+  - flag: --ascii
+    short: ""
+    type: bool
+    description: Keep only ASCII; other scripts are dropped (empty slug plus a warning if nothing is left)
   - flag: --json
     short: "-j"
     type: bool

@@ -52,20 +52,20 @@ echo 'hello world&foo=bar' | vrk pct --encode
 
 ## Flags
 
-| Flag       | Short | Type | Description                                              |
-|------------|-------|------|----------------------------------------------------------|
-| `--encode` |       | bool | Percent-encode input (RFC 3986 unless --form)            |
-| `--decode` |       | bool | Percent-decode input                                     |
-| `--form`   |       | bool | Use application/x-www-form-urlencoded rules (spaces / +) |
-| `--json`   | -j    | bool | Emit JSON per line: {input, output, op, mode}            |
-| `--quiet`  | -q    | bool | Suppress stderr output                                   |
+| Flag       | Short | Type | Description                                                                  |
+|------------|-------|------|------------------------------------------------------------------------------|
+| `--encode` |       | bool | Percent-encode input (RFC 3986 unless --form)                                |
+| `--decode` |       | bool | Percent-decode input                                                         |
+| `--form`   |       | bool | Use application/x-www-form-urlencoded rules (spaces / +)                     |
+| `--json`   | -j    | bool | Emit JSON per line: {input, output, op, mode}, where mode is percent or form |
+| `--quiet`  | -q    | bool | Suppress stderr output                                                       |
 
 
 <!-- notes - edit in notes/pct.notes.md -->
 
 ## How it works
 
-### Encode (path mode, default)
+### Encode (default)
 
 ```bash
 $ echo 'hello world' | vrk pct --encode
@@ -112,7 +112,7 @@ foo%20bar
 
 ```bash
 $ echo 'hello world' | vrk pct --encode --json
-{"input":"hello world","output":"hello%20world","op":"encode","mode":"path"}
+{"input":"hello world","output":"hello%20world","op":"encode","mode":"percent"}
 ```
 
 ## Pipeline integration
@@ -137,7 +137,7 @@ Both --encode and --decode:
 
 ```bash
 $ echo 'test' | vrk pct --encode --decode
-usage error: pct: specify --encode or --decode, not both
+usage error: pct: flags --encode and --decode are mutually exclusive
 $ echo $?
 2
 ```
@@ -146,7 +146,7 @@ Neither flag:
 
 ```bash
 $ echo 'test' | vrk pct
-usage error: pct: specify --encode or --decode
+usage error: pct: either --encode or --decode is required
 $ echo $?
 2
 ```
@@ -155,7 +155,7 @@ Invalid percent sequence:
 
 ```bash
 $ echo '%ZZ' | vrk pct --decode
-error: pct: invalid percent-encoding
+error: pct: invalid percent-encoded input: invalid URL escape "%ZZ"
 $ echo $?
 1
 ```

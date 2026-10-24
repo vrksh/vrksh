@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+	"unicode/utf8"
 
 	"github.com/vrksh/vrksh/internal/shared/tokcount"
 )
@@ -33,30 +35,31 @@ func runChunk(input string, args []string) (code int, stdout, stderr string) {
 		os.Stderr = oldStderr
 	}()
 
-	// stdin pipe
-	rIn, wIn, _ := os.Pipe()
-	_, _ = io.WriteString(wIn, input)
-	_ = wIn.Close()
-	os.Stdin = rIn
+	// stdin from a temp file so large inputs never block on a pipe buffer.
+	in, _ := os.CreateTemp("", "chunk-stdin")
+	defer func() { _ = os.Remove(in.Name()) }()
+	_, _ = io.WriteString(in, input)
+	_, _ = in.Seek(0, io.SeekStart)
+	os.Stdin = in
 
-	// stdout pipe
+	// stdout and stderr are drained concurrently so large outputs never block Run.
 	rOut, wOut, _ := os.Pipe()
 	os.Stdout = wOut
-
-	// stderr pipe
 	rErr, wErr, _ := os.Pipe()
 	os.Stderr = wErr
+	var bufOut, bufErr strings.Builder
+	done := make(chan struct{}, 2)
+	go func() { _, _ = io.Copy(&bufOut, rOut); done <- struct{}{} }()
+	go func() { _, _ = io.Copy(&bufErr, rErr); done <- struct{}{} }()
 
 	os.Args = append([]string{"vrk"}, args...)
 	code = Run()
 
 	_ = wOut.Close()
 	_ = wErr.Close()
-	_ = rIn.Close()
-
-	var bufOut, bufErr strings.Builder
-	_, _ = io.Copy(&bufOut, rOut)
-	_, _ = io.Copy(&bufErr, rErr)
+	<-done
+	<-done
+	_ = in.Close()
 	_ = rOut.Close()
 	_ = rErr.Close()
 
@@ -92,7 +95,7 @@ func assertInvariant(t *testing.T, records []record, size int) {
 // ── basic split ──────────────────────────────────────────────────────────────
 
 func TestBasicSplit(t *testing.T) {
-	// Build a deterministic input: " hello" is one cl100k_base token.
+	// Build a deterministic input: " hello" is one token.
 	// Prepend "hello" (1 token) so the total is 1 + 2499 = 2500 tokens.
 	input := "hello" + strings.Repeat(" hello", 2499)
 	total, err := tokcount.CountTokens(input)
@@ -160,14 +163,14 @@ func TestOverlap(t *testing.T) {
 	}
 
 	// chunk[1] must begin with the last 100 tokens of chunk[0].
-	ids0, err := tokcount.EncodeTokens(records[0].Text)
+	ids0, err := tokcount.Default.Encode(records[0].Text)
 	if err != nil {
 		t.Fatalf("EncodeTokens chunk[0]: %v", err)
 	}
 	if len(ids0) < 100 {
 		t.Fatalf("chunk[0] has %d tokens, need >= 100 to test overlap", len(ids0))
 	}
-	overlapText := tokcount.DecodeTokens(ids0[len(ids0)-100:])
+	overlapText := tokcount.Default.Decode(ids0[len(ids0)-100:])
 	if !strings.HasPrefix(records[1].Text, overlapText) {
 		t.Errorf("chunk[1] does not start with last 100 tokens of chunk[0]\n"+
 			"want prefix: %q\n got prefix:  %q",
@@ -488,4 +491,199 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// ── UTF-8 safety (multi-byte scripts) ────────────────────────────────────────
+
+// multiByteSamples are sentences where tokens hold parts of characters.
+var multiByteSamples = []string{
+	"यह एक साधारण वाक्य है। ",
+	"Emoji party 🎉🚀🔥 time. ",
+	"Ελληνικά κείμενο εδώ. ",
+	"東京は日本の首都です。",
+}
+
+// checkChunkInvariants asserts the chunk contract for any input:
+//  1. every text is valid UTF-8 with no U+FFFD unless the input had one,
+//  2. tokens is the real token count of text,
+//  3. tokens never exceeds size by more than 3 (the one allowed overflow,
+//     when a single character spans more tokens than fit).
+func checkChunkInvariants(t *testing.T, input string, records []record, size int) {
+	t.Helper()
+	inputHasFFFD := strings.ContainsRune(input, utf8.RuneError)
+	for _, r := range records {
+		if !utf8.ValidString(r.Text) {
+			t.Errorf("record[%d] text is not valid UTF-8: %q", r.Index, r.Text)
+		}
+		if !inputHasFFFD && strings.ContainsRune(r.Text, utf8.RuneError) {
+			t.Errorf("record[%d] text has U+FFFD: %q", r.Index, r.Text)
+		}
+		n, err := tokcount.CountTokens(r.Text)
+		if err != nil {
+			t.Fatalf("CountTokens: %v", err)
+		}
+		if r.Tokens != n {
+			t.Errorf("record[%d] tokens = %d, real count of text = %d (%q)", r.Index, r.Tokens, n, r.Text)
+		}
+		if r.Tokens > size+3 {
+			t.Errorf("record[%d] tokens = %d, size = %d (overflow > 3)", r.Index, r.Tokens, size)
+		}
+	}
+}
+
+func joinTexts(records []record) string {
+	var sb strings.Builder
+	for _, r := range records {
+		sb.WriteString(r.Text)
+	}
+	return sb.String()
+}
+
+func TestMultiByteNoSplitCharacters(t *testing.T) {
+	for _, s := range multiByteSamples {
+		input := strings.Repeat(s, 60)
+		for _, size := range []int{1, 2, 3, 5, 20, 37} {
+			for _, overlap := range []int{0, 1, size / 2} {
+				if overlap >= size {
+					continue
+				}
+				code, stdout, stderr := runChunk(input, []string{"--size", itoa(size), "--overlap", itoa(overlap)})
+				if code != 0 {
+					t.Fatalf("%q size=%d overlap=%d: exit %d, stderr %q", s, size, overlap, code, stderr)
+				}
+				records := parseRecords(t, stdout)
+				checkChunkInvariants(t, input, records, size)
+				if overlap == 0 && joinTexts(records) != input {
+					t.Errorf("%q size=%d: joined chunks differ from input", s, size)
+				}
+			}
+		}
+	}
+}
+
+func TestMultiByteByParagraph(t *testing.T) {
+	var paras []string
+	for _, s := range multiByteSamples {
+		paras = append(paras, strings.Repeat(s, 3), strings.Repeat(s, 15))
+	}
+	input := strings.Join(paras, "\n\n")
+	for _, size := range []int{5, 20, 60} {
+		for _, overlap := range []int{0, 4} {
+			code, stdout, stderr := runChunk(input, []string{"--size", itoa(size), "--overlap", itoa(overlap), "--by", "paragraph"})
+			if code != 0 {
+				t.Fatalf("size=%d: exit %d, stderr %q", size, code, stderr)
+			}
+			checkChunkInvariants(t, input, parseRecords(t, stdout), size)
+		}
+	}
+}
+
+// TestByParagraphKeepsSeparators checks packed paragraphs keep the blank line
+// between them instead of being glued together.
+func TestByParagraphKeepsSeparators(t *testing.T) {
+	input := "First para.\n\nSecond para.\n\nThird."
+	code, stdout, _ := runChunk(input, []string{"--size", "100", "--by", "paragraph"})
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	records := parseRecords(t, stdout)
+	if len(records) != 1 || records[0].Text != input {
+		t.Errorf("got %+v, want one chunk with text %q", records, input)
+	}
+	checkChunkInvariants(t, input, records, 100)
+}
+
+// randomMixedText builds text from a mix of scripts so token windows land
+// inside multi-byte characters often.
+func randomMixedText(rng *rand.Rand, n int) string {
+	alphabet := []rune("ab z.\n🎉🚀🔥東京日本語यहएकΕλληνικά한국어é")
+	var sb strings.Builder
+	for i := 0; i < n; i++ {
+		sb.WriteRune(alphabet[rng.Intn(len(alphabet))])
+	}
+	return sb.String()
+}
+
+// TestPropertyMultiByte: for random mixed-script input, any size and overlap,
+// the chunk invariants hold and --overlap 0 rejoins to the input exactly.
+func TestPropertyMultiByte(t *testing.T) {
+	rng := rand.New(rand.NewSource(7))
+	for i := 0; i < 60; i++ {
+		input := strings.TrimSuffix(randomMixedText(rng, 1+rng.Intn(400)), "\n")
+		if input == "" {
+			continue
+		}
+		size := 1 + rng.Intn(40)
+		overlap := rng.Intn(size)
+		args := []string{"--size", itoa(size), "--overlap", itoa(overlap)}
+		if i%3 == 0 {
+			args = append(args, "--by", "paragraph")
+		}
+		code, stdout, stderr := runChunk(input, args)
+		if code != 0 {
+			t.Fatalf("iteration %d: exit %d, stderr %q", i, code, stderr)
+		}
+		records := parseRecords(t, stdout)
+		checkChunkInvariants(t, input, records, size)
+
+		code, stdout, _ = runChunk(input, []string{"--size", itoa(size)})
+		if code != 0 {
+			t.Fatalf("iteration %d: exit %d", i, code)
+		}
+		if got := joinTexts(parseRecords(t, stdout)); got != input {
+			t.Errorf("iteration %d size=%d: rejoin differs\n got %q\nwant %q", i, size, got, input)
+		}
+	}
+}
+
+// FuzzChunk: never panic, never hang, keep the invariants, finish fast.
+func FuzzChunk(f *testing.F) {
+	for _, s := range multiByteSamples {
+		f.Add(strings.Repeat(s, 5), 3, 1)
+	}
+	f.Add("hello world", 1, 0)
+	f.Add("a\n\nb\n\n\n\nc", 2, 1)
+	f.Add("\xff\xfe broken \xe0\xa4", 2, 0)
+
+	f.Fuzz(func(t *testing.T, input string, size, overlap int) {
+		if len(input) > 4096 {
+			return
+		}
+		size = 1 + abs(size)%50
+		overlap = abs(overlap) % size
+		start := time.Now()
+		code, stdout, _ := runChunk(input, []string{"--size", itoa(size), "--overlap", itoa(overlap)})
+		if code != 0 {
+			t.Fatalf("exit %d", code)
+		}
+		records := parseRecords(t, stdout)
+		if utf8.ValidString(input) {
+			checkChunkInvariants(t, input, records, size)
+		}
+		if time.Since(start) > time.Second {
+			t.Errorf("took %v, want under 1s", time.Since(start))
+		}
+	})
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// TestModelFlag checks --model picks the encoding: the Hindi sentence is 24
+// cl100k_base tokens and 9 o200k_base tokens.
+func TestModelFlag(t *testing.T) {
+	const hindi = "यह एक साधारण वाक्य है।"
+	for args, want := range map[string]string{"": `"tokens":9`, "gpt-5": `"tokens":9`, "gpt-4": `"tokens":24`} {
+		code, stdout, _ := runChunk(hindi, []string{"--size", "100", "--model", args})
+		if code != 0 || !strings.Contains(stdout, want) {
+			t.Errorf("--model %q: exit %d stdout %q, want %s", args, code, stdout, want)
+		}
+	}
+	if code, stdout, _ := runChunk(hindi, []string{"--size", "100", "-m", "llama3"}); code != 2 || stdout != "" {
+		t.Errorf("unknown model: exit %d stdout %q, want exit 2 and no output", code, stdout)
+	}
 }

@@ -45,11 +45,11 @@ vrk epoch '+3d' --iso
 
 ## Exit codes
 
-| Code | Meaning                                                           |
-|------|-------------------------------------------------------------------|
-| 0    | Success                                                           |
-| 1    | Runtime error (I/O failure)                                       |
-| 2    | Unsupported format, ambiguous timezone, --tz without --iso/--json |
+| Code | Meaning                                                                                                  |
+|------|----------------------------------------------------------------------------------------------------------|
+| 0    | Success                                                                                                  |
+| 1    | Invalid input value (unsupported format, invalid date, missing sign on a relative offset) or I/O failure |
+| 2    | No input, unknown flag, ambiguous timezone, --tz without --iso/--json                                    |
 
 ## Flags
 
@@ -76,6 +76,8 @@ vrk epoch accepts four input forms:
 | ISO datetime | `2025-02-20T10:00:00Z` | RFC 3339 |
 | Relative offset | `+3d`, `-1h` | From now (or from --at) |
 
+Integers with an absolute value from 100000000000 up to (not including) 100000000000000 are read as milliseconds (JavaScript `Date.now()`), so `vrk epoch --iso 1792042275000` prints `2026-10-15T05:31:15Z`. Ten-digit values stay seconds. With `--json`, millisecond input adds `"unit":"ms"`.
+
 Relative units: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks).
 
 ## How it works
@@ -97,15 +99,16 @@ $ vrk epoch '2025-02-20T00:00:00Z'
 ### Relative time
 
 ```bash
-$ vrk epoch '+3d'
-1775152019
+$ vrk epoch '+3d' --at 1740009600
+1740268800
 
-$ vrk epoch '+3d' --iso
-2026-04-02T17:46:59Z
+$ vrk epoch '+3d' --at 1740009600 --iso
+2025-02-23T00:00:00Z
 ```
 
 ### Current time
 
+<!-- doccheck: skip (wall-clock time) -->
 ```bash
 $ vrk epoch --now
 1774892819
@@ -114,8 +117,8 @@ $ vrk epoch --now
 ### JSON output
 
 ```bash
-$ vrk epoch '+3d' --json
-{"input":"+3d","unix":1775152019,"iso":"2026-04-02T17:46:59Z"}
+$ vrk epoch '+3d' --at 1740009600 --json
+{"input":"+3d","unix":1740268800,"iso":"2025-02-23T00:00:00Z","ref":"1740009600"}
 ```
 
 ### Timezone conversion
@@ -175,7 +178,16 @@ Invalid input:
 
 ```bash
 $ vrk epoch 'not-a-date'
-error: epoch: unrecognized input format: "not-a-date"
+error: epoch: unsupported format "not-a-date": natural language not supported; accepted forms: unix integer, +3d/-3d, YYYY-MM-DD, YYYY-MM-DDTHH:MM:SSZ
+$ echo $?
+1
+```
+
+A date that does not exist is also exit 1:
+
+```bash
+$ vrk epoch 2026-02-29
+error: epoch: invalid date "2026-02-29"
 $ echo $?
 1
 ```
@@ -184,7 +196,7 @@ Missing input:
 
 ```bash
 $ vrk epoch
-usage error: epoch: no input provided
+usage error: epoch: no input: provide as argument or via stdin
 $ echo $?
 2
 ```

@@ -251,27 +251,27 @@ func isTokenValid(payload map[string]any) bool {
 func decodeJWT(token string) (header, payload map[string]any, signature string, err error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, nil, "", fmt.Errorf("invalid JWT: expected 3 parts, got %d", len(parts))
+		return nil, nil, "", fmt.Errorf("jwt: invalid token: expected 3 parts, got %d", len(parts))
 	}
 
 	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("invalid JWT: cannot decode header: %v", err)
+		return nil, nil, "", errors.New("jwt: invalid token: header is not base64url")
 	}
 	dec := json.NewDecoder(bytes.NewReader(headerBytes))
 	dec.UseNumber()
 	if err := dec.Decode(&header); err != nil {
-		return nil, nil, "", fmt.Errorf("invalid JWT: header is not valid JSON: %v", err)
+		return nil, nil, "", errors.New("jwt: invalid token: header is not valid JSON")
 	}
 
 	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("invalid JWT: cannot decode payload: %v", err)
+		return nil, nil, "", errors.New("jwt: invalid token: payload is not base64url")
 	}
 	dec = json.NewDecoder(bytes.NewReader(payloadBytes))
 	dec.UseNumber()
 	if err := dec.Decode(&payload); err != nil {
-		return nil, nil, "", fmt.Errorf("invalid JWT: payload is not valid JSON: %v", err)
+		return nil, nil, "", errors.New("jwt: invalid token: payload is not valid JSON")
 	}
 
 	return header, payload, parts[2], nil

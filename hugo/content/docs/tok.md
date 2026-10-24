@@ -20,7 +20,7 @@ A 15,000-token document goes to a model with a 4,096-token window. No error. The
 
 ## The solution
 
-`vrk tok` counts tokens and gates pipelines in 5ms. Uses cl100k_base (exact for GPT-4, ~95% for Claude). Without `--check` it prints the count. With `--check N` it passes input through if within budget, or exits 1 with empty stdout if over, killing the pipeline before it wastes an API call.
+`vrk tok` counts tokens and gates pipelines in about 25 ms. Counts with o200k_base by default, the tokenizer of GPT-4o, GPT-4.1, GPT-5 and the o-series; `--model gpt-4` or `gpt-3.5-turbo` switches to cl100k_base. Exact for OpenAI models, an estimate for Claude. Without `--check` it prints the count. With `--check N` it passes input through if within budget, or exits 1 with empty stdout if over, killing the pipeline before it wastes an API call.
 
 ## Before and after
 
@@ -46,20 +46,20 @@ cat system-prompt.txt | vrk tok --check 8000
 
 ## Exit codes
 
-| Code | Meaning                                                     |
-|------|-------------------------------------------------------------|
-| 0    | Measurement success; or --check within limit                |
-| 1    | --check over limit; I/O error; tokenizer error              |
-| 2    | Usage error - unknown flag, no stdin, --check without value |
+| Code | Meaning                                                                      |
+|------|------------------------------------------------------------------------------|
+| 0    | Measurement success; or --check within limit                                 |
+| 1    | --check over limit; I/O error; tokenizer error                               |
+| 2    | Usage error - unknown flag, unknown --model, no stdin, --check without value |
 
 ## Flags
 
-| Flag      | Short | Type   | Description                                                              |
-|-----------|-------|--------|--------------------------------------------------------------------------|
-| `--check` |       | int    | Pass input through if ≤N tokens; exit 1 with empty stdout if over        |
-| `--model` |       | string | Tokenizer - cl100k_base (default)                                        |
-| `--json`  | -j    | bool   | Emit JSON (measurement) or JSON error (gate). Does not wrap passthrough. |
-| `--quiet` | -q    | bool   | Suppress stderr on failure                                               |
+| Flag      | Short | Type   | Description                                                                                                   |
+|-----------|-------|--------|---------------------------------------------------------------------------------------------------------------|
+| `--check` |       | int    | Pass input through if ≤N tokens; exit 1 with empty stdout if over                                             |
+| `--model` | -m    | string | OpenAI model or encoding to count for: gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo, o200k_base (default), cl100k_base |
+| `--json`  | -j    | bool   | Emit JSON (measurement) or JSON error (gate). Does not wrap passthrough.                                      |
+| `--quiet` | -q    | bool   | Suppress stderr on failure                                                                                    |
 
 
 <!-- notes - edit in notes/tok.notes.md -->
@@ -72,10 +72,10 @@ Counts tokens and prints the number to stdout:
 
 ```bash
 $ cat system-prompt.txt | vrk tok
-8847
+11
 
 $ cat system-prompt.txt | vrk tok --json
-{"tokens":8847,"model":"cl100k_base"}
+{"tokens":11,"model":"o200k_base"}
 ```
 
 ### Gate mode (--check N)
@@ -89,7 +89,7 @@ short input
 
 # Over budget - empty stdout, exit 1
 $ printf 'You are a helpful assistant.' | vrk tok --check 3
-# (no stdout)
+tok: 6 tokens exceeds limit of 3
 $ echo $?
 1
 ```
@@ -106,7 +106,7 @@ In measurement mode, `--json` wraps the count in a JSON object:
 
 ```bash
 $ echo 'Hello, world!' | vrk tok --json
-{"tokens":4,"model":"cl100k_base"}
+{"tokens":4,"model":"o200k_base"}
 ```
 
 When `--check` fails and `--json` is active, the error goes to stdout as JSON (stderr stays empty):

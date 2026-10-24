@@ -72,6 +72,7 @@ vrk grab https://blog.example.com/llm-best-practices | vrk tok
 
 ### Markdown (default)
 
+<!-- doccheck: skip (real network fetch) -->
 ```bash
 $ vrk grab https://example.com/blog/llm-pipelines
 # Getting Started with LLM Pipelines
@@ -87,6 +88,7 @@ Clean markdown - headers, paragraphs, links, and code blocks preserved. Ready to
 
 ### Plain text (--text)
 
+<!-- doccheck: skip (real network fetch) -->
 ```bash
 $ vrk grab --text https://example.com/blog/llm-pipelines
 Getting Started with LLM Pipelines
@@ -168,18 +170,20 @@ done
 
 Unreachable URL:
 
+<!-- doccheck: skip (needs DNS) -->
 ```bash
 $ vrk grab https://nonexistent.example.com/page
-error: grab: Get "https://nonexistent.example.com/page": dial tcp: lookup nonexistent.example.com: no such host
+error: grab: fetch failed: Get "https://nonexistent.example.com/page": lookup nonexistent.example.com: no such host
 $ echo $?
 1
 ```
 
 HTTP error:
 
+<!-- doccheck: skip (real network fetch) -->
 ```bash
 $ vrk grab https://example.com/this-page-does-not-exist
-error: grab: HTTP 404
+error: grab: HTTP 404: Not Found
 $ echo $?
 1
 ```

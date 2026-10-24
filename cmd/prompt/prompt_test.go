@@ -169,7 +169,7 @@ func TestExplainKeyNotLeaked(t *testing.T) {
 
 // TestBudgetHardGate checks that --budget 1 exits 1 (token count exceeds budget)
 // both with and without --fail. Budget check fires before any API call or key check.
-// "hello world" tokenizes to 2 tokens (cl100k_base), so budget 1 is exceeded.
+// "hello world" tokenizes to 2 tokens, so budget 1 is exceeded.
 func TestBudgetHardGate(t *testing.T) {
 	// (a) with --fail
 	_, stderr, code := runPrompt(t, map[string]string{}, []string{"--budget", "1", "--fail"}, "hello world")
@@ -1031,7 +1031,7 @@ func TestFieldEmptyInput(t *testing.T) {
 // TestFieldBudgetExceeded checks that --budget is enforced per record and
 // exits 1 before making an API call.
 func TestFieldBudgetExceeded(t *testing.T) {
-	// "hello world" is ~2 tokens (cl100k_base), budget of 1 exceeds.
+	// "hello world" is ~2 tokens, budget of 1 exceeds.
 	stdin := "{\"text\":\"hello world\"}\n"
 	_, stderr, code := runPrompt(t, map[string]string{},
 		[]string{"--field", "text", "--budget", "1", "--endpoint", "http://localhost:1", "--model", "test"}, stdin)

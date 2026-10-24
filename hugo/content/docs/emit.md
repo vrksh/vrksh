@@ -69,7 +69,7 @@ run-pipeline 2>&1 | vrk emit --tag deploy --parse-level
 
 ```bash
 $ echo 'Application started' | vrk emit
-{"ts":"2026-03-30T17:48:56.194Z","level":"info","msg":"Application started"}
+{"ts":"...","level":"info","msg":"Application started"}
 ```
 
 Every line becomes a JSONL record with an ISO timestamp and log level.
@@ -78,7 +78,7 @@ Every line becomes a JSONL record with an ISO timestamp and log level.
 
 ```bash
 $ echo 'Connection refused' | vrk emit --level error
-{"ts":"2026-03-30T17:48:56.194Z","level":"error","msg":"Connection refused"}
+{"ts":"...","level":"error","msg":"Connection refused"}
 ```
 
 Levels: `debug`, `info` (default), `warn`, `error`.
@@ -87,10 +87,10 @@ Levels: `debug`, `info` (default), `warn`, `error`.
 
 ```bash
 $ printf 'Application started\nERROR: database connection failed\nWARNING: cache miss rate high\nProcessing complete\n' | vrk emit --parse-level
-{"ts":"2026-03-30T17:48:56.194Z","level":"info","msg":"Application started"}
-{"ts":"2026-03-30T17:48:56.195Z","level":"error","msg":"database connection failed"}
-{"ts":"2026-03-30T17:48:56.195Z","level":"warn","msg":"cache miss rate high"}
-{"ts":"2026-03-30T17:48:56.195Z","level":"info","msg":"Processing complete"}
+{"ts":"...","level":"info","msg":"Application started"}
+{"ts":"...","level":"error","msg":"database connection failed"}
+{"ts":"...","level":"warn","msg":"cache miss rate high"}
+{"ts":"...","level":"info","msg":"Processing complete"}
 ```
 
 Recognizes `ERROR`, `WARN`, `WARNING`, `INFO`, and `DEBUG` prefixes. Strips the prefix from the message.
@@ -99,7 +99,7 @@ Recognizes `ERROR`, `WARN`, `WARNING`, `INFO`, and `DEBUG` prefixes. Strips the 
 
 ```bash
 $ echo 'Fetching data' | vrk emit --tag fetch
-{"ts":"2026-03-30T17:48:56.194Z","level":"info","tag":"fetch","msg":"Fetching data"}
+{"ts":"...","level":"info","tag":"fetch","msg":"Fetching data"}
 ```
 
 Tags let you filter logs by stage: `jq 'select(.tag == "fetch")'`.
@@ -107,7 +107,7 @@ Tags let you filter logs by stage: `jq 'select(.tag == "fetch")'`.
 ### Combined: tag + parse-level
 
 ```bash
-$ run-deploy.sh 2>&1 | vrk emit --tag deploy --parse-level
+$ printf 'INFO Starting deployment\nERROR Container health check failed\nWARN Rolling back to previous version\n' | vrk emit --tag deploy --parse-level
 {"ts":"...","level":"info","tag":"deploy","msg":"Starting deployment"}
 {"ts":"...","level":"error","tag":"deploy","msg":"Container health check failed"}
 {"ts":"...","level":"warn","tag":"deploy","msg":"Rolling back to previous version"}
@@ -153,9 +153,10 @@ echo "$RESULT" | vrk emit --tag summarize --level info
 
 Interactive terminal with no input:
 
+<!-- doccheck: skip (TTY-only behaviour) -->
 ```bash
 $ vrk emit
-usage error: emit: no input: pipe text to stdin
+usage error: emit: no input: pipe lines to stdin
 $ echo $?
 2
 ```
@@ -164,7 +165,7 @@ Invalid log level:
 
 ```bash
 $ echo 'test' | vrk emit --level critical
-usage error: emit: invalid level "critical" (use debug, info, warn, error)
+usage error: emit: unknown level "critical": must be debug, info, warn, or error
 $ echo $?
 2
 ```

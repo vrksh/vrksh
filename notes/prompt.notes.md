@@ -2,6 +2,7 @@
 
 ### Simple question
 
+<!-- doccheck: skip (real LLM output, the mock endpoint cannot answer questions) -->
 ```bash
 $ echo 'What is the capital of France?' | vrk prompt
 Paris.
@@ -19,6 +20,7 @@ cat user-feedback.csv | vrk prompt --system @prompts/analyze-feedback.txt
 
 Force the LLM to return JSON matching a specific shape:
 
+<!-- doccheck: skip (real LLM output, the mock endpoint cannot fill a schema sent as system text) -->
 ```bash
 $ cat bug-report.txt | vrk prompt \
     --system 'Extract structured fields from this bug report' \
@@ -26,7 +28,13 @@ $ cat bug-report.txt | vrk prompt \
 {"severity":"high","component":"auth","summary":"Login fails after password reset","reproducible":true}
 ```
 
-If the LLM returns JSON that doesn't match the schema, prompt exits 1. Combine with `--retry` to automatically re-prompt:
+If the response does not match the schema, what happens depends on `--fail` and `--retry`:
+
+- Neither set: prompt prints the response anyway, warns on stderr, and exits 0. `--schema` alone does not fail the pipeline.
+- `--fail`: prompt exits 1 and prints nothing to stdout.
+- `--retry N`: prompt re-sends up to N more times. If no attempt matches, it exits 1 with `response does not match schema after N+1 attempts`.
+
+Combine with `--retry` to automatically re-prompt:
 
 ```bash
 cat bug-report.txt | vrk prompt \
@@ -35,10 +43,19 @@ cat bug-report.txt | vrk prompt \
   --retry 3
 ```
 
-On each retry, temperature escalates slightly to encourage the model to try a different approach.
+On each retry, temperature rises by 0.1 (0, 0.1, 0.2, and so on, up to 1) to encourage the model to try a different approach.
+
+This works the same on every provider. Only the request differs:
+
+- Anthropic: the schema keys and types are added to the system prompt as instructions.
+- OpenAI: the schema is sent as `response_format` with a JSON Schema built from your keys (`type: object`, every key `required`, `additionalProperties: false`). `strict` is on only when every type is `string`, `number`, `integer`, or `boolean`.
+- `--endpoint`: the schema instructions are sent as a system message (after your `--system` text, separated by a blank line), with `response_format: {"type":"json_object"}`.
+
+In every case vrk checks the reply itself, so `--fail` and `--retry` behave the same everywhere.
 
 ### See what would be sent without calling the API
 
+<!-- doccheck: skip (output holds the provider endpoint, which differs per setup) -->
 ```bash
 $ echo 'test input' | vrk prompt --explain
 ```
@@ -64,8 +81,8 @@ cat article.md | vrk prompt -m llama3 --endpoint http://localhost:11434/v1
 Pre-flight token check. If the prompt exceeds N tokens, prompt exits 1 without calling the API. Saves money on obviously-too-large inputs.
 
 ```bash
-$ cat huge-document.txt | vrk prompt --budget 4000 --system 'Summarize'
-error: prompt: 23847 tokens exceeds budget 4000
+$ cat huge-document.txt | vrk prompt --budget 10 --system 'Summarize'
+error: prompt: 35 tokens exceeds budget of 10
 $ echo $?
 1
 ```
@@ -85,7 +102,7 @@ echo 'Extract entities' | vrk prompt --schema entities-schema.json
 
 ### --retry
 
-Only meaningful with `--schema`. Retries N times when the response doesn't match the schema, escalating temperature on each attempt:
+Only meaningful with `--schema`. Retries N times when the response doesn't match the schema, escalating temperature on each attempt. If the last attempt still does not match, prompt exits 1, even without `--fail`:
 
 ```bash
 cat input.txt | vrk prompt \
@@ -95,7 +112,7 @@ cat input.txt | vrk prompt \
 
 ### --fail / -f
 
-Exit 1 on non-2xx API response or schema mismatch instead of printing partial output. Use in CI or pipelines where partial results are worse than no results.
+Exit 1 on schema mismatch instead of printing the response. API errors (non-2xx) always exit 1, with or without `--fail`. Use in CI or pipelines where a wrong-shaped result is worse than no result.
 
 ### --json / -j
 
@@ -103,7 +120,7 @@ Wraps the response in a JSON envelope with metadata (model used, token counts, t
 
 ### --endpoint
 
-Point prompt at any OpenAI-compatible API. Works with Ollama, vLLM, LiteLLM, or any provider that speaks the OpenAI chat completions format:
+Point prompt at any OpenAI-compatible API. Works with Ollama, vLLM, LiteLLM, or any provider that speaks the OpenAI chat completions format. `--schema`, `--fail`, and `--retry` work here too. `--model` is required. Set `VRK_LLM_KEY` if the server needs a bearer token:
 
 ```bash
 cat notes.txt | vrk prompt \
@@ -162,9 +179,10 @@ done
 
 API key missing:
 
+<!-- doccheck: skip (doccheck always sets a mock endpoint and key) -->
 ```bash
 $ echo 'hello' | ANTHROPIC_API_KEY= vrk prompt
-error: prompt: ANTHROPIC_API_KEY or OPENAI_API_KEY must be set
+error: prompt: no API key found: set ANTHROPIC_API_KEY or OPENAI_API_KEY
 $ echo $?
 1
 ```
@@ -172,8 +190,8 @@ $ echo $?
 Budget exceeded:
 
 ```bash
-$ cat huge-file.txt | vrk prompt --budget 100 --system 'Summarize'
-error: prompt: 23847 tokens exceeds budget 100
+$ cat huge-file.txt | vrk prompt --budget 20 --system 'Summarize'
+error: prompt: 35 tokens exceeds budget of 20
 $ echo $?
 1
 ```
@@ -186,3 +204,14 @@ error: prompt: response does not match schema
 $ echo $?
 1
 ```
+
+Empty prompt (nothing on stdin, or only whitespace). Nothing is sent:
+
+```bash
+$ printf '' | vrk prompt
+error: prompt: empty prompt, nothing sent
+$ echo $?
+1
+```
+
+With `--field`, a record whose field is empty is skipped with a warning (`prompt: line N: empty prompt, skipped`) and processing continues.

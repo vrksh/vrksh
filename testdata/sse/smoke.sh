@@ -259,11 +259,31 @@ exit_code=$(set +e; printf 'data: {"ok":true}\n\n' | "$VRK" sse --field data.ok 
 assert_exit        "field bool: exit 0"    0       "$exit_code"
 assert_stdout_equals "field bool: value"   "true"  "$stdout"
 
-# Path not found → empty output, exit 0
-stdout=$(printf 'data: {"a":1}\n\n' | "$VRK" sse --field data.missing 2>/dev/null)
+# Path matched no event of a non-empty stream → empty output, exit 1
+stdout=$(printf 'data: {"a":1}\n\n' | "$VRK" sse --field data.missing 2>/dev/null || true)
 exit_code=$(set +e; printf 'data: {"a":1}\n\n' | "$VRK" sse --field data.missing >/dev/null 2>&1; echo $?)
-assert_exit        "field missing: exit 0"        0  "$exit_code"
+assert_exit        "field missing: exit 1"        1  "$exit_code"
 assert_stdout_empty "field missing: stdout empty"    "$stdout"
+
+# Array index, bracket and dot forms
+stream_openai() {
+  printf 'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n'
+}
+stdout=$(stream_openai | "$VRK" sse --field 'data.choices[0].delta.content' 2>/dev/null)
+assert_stdout_equals "field [0] form" "Hi" "$stdout"
+stdout=$(stream_openai | "$VRK" sse --field data.choices.0.delta.content 2>/dev/null)
+assert_stdout_equals "field .0 form" "Hi" "$stdout"
+
+# --raw: values written exactly, newlines inside values survive
+stream_md() {
+  for t in '# Title' '\n\n' 'First para.'; do
+    printf 'data: {"t":"%s"}\n\n' "$t"
+  done
+}
+rawfile=$(mktemp)
+stream_md | "$VRK" sse --field data.t --raw >"$rawfile" 2>/dev/null
+if printf '# Title\n\nFirst para.' | cmp -s - "$rawfile"; then ok "--raw: exact bytes"; else fail "--raw: exact bytes" "$(od -c "$rawfile" | head -3)"; fi
+rm -f "$rawfile"
 
 # --field combined with --event
 stream_ping_delta() {
@@ -309,10 +329,10 @@ assert_exit "non-json: exit 0" 0 "$exit_code"
 assert_stdout_contains "non-json: data is string" '"not-json"' "$stdout"
 assert_valid_jsonl     "non-json: still valid JSON record" "$stdout"
 
-# --field on non-JSON data → skip silently
-stdout=$(printf 'data: not-json\n\n' | "$VRK" sse --field data.text 2>/dev/null)
+# --field on non-JSON data → no output, exit 1 (no event matched)
+stdout=$(printf 'data: not-json\n\n' | "$VRK" sse --field data.text 2>/dev/null || true)
 exit_code=$(set +e; printf 'data: not-json\n\n' | "$VRK" sse --field data.text >/dev/null 2>&1; echo $?)
-assert_exit        "non-json field: exit 0"        0  "$exit_code"
+assert_exit        "non-json field: exit 1"        1  "$exit_code"
 assert_stdout_empty "non-json field: stdout empty"    "$stdout"
 
 # ------------------------------------------------------------

@@ -190,11 +190,11 @@ exit_code=$(set +e; "$VRK" epoch +6h --at "$ANCHOR" > /dev/null 2>&1; echo $?)
 assert_exit "+6h arg: exit 0" 0 "$exit_code"
 assert_stdout_equals "+6h arg: value" "1740031200" "$stdout"
 
-# Bare unsigned (no sign) → exit 2
+# Bare unsigned (no sign) → exit 1
 stdout=$(echo '3d' | "$VRK" epoch 2>/dev/null) || true
 stderr=$(set +e; echo '3d' | "$VRK" epoch 2>&1 >/dev/null; true)
 exit_code=$(set +e; echo '3d' | "$VRK" epoch > /dev/null 2>&1; echo $?)
-assert_exit "unsigned 3d: exit 2" 2 "$exit_code"
+assert_exit "unsigned 3d: exit 1" 1 "$exit_code"
 assert_stdout_empty "unsigned 3d: stdout empty" "$stdout"
 assert_stderr_contains "unsigned 3d: stderr sign required" "sign required" "$stderr"
 
@@ -253,7 +253,7 @@ assert_stderr_contains "--tz without --iso: stderr mentions --iso" "--tz require
 stdout=$(echo 'next tuesday' | "$VRK" epoch 2>/dev/null) || true
 stderr=$(set +e; echo 'next tuesday' | "$VRK" epoch 2>&1 >/dev/null; true)
 exit_code=$(set +e; echo 'next tuesday' | "$VRK" epoch > /dev/null 2>&1; echo $?)
-assert_exit "natural language: exit 2" 2 "$exit_code"
+assert_exit "natural language: exit 1" 1 "$exit_code"
 assert_stdout_empty "natural language: stdout empty" "$stdout"
 assert_stderr_contains "natural language: stderr mentions 'natural language'" "natural language" "$stderr"
 
@@ -349,11 +349,19 @@ assert_stdout_contains "--json --tz: iso uses offset"  '2025-02-20T05:30:00+05:3
 exit_code=$(set +e; "$VRK" epoch "$ANCHOR" --json --tz America/New_York > /dev/null 2>&1; echo $?)
 assert_exit "--json --tz without --iso: exit 0" 0 "$exit_code"
 
+# Milliseconds and invalid dates
+stdout=$("$VRK" epoch --iso 1792042275000 2>/dev/null)
+assert_stdout_equals "13-digit ms: iso" "2026-10-15T05:31:15Z" "$stdout"
+stderr=$(set +e; "$VRK" epoch 2026-02-29 2>&1 >/dev/null; true)
+exit_code=$(set +e; "$VRK" epoch 2026-02-29 > /dev/null 2>&1; echo $?)
+assert_exit "invalid date: exit 1" 1 "$exit_code"
+assert_stderr_contains "invalid date: stderr" "invalid date" "$stderr"
+
 # Error + --json: JSON to stdout, stderr empty
 stdout=$(set +e; echo '3d' | "$VRK" epoch --json 2>/dev/null; true)
 stderr=$(set +e; echo '3d' | "$VRK" epoch --json 2>&1 >/dev/null; true)
 exit_code=$(set +e; echo '3d' | "$VRK" epoch --json > /dev/null 2>&1; echo $?)
-assert_exit            "--json error: exit 2"          2         "$exit_code"
+assert_exit            "--json error: exit 1"          1         "$exit_code"
 assert_stderr_empty    "--json error: stderr empty"              "$stderr"
 assert_stdout_contains "--json error: error key"       '"error"' "$stdout"
 assert_stdout_contains "--json error: code key"        '"code"'  "$stdout"
@@ -387,11 +395,11 @@ fi
 echo ""
 echo "--- --quiet ---"
 
-# Invalid input with quiet should exit 2 and have no stderr
+# Invalid input with quiet should exit 1 and have no stderr
 stdout=$("$VRK" epoch --quiet "3d" 2>/dev/null) || true
 stderr=$(set +e; "$VRK" epoch --quiet "3d" 2>&1 >/dev/null; true)
 exit_code=$(set +e; "$VRK" epoch --quiet "3d" > /dev/null 2>&1; echo $?)
-assert_exit            "--quiet error: exit 2"          2        "$exit_code"
+assert_exit            "--quiet error: exit 1"          1        "$exit_code"
 assert_stdout_empty    "--quiet error: stdout empty"             "$stdout"
 assert_stderr_empty    "--quiet error: stderr empty"             "$stderr"
 

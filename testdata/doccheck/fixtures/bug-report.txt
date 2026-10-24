@@ -1,0 +1,1 @@
+Login fails on Safari 17. Steps: open /login, enter valid credentials, press Enter. Expected: dashboard. Actual: blank page and a console error.

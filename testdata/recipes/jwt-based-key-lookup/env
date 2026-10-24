@@ -1,0 +1,2 @@
+TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6NDEwMjQ0NDgwMH0.c2ln
+vrk kv set user:alice '{"plan":"pro"}' >/dev/null

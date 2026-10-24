@@ -40,7 +40,7 @@ internal/
     plaintext/
       plaintext.go              — StripMarkdown() — goldmark-based markdown-to-plain-text
     tokcount/
-      tokcount.go               — CountTokens(), EncodeTokens(), DecodeTokens() — cl100k_base BPE
+      tokcount.go               — ForModel(), O200k/Cl100k Encode/Count/Decode; CountTokens() uses o200k_base
     testutil/
       contract.go               — RunContractTests, ContractCase, assertion helpers
 testdata/
@@ -112,7 +112,10 @@ make lint                  # golangci-lint
 make cross                 # verify cross-compilation for all targets - run after every session
 make fuzz                  # fuzz all required tools for 60s each
 make smoke                 # end-to-end smoke tests against the real binary (runs make build first)
-make check                 # build + test + lint + cross + smoke - run before every commit
+make doccheck              # run every `$ vrk ...` example in the generated docs against the binary and a mock LLM
+make recipecheck           # run every recipe's steps, then its testdata/recipes/<slug>/expect.sh
+make acceptance            # scripts/acceptance.sh - release acceptance checks
+make check                 # build + test + lint + cross + smoke + doccheck + recipecheck - run before every commit
 make clean                 # remove build artifacts
 ```
 
@@ -255,7 +258,7 @@ Read the source in `internal/shared/` for full signatures. Key functions and whe
 | `SilenceStderr(quiet)` | flags.go | `defer shared.SilenceStderr(quietFlag)()` |
 | `IsTerminal` | terminal.go | Var, override in tests: `var isTerminal = shared.IsTerminal` |
 | `plaintext.StripMarkdown(s)` | plaintext/ | Markdown to plain text. Uses goldmark. |
-| `tokcount.CountTokens(s)` | tokcount/ | cl100k_base token count. Embedded vocab, no network. |
+| `tokcount.CountTokens(s)` | tokcount/ | o200k_base token count. `ForModel(m)` picks cl100k_base for gpt-4/3.5. Embedded vocab, no network. |
 
 ## JSON output conventions
 
@@ -277,7 +280,7 @@ The last record emitted when `--json` is active:
 
 A single JSON object with primary data and metadata:
 ```json
-{"tokens":42,"model":"cl100k_base","budget":4000,"over_budget":false}
+{"tokens":42,"model":"o200k_base","budget":4000,"over_budget":false}
 ```
 
 ### `--json` error envelope
@@ -293,7 +296,7 @@ One tool per commit. Run `make check` before every commit.
 
 ```bash
 # Before committing
-make check                 # must pass - build + test + lint + cross + smoke
+make check                 # must pass - build + test + lint + cross + smoke + doccheck + recipecheck
 
 # Commit format: feat(<tool>): <what it does>
 git add .
@@ -396,6 +399,12 @@ Intentionally absent: `--config`, `--verbose`, `--output <file>`, `--interactive
   ```
   This applies to `jwt`, `epoch`, `kv`, `prompt --json`, and any tool that unmarshals JSONL records.
 - **SSE streams in smoke tests**: never store SSE streams in bash variables (`$()` strips trailing `\n\n` which breaks SSE dispatch). Use bash functions that `printf` the stream and pipe directly into the binary.
+- **Streaming LLM text out of `sse`**: use `sse --field data.choices[0].delta.content --raw`. Without `--raw` each value gets a newline and the reassembled text is wrong.
+- **`coax` runs argv, not a shell string.** The args after `--` go straight to `exec.Command`. Pipes, redirects and builtins need `-- sh -c '...'`. `--until` is the only shell string coax takes. Don't add a shell join back.
+- **Long lines.** `ScanLines()` accepts lines up to 64 MiB (`shared.MaxLineBytes`) and errors past that. Don't build your own `bufio.Scanner` with the 64 KiB default.
+- **Version string.** `main.version` defaults to `dev` and is set with `-ldflags "-X main.version=..."`: by goreleaser at release time, and from `git describe` by `make build`. Never hard-code a version in a tool; `vrk --version` and the MCP server both read this var.
+- **Doc examples are tests.** Every `$ vrk ...` line in a bash/sh fence in `notes/*.notes.md` runs under `make doccheck`. Its stdin is not a TTY and it has no network. For an example that can't run there (TTY-only, needs DNS, mutates the repo), put `<!-- doccheck: skip (reason) -->` on the line above the fence. Run `make generate` after editing notes or schema.
+- **Recipes are tests.** Each recipe in `hugo/data/recipes.yaml` needs `testdata/recipes/<slug>/` with an `expect.sh`. Fixtures there are copied into a temp dir; an optional `setup.sh` runs first for state fixtures can't hold (git repos, servers). Point URLs at `$SITE_URL` instead of the network. The mock LLM only returns JSON when the system prompt contains a flat shape like `{"summary":"string"}`.
 - **Two `grab` calls in count-comparison smoke tests**: cache the shared input to a `mktemp` file and pipe both invocations from it. Two separate fetches of the same URL can disagree if anything changes between them.
 
 ## Build order — tests before implementation

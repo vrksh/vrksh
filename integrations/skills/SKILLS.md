@@ -3,6 +3,8 @@
 This file is embedded in the `vrk` binary and served via `vrk --skills`.
 It is the agent-facing reference for using vrksh tools in AI pipelines.
 
+Running bare `vrk` with no arguments prints the tool list to stdout and exits 0; `vrk help`, `vrk -h` and `--help` also print to stdout. `vrk --version` (or `vrk version`) prints the version. Line-based tools (mask, emit, sip, throttle, slug, recase, sse, jsonl, validate, assert) accept lines up to 64 MiB; a longer line fails with `line exceeds 64 MiB limit`.
+
 ---
 
 ## jwt — JWT Inspector
@@ -125,12 +127,13 @@ Errors with `--json` active: `{"error":"msg","code":N}` to stdout; stderr empty.
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 2 | Usage error — unsupported format, missing sign, ambiguous timezone, no input, `--tz` without `--iso` or `--json` |
+| 1 | Bad input value - unsupported format, invalid date, relative offset without a sign |
+| 2 | Usage error - unknown flag, no input, bad `--tz` or `--at`, ambiguous timezone, `--tz` without `--iso` or `--json` |
 
 ### Relative time format
 
 Must include a sign prefix: `+3d` (3 days from now), `-3d` (3 days ago).
-Bare `3d` exits 2 with "sign required". Units: `s` `m` `h` `d` `w` (no months or years).
+Bare `3d` exits 1 with "sign required". Units: `s` `m` `h` `d` `w` (no months or years).
 Negative relative times (`-3d`, `-2h`, etc.) work as positional args or via stdin.
 
 ### Examples
@@ -181,7 +184,8 @@ CUTOFF=$(vrk epoch -30d --at "$BASELINE")
 
 ### Gotchas
 
-- Relative times **must** be signed: `+3d` or `-3d`. Bare `3d` exits 2.
+- Relative times **must** be signed: `+3d` or `-3d`. Bare `3d` exits 1.
+- Integers from 1e11 up to (not including) 1e14 are read as milliseconds. `vrk epoch --iso 1792042275000` gives `2026-10-15T05:31:15Z`; `--json` adds `"unit":"ms"`.
 - Timezone abbreviations (IST, EST, PST) exit 2 — they are ambiguous across regions.
   Use full IANA names (`America/New_York`) or numeric offsets (`+05:30`).
 - `--tz` requires `--iso` or `--json`; using it with plain integer output exits 2.
@@ -283,8 +287,9 @@ vrk uuid --v7 --count 10 --json | jq -r '.uuid'
 
 ## tok — Token Counter
 
-Counts tokens in stdin using the cl100k_base tokenizer. Exact for GPT-4 family,
-~95% accurate for Claude. With `--check N`, acts as a pipeline gate: passes input
+Counts tokens in stdin with o200k_base, the tokenizer of GPT-4o, GPT-4.1, GPT-5
+and the o-series. `--model gpt-4` or `gpt-3.5-turbo` counts with cl100k_base.
+Exact for OpenAI models, an estimate for Claude. With `--check N`, acts as a pipeline gate: passes input
 through if within the token limit, exits 1 if over.
 Input: positional argument or stdin.
 
@@ -293,8 +298,8 @@ Input: positional argument or stdin.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--check <N>` | - | Pass input through if within N tokens; exit 1 with empty stdout if over. Reads all stdin before deciding. |
-| `--model <name>` | `-m` | Tokenizer model label (default: `cl100k_base`; only cl100k_base is currently implemented) |
-| `--json` | `-j` | Emit output as `{"tokens": N, "model": "cl100k_base"}` (measurement mode) or JSON error (check mode) |
+| `--model <name>` | `-m` | OpenAI model or encoding: `gpt-5`, `gpt-4o`, `o3` and other current models use `o200k_base` (default); `gpt-4`, `gpt-3.5-turbo` use `cl100k_base`. Unknown names exit 2. |
+| `--json` | `-j` | Emit output as `{"tokens": N, "model": "o200k_base"}` (measurement mode) or JSON error (check mode). `model` is the encoding used. |
 | `--quiet` | `-q` | Suppress all stderr output (exit codes unaffected) |
 
 ### Exit codes
@@ -303,7 +308,7 @@ Input: positional argument or stdin.
 |------|---------|
 | 0 | Success - count printed (or JSON emitted); `--check` within limit |
 | 1 | Over limit - `--check N` was set and token count exceeds N |
-| 2 | Usage error - unknown flag; running interactively with no piped input |
+| 2 | Usage error - unknown flag; unknown `--model`; running interactively with no piped input |
 
 ### Examples
 
@@ -317,7 +322,7 @@ vrk tok "hello world"
 
 # JSON output
 echo "hello world" | vrk tok --json
-# -> {"tokens":2,"model":"cl100k_base"}
+# -> {"tokens":2,"model":"o200k_base"}
 
 # Gate: pass through if within 8000 tokens
 echo "hello world" | vrk tok --check 8000
@@ -327,9 +332,9 @@ echo "hello world" | vrk tok --check 8000
 cat big_context.txt | vrk tok --check 100
 # -> (nothing on stdout, exits 1)
 
-# Count with explicit model label
-echo "hello world" | vrk tok --model cl100k_base
-# -> 2
+# Count for GPT-4 (cl100k_base)
+echo "hello world" | vrk tok --model gpt-4 --json
+# -> {"tokens":2,"model":"cl100k_base"}
 ```
 
 ### Compose patterns
@@ -357,8 +362,9 @@ cat generated_prompt.txt | vrk tok --check 100000 > /dev/null || { echo "Prompt 
 - **`--json` + `--check` within limit** passes raw input through, not a JSON envelope. `--json` only affects the error path.
 - **`--check 0`** exits 1 for any non-empty input. Valid but rarely useful.
 - **Positional arg passthrough** joins with space, no trailing newline. Stdin passthrough preserves raw bytes exactly including trailing newlines.
-- **`--model` is a label, not a tokenizer switch.** Passing `--model claude-3-opus` or any other value still uses cl100k_base internally - the flag exists for forward compatibility and `--json` output labelling. Only `cl100k_base` is currently implemented; any other string is accepted without error but does not change which tokenizer runs.
-- **cl100k_base is approximate for Claude (~95% accurate).** The exact Claude tokenizer is not publicly available. Set `--check` at 90% of the model's actual context limit to absorb the error margin.
+- **`--model` picks the tokenizer.** Matching follows tiktoken: `gpt-4`, `gpt-4-*`, `gpt-3.5*` and `text-embedding-*` count with cl100k_base; every other `gpt-*`, `chatgpt-*` and `o1`/`o3`/`o4` model counts with o200k_base. Non-OpenAI names such as `claude-*` exit 2; leave `--model` off to estimate for them.
+- **Counts differ between encodings.** English prose and code come out within about 1% of each other; Hindi, CJK and Greek are often half as many tokens in o200k_base. Pass the model you send to.
+- **OpenAI tokenizers are an estimate for Claude.** The exact Claude tokenizer is not publicly available. Set `--check` at 90% of the model's actual context limit to absorb the error margin.
 - **Empty pipe is 0 tokens, not an error.** `cat /dev/null | vrk tok` exits 0 and prints `0`. Only running `vrk tok` interactively in a terminal (no pipe) exits 2.
 
 ---
@@ -374,7 +380,8 @@ stream directly into it.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--event <name>` | `-e` | Only emit events of this type; skip all others |
-| `--field <path>` | `-F` | Extract a dot-path field from the record and print as plain text |
+| `--field <path>` | `-F` | Extract a dot-path field from the record and print as plain text. Array indexes work: `data.choices[0].delta.content` or `data.choices.0.delta.content` |
+| `--raw` | - | With `--field`, write each value with no newline after it, flushed per event, so streamed text reassembles exactly |
 
 No `--json`: output is already JSONL by default.
 No `--quiet`: `sse` produces no informational stderr in normal operation.
@@ -402,7 +409,7 @@ vrk sse --field event             # extracts the event name itself
 
 - String values are printed as-is (no quotes).
 - Number and boolean values are printed as their JSON representation (`42`, `true`).
-- If the path is not found, the record is skipped silently.
+- If the path is not found, the record is skipped silently. If the stream had events but `--field` matched none of them, `sse` exits 1 with `sse: --field <path> matched no events`. A stream with no events at all still exits 0.
 - If `data` is not a JSON object, the record is skipped silently.
 
 ### Exit codes
@@ -410,7 +417,7 @@ vrk sse --field event             # extracts the event name itself
 | Code | Meaning |
 |------|---------|
 | 0 | Success — stream parsed, `[DONE]` encountered, or stdin closed cleanly |
-| 1 | Runtime error — I/O error reading stdin |
+| 1 | Runtime error - I/O error reading stdin, or `--field` matched no events |
 | 2 | Usage error — no stdin when running interactively, unknown flag |
 
 ### Examples
@@ -427,6 +434,9 @@ curl -N ... | vrk sse --event content_block_delta --field data.delta.text
 
 # Accumulate streaming text tokens into a single string
 curl -N ... | vrk sse --event content_block_delta --field data.delta.text | tr -d '\n'
+
+# Same, without tr: --raw writes values with no newline (OpenAI-style array path)
+curl -N ... | vrk sse --field 'data.choices[0].delta.content' --raw
 
 # Pipe from a saved SSE log
 cat stream.log | vrk sse --event message
@@ -464,7 +474,7 @@ curl -sN ... | vrk sse | jq 'select(.event == "content_block_delta") | .data.del
 - **Multi-line `data:` fields are concatenated with `\n`.** Two consecutive `data:` lines in one block join as `val1\nval2`. The resulting string is then parsed as JSON if valid, otherwise kept as a raw string.
 - **`data:` with no value contributes an empty string** to the multi-line accumulation buffer. This is per the SSE spec.
 - **Non-JSON `data:` values are emitted as strings**, not dropped. This means comment-like lines (`data: [DONE]`, `data: ping`) appear in the output as `{"event":"message","data":"[DONE]"}` — except `[DONE]` which is intercepted as the termination sentinel before emission.
-- **`--field` skips silently on missing paths or non-JSON data.** No error, no output for that record. This is intentional — real streams mix JSON and non-JSON events.
+- **`--field` skips silently on missing paths or non-JSON data.** No error, no output for that record. This is intentional - real streams mix JSON and non-JSON events. Only when no event in the whole stream matched does `sse` exit 1.
 - **Stdout is always empty on error.** Errors go to stderr only.
 
 ---
@@ -643,7 +653,7 @@ the command on every attempt.
 
 ```bash
 # Retry up to 3 times (default), exit with last command's exit code
-vrk coax -- exit 1
+vrk coax -- sh -c 'exit 1'
 
 # Retry exactly 2 times (3 total attempts)
 vrk coax --times 2 -- my-flaky-command
@@ -695,12 +705,13 @@ echo "last exit: $?"
 ### Gotchas
 
 - **`--` is required** to separate coax flags from the retried command: `vrk coax --times 2 -- cmd args`. Without a command, coax exits 2 with "missing command".
-- **Commands run via `sh -c`.** The args after `--` are joined with spaces and passed to `sh -c "..."`. Shell builtins (`exit`, `test`, `[`) work, and you can use pipes and redirects inline. Pass complex commands as a single quoted argument to avoid double-wrapping: `vrk coax -- "cmd1 && cmd2"`.
-- **Exit code passthrough.** On exhaustion, coax exits with the last command's actual exit code — not a normalised 1. `vrk coax --times 2 -- exit 42` exits 42. Callers that test `$? -ne 0` still work; callers checking a specific code should account for this.
+- **Commands run directly, not through a shell.** The args after `--` are the program and its arguments, exactly as given. Pipes, redirects and builtins (`exit`, `cd`) need a shell: `vrk coax -- sh -c 'curl -sf url | jq .data'`. A single quoted string like `vrk coax -- 'cmd1 && cmd2'` fails with "command not found". Only `--until` is a shell string.
+- **Exit code passthrough.** On exhaustion, coax exits with the last command's actual exit code — not a normalised 1. `vrk coax --times 2 -- sh -c 'exit 42'` exits 42. Callers that test `$? -ne 0` still work; callers checking a specific code should account for this.
 - **`--on` with no match exits immediately.** If `--on 42` is set and the command exits 1, coax stops after the first attempt. The filter is strict — it does not fall back to "retry on any non-zero".
 - **`--until` takes precedence over `--on`.** If both are set, only the condition is checked to decide whether to retry.
 - **`--until` condition output is discarded.** The stdout and stderr of the `--until` command are suppressed — it is a side-effect check, not data.
-- **Stdin is buffered once and re-piped.** All of stdin is read at startup. Streaming stdin sources (e.g., a slow HTTP body) will block until EOF before the first attempt starts. For streaming use cases, write stdin to a file first and redirect from the file.
+- **Stdin is replayed on every retry.** Up to 64 MiB is kept for replay; a retry over that fails with `coax: stdin larger than 64 MiB cannot be replayed` (exit 1). A command that ignores stdin starts at once even if the pipe stays open.
+- **Missing command and signals.** A command that does not exist exits 1 with `coax: command not found: <name>` and is not retried. SIGINT and SIGTERM are forwarded to the command and stop further retries; a command killed by a signal gives exit 128 + signal number. When retries run out, the last stderr line is `coax: all <N> attempts failed (last exit <code>)`.
 - **`--quiet` suppresses only coax's own lines** — the `coax: attempt N failed` progress messages. The subprocess's own stdout and stderr are never suppressed.
 - **Stdout is always empty on error.** Coax's own error messages go to stderr only.
 
@@ -720,7 +731,7 @@ Input: positional argument or stdin.
 | `--endpoint <url>` | — | string | `""` | OpenAI-compatible API base URL; overrides provider detection |
 | `--field <path>` | — | string | `""` | Dot-path field in each JSONL line to use as prompt text |
 | `--budget <N>` | — | int | 0 | Exit 1 before calling the API if prompt exceeds N tokens (0 = disabled) |
-| `--fail` | `-f` | bool | false | Accepted; meaningful with `--schema` (exit 1 on mismatch) |
+| `--fail` | `-f` | bool | false | With `--schema`: exit 1 on mismatch. Without `--fail` or `--retry`, a mismatch only warns on stderr and exits 0 |
 | `--json` | `-j` | bool | false | Emit response as a JSON envelope with metadata |
 | `--schema <val>` | `-s` | string | "" | Inline JSON schema or file path; validates response keys and types |
 | `--explain` | — | bool | false | Print equivalent curl command and exit 0; no API call |
@@ -731,8 +742,8 @@ Input: positional argument or stdin.
 
 | Code | Condition |
 |------|-----------|
-| 0 | Success - response on stdout |
-| 1 | Runtime error: no API key, HTTP error, budget exceeded, schema mismatch after all retries, invalid JSONL, field not found |
+| 0 | Success - response on stdout. Also a `--schema` mismatch without `--fail` or `--retry`: response is printed and `prompt: warning: response does not match schema` goes to stderr |
+| 1 | Runtime error: no API key, HTTP error, budget exceeded, empty or whitespace-only prompt, schema mismatch with `--fail` or after all retries, invalid JSONL, field not found |
 | 2 | Usage error: no input in interactive terminal, unknown flag, `--field` with `--explain`, `--field` with TTY stdin |
 
 ### Provider resolution order
@@ -866,12 +877,14 @@ vrk coax --times 3 --backoff exp:1s --on 1 -- \
 - **`--field` exits on first error.** If line 5 has invalid JSON, lines 1-4 are already written to stdout. Callers that need atomicity should buffer output and check exit code.
 - **`--field` overwrites `response` in input records.** If the input JSONL has a field named `response`, it is overwritten and a warning is emitted to stderr.
 - **`--budget` is a hard gate.** It fires before the API call - even if no API key is set. There is no soft warning mode; use `vrk tok --check N` to gate the pipeline upstream.
-- **Temperature default is 0.** Responses are deterministic by default. `--retry` escalates temperature across attempts (0.0 → 0.1 → 0.2). Do not add a `--temperature` flag unless explicitly extending the tool.
+- **Temperature default is 0.** Responses are deterministic by default. `--retry` escalates temperature by 0.1 per attempt, capped at 1 (0.0 → 0.1 → 0.2 → ...). Do not add a `--temperature` flag unless explicitly extending the tool.
 - **API keys are never in output.** The key value is scrubbed from all error messages and `--explain` output before writing to stdout or stderr. `--explain` uses `$ANTHROPIC_API_KEY` / `$OPENAI_API_KEY` as shell variable references.
 - **No conversation history.** Each call is stateless — there is no session context between invocations. For multi-turn conversations, build the context into the prompt text before calling.
 - **`io.ReadAll` blocks until EOF.** The full prompt is read before the API call. For very large inputs, consider whether the model's context window can handle the token count.
 - **`--schema` depth is top-level only.** Validation checks top-level keys and types (`string`, `number`, `boolean`, `array`, `object`). Nested schema structures are not validated.
-- **`--schema` with OpenAI uses `response_format.json_schema`.** Validation is API-enforced. With Anthropic, the schema is injected as a system prompt and the response is validated post-call.
+- **`--schema` mismatch is a warning unless you ask for more.** Without `--fail` or `--retry` the response is still printed, a warning goes to stderr, and the exit code is 0 (also in `--field` mode and on Anthropic). Add `--fail` to exit 1, or `--retry N` to retry first. Replies are checked against the schema on Anthropic, OpenAI and custom endpoints alike.
+- **`--schema` transport differs by provider.** OpenAI gets a JSON Schema in `response_format` (every key required, `additionalProperties: false`; `strict` only when all types are scalar). Anthropic gets the schema as a system prompt. `--endpoint` / `VRK_LLM_URL` gets it as a system message with `response_format: json_object`. In all cases the reply is also validated post-call.
+- **Empty prompt is an error.** An empty or whitespace-only prompt exits 1 with `prompt: empty prompt, nothing sent` and makes no request. With `--field`, empty records are skipped with `line N: empty prompt, skipped`.
 - **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.
 - **`--system @file` path resolution** — the path is relative to the working directory where `vrk` is invoked, not to the script containing the command. In CI, always use absolute paths or paths relative to the repo root.
 
@@ -880,7 +893,7 @@ vrk coax --times 3 --backoff exp:1s --on 1 -- \
 ## chunk — Token-Aware Text Splitter
 
 Splits text from stdin into chunks, each within a token budget. Emits JSONL.
-Uses cl100k_base tokenization (exact for GPT-4 family, ~95% accurate for Claude).
+Counts with o200k_base by default; `--model gpt-4` switches to cl100k_base (see tok).
 Input: positional argument or stdin.
 
 ### Flags
@@ -890,6 +903,7 @@ Input: positional argument or stdin.
 | `--size N` | — | Max tokens per chunk (required, must be >= 1) |
 | `--overlap N` | — | Token overlap between adjacent chunks (default 0; must be < --size) |
 | `--by <mode>` | — | Chunking strategy; only `paragraph` is currently supported |
+| `--model <name>` | `-m` | Tokenizer, same values as `tok --model` (default `o200k_base`) |
 
 ### Output format
 
@@ -902,8 +916,8 @@ One JSONL record per chunk:
 ```
 
 - `index`: 0-based, sequential across all emitted records
-- `text`: decoded token window — may split mid-word at token boundaries (see Gotchas)
-- `tokens`: exact cl100k_base token count for the emitted text; never exceeds `--size`
+- `text`: decoded token window - may split mid-word at token boundaries, but never splits a UTF-8 character (see Gotchas)
+- `tokens`: exact token count for the emitted text in the chosen encoding; stays within `--size` except when a single character is wider than the window (then up to 3 tokens over)
 
 ### Exit codes
 
@@ -911,13 +925,13 @@ One JSONL record per chunk:
 |------|---------|
 | 0 | Success (including empty input — no records emitted) |
 | 1 | Runtime error — I/O error reading stdin, tokenizer failure |
-| 2 | Usage error — `--size` absent or < 1, `--overlap` >= `--size`, unknown `--by` mode, unknown flag |
+| 2 | Usage error — `--size` absent or < 1, `--overlap` >= `--size`, unknown `--by` mode, unknown `--model`, unknown flag |
 
 ### Splitting modes
 
-**Default (no `--by`):** Sliding window over token IDs. Step = `size - overlap`. Each window is decoded back to text. The invariant `tokens <= size` is structurally guaranteed.
+**Default (no `--by`):** Sliding window over token IDs. Step = `size - overlap`. Each window is decoded back to text. Window edges move to a UTF-8 character boundary, so `tokens <= size` holds except for a single character wider than `--size` (at most 3 tokens over).
 
-**`--by paragraph`:** Splits text at double-newlines (`\n\n`), then greedily packs paragraphs into chunks. A paragraph that exceeds `--size` tokens falls back to token-level splitting. Overlap is applied by prepending the last `--overlap` token IDs from the previous chunk at the start of the next.
+**`--by paragraph`:** Splits text at double-newlines (`\n\n`), then greedily packs paragraphs into chunks, joined with a blank line (`\n\n`) so the separators are kept in `text`. A paragraph that exceeds `--size` tokens falls back to token-level splitting. Overlap is applied by prepending the last `--overlap` token IDs from the previous chunk at the start of the next.
 
 ### Examples
 
@@ -978,12 +992,12 @@ cat article.txt | vrk chunk --size 800 --overlap 80 --by paragraph | jq '.text'
 
 - **`--size` is required.** There is no default. Omitting it exits 2: `chunk: --size is required`.
 - **Chunks may split mid-word.** The default mode works at the token-ID level. Tiktoken token boundaries do not always align with word boundaries, so a chunk boundary can fall in the middle of a word. The decoded text is emitted as-is — boundaries are never adjusted, because adjusting them would change token counts and risk breaking the size invariant.
-- **`--by paragraph` uses double newline as the separator.** A single newline is not a paragraph break. If your text uses single newlines as paragraph separators, pre-process it with `sed` or `awk` before piping to `chunk`.
+- **`--by paragraph` uses double newline as the separator and keeps it.** Packed paragraphs are joined with `\n\n` in `text`. A single newline is not a paragraph break. If your text uses single newlines as paragraph separators, pre-process it with `sed` or `awk` before piping to `chunk`.
 - **`--by paragraph` oversized paragraphs fall back to token-level split.** A paragraph that exceeds `--size` tokens is split at token boundaries, not at sentence or word boundaries. The mid-word split caveat applies.
 - **`--overlap` is in tokens, matching `--size` units.** Overlap is not a percentage.
 - **Empty input exits 0 with no output.** `printf '' | vrk chunk --size 1000` emits nothing and exits 0. This is intentional — empty input is not an error.
 - **`tokens` field is exact.** It reflects the actual token count of the emitted `text`, not an approximation. Use it for downstream budget checks.
-- **cl100k_base is approximate for Claude (~95% accurate).** Set `--size` at 90% of the model's actual context limit to absorb the error margin.
+- **OpenAI tokenizers are an estimate for Claude.** Set `--size` at 90% of the model's actual context limit to absorb the error margin.
 - **Stdout is always empty on error.** Errors go to stderr only.
 
 ---
@@ -1019,7 +1033,7 @@ Requests to internal network addresses (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 
 - `content`: extracted content in the active mode (markdown by default)
 - `fetched_at`: Unix timestamp (integer seconds) of when the response was received
 - `status`: HTTP status code (always 200 on exit 0)
-- `token_estimate`: cl100k_base token count of `content` (~95% accurate for Claude)
+- `token_estimate`: o200k_base token count of `content` (an estimate for Claude)
 
 ### Exit codes
 
@@ -1094,7 +1108,7 @@ vrk coax --times 3 --backoff exp:1s -- vrk grab https://example.com
 - **Invalid URL is a usage error (exit 2), not a runtime error (exit 1).** A URL with no scheme (`example.com`) or a non-http/https scheme (`ftp://`) exits 2 — the caller gave bad input. A valid URL that fails to fetch (DNS, timeout, 404) exits 1.
 - **Non-HTML responses pass through unchanged.** If the server returns `Content-Type: application/json` or any non-`text/html` type, the raw body is emitted to stdout without extraction. `--text` is a no-op for non-HTML. `--json` still wraps the raw body in the envelope.
 - **Max 5 redirect hops.** Chains longer than 5 redirects exit 1 with "too many redirects (> 5)". Cookies are never stored between redirects or invocations.
-- **`token_estimate` uses cl100k_base (~95% accurate for Claude).** The estimate reflects the extracted `content` field, not the raw HTML. Set downstream budgets at 90% of the actual model limit to absorb the error margin.
+- **`token_estimate` uses o200k_base (exact for GPT-4o and later, an estimate for Claude).** The estimate reflects the extracted `content` field, not the raw HTML. Set downstream budgets at 90% of the actual model limit to absorb the error margin.
 - **`--text` output is whitespace-normalised.** `grab --text` runs the HTML extractor then `vrk plain`'s markdown stripper. Consecutive blank lines are collapsed to one, and multiple spaces on a line are collapsed to one. The prose content is unchanged, but whitespace structure may differ from the raw page.
 - **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.
 - **Internal addresses are blocked by default.** Requests to 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, ::1, and link-local IPv6 exit 1 unless `--allow-internal` is passed. This includes addresses reached via redirects - a public URL that redirects to localhost is also blocked.
@@ -1112,8 +1126,7 @@ Input: positional argument or stdin.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--json` | `-j` | JSON envelope: `{"text":"…","input_bytes":N,"output_bytes":M}` |
-
-No `--quiet`. `plain` produces no informational stderr in normal operation.
+| `--quiet` | `-q` | Suppress stderr output |
 
 ### --json output shape
 
@@ -1210,6 +1223,7 @@ Input: positional argument or stdin. Empty input exits 0 with no output.
 |------|-------|-------------|
 | `--bare` | `-b` | Output URLs only, one per line |
 | `--json` | `-j` | Append `{"_vrk":"links","count":N}` after all records |
+| `--quiet` | `-q` | Suppress stderr output |
 
 ### --json output shapes
 
@@ -1313,7 +1327,7 @@ Extra keys in the record that are not in the schema are **ignored** (subset chec
 |------|---------|
 | 0 | All lines valid, OR invalid lines found but `--strict` not set |
 | 1 | `--strict` and at least one invalid line; or I/O error (with `--json`: error record to stdout) |
-| 2 | `--schema` missing or invalid, unknown schema type, unknown flag |
+| 2 | `--schema` missing or invalid, unknown schema type, a JSON Schema instead of a flat `{"key":"type"}` map, unknown flag |
 
 ### Examples
 
@@ -1324,7 +1338,7 @@ echo '{"name":"alice","age":30}' | vrk validate --schema '{"name":"string","age"
 
 # Invalid record — warned to stderr, nothing on stdout
 echo '{"name":"alice","age":"wrong"}' | vrk validate --schema '{"name":"string","age":"number"}'
-# → (empty stdout, stderr: "warning: validation failed: age expected number, got string", exit 0)
+# → (empty stdout, stderr: "warning: validate: line 1: age expected number, got string", exit 0)
 
 # --strict: exit 1 on first invalid
 cat records.jsonl | vrk validate --schema '{"name":"string"}' --strict
@@ -1374,7 +1388,7 @@ line-by-line — safe on large inputs. Best-effort — not a security boundary.
 
 ### Built-in patterns
 
-Applied before entropy scanning. The key prefix is preserved; the value is replaced.
+Applied before entropy scanning. For the keyword patterns the key prefix is preserved and the value is replaced.
 
 | Name | Matches |
 |------|---------|
@@ -1383,12 +1397,26 @@ Applied before entropy scanning. The key prefix is preserved; the value is repla
 | `secret` | `secret=<value>` or `secret:<value>` |
 | `api_key` | `api_key=<value>`, `api-key=<value>`, etc. |
 | `token` | `token=<value>` or `token:<value>` |
+| `aws_key` | AWS `AKIA` / `ASIA` access key IDs |
+| `openai_anthropic` | `sk-...` keys (20+ key characters) |
+| `stripe` | `sk_live_`, `sk_test_`, `rk_live_`, `rk_test_` keys |
+| `github` | `ghp_` / `gho_` / `ghu_` / `ghs_` / `ghr_` tokens and `github_pat_` |
+| `slack` | `xoxb-`, `xoxp-`, `xoxa-`, ... tokens |
+| `google` | `AIza...` API keys |
+| `huggingface` | `hf_...` tokens |
+| `npm` | `npm_...` tokens |
+| `sendgrid` | `SG.<id>.<secret>` keys |
+| `jwt` | `eyJ...` three-part JWTs |
+
+The key-prefix patterns (`aws_key` onward) replace only the key itself, apply anywhere in a line, and also catch keys inside URLs and paths, which entropy scanning skips.
 
 ### Entropy scanning
 
 Tokens shorter than 8 characters are never entropy-checked. Tokens that already
 contain `[REDACTED]` (from pattern substitution) are skipped. Shannon entropy is
 calculated per whitespace-delimited token: `H = -sum(p * log2(p))`.
+
+URLs without credentials, file paths, UUIDs, prefixed digests (`sha256:...`) and container image refs are not redacted by entropy, so logs keep their context. Each path segment and each secret-named query value (`api_key`, `token`, `sig`, ...) is still checked on its own. Punctuation around a redacted secret is kept: `key sk-..., please` gives `key [REDACTED], please`.
 
 ### Exit codes
 
@@ -1460,12 +1488,12 @@ vrk prompt --system "summarise this" < doc.txt | vrk mask | vrk kv set summary
 ### Gotchas
 
 - **Best-effort only — not a security boundary.** Do not rely on `mask` as a compliance or audit control. Use it to reduce accidental exposure in logs and pipelines.
-- **UUIDs and SHA-256 hashes are high-entropy — expect false positives.** A UUID like `550e8400-e29b-41d4-a716-446655440000` (36 chars, entropy ≈ 3.8) may or may not be redacted depending on the threshold. SHA-256 hex strings will almost always be redacted at the default 4.0 threshold.
+- **UUIDs, `sha256:...` digests, file paths and plain URLs are left alone** by entropy scanning. Other high-entropy tokens still count as secrets.
 - **Short passwords are below the 8-char token floor — expect false negatives.** `hunter2` (7 chars) is never entropy-checked. Pattern-based detection (`password=hunter2`) still catches it, but a bare short password with no keyword prefix will not be redacted.
 - **Token floor is 8 characters.** Tokens shorter than 8 chars are skipped by entropy analysis regardless of `--entropy` setting.
 - **`--pattern` replaces the entire match.** Unlike built-in patterns (which preserve the key prefix via a capture group), `--pattern` replaces the whole regex match with `[REDACTED]`. To preserve a prefix, use a lookahead or adjust the pattern to match only the value portion.
 - **`patterns_matched` uses literal regex strings for `--pattern` values.** The field `"sk-ant-[A-Za-z0-9]+"` in `patterns_matched` means that exact regex fired, not a named category.
-- **Ordering in `patterns_matched`:** built-ins in declaration order (bearer → password → secret → api_key → token), then `"entropy"`, then custom `--pattern` values in argument order.
+- **Ordering in `patterns_matched`:** built-ins in declaration order (bearer → password → secret → api_key → token → the key-prefix patterns), then `"entropy"`, then custom `--pattern` values in argument order.
 
 ---
 
@@ -1573,6 +1601,7 @@ limits when calling LLMs or external services in a loop. Input: stdin only.
 | `--burst N` | — | Emit first N lines without delay, then rate-limit the rest |
 | `--tokens-field <field>` | — | Rate by token count of a JSONL field value (dot-path) |
 | `--json` | `-j` | Append `{"_vrk":"throttle","rate":"...","lines":N,"elapsed_ms":N}` after all lines |
+| `--quiet` | `-q` | Suppress stderr output |
 
 ### Exit codes
 
@@ -1619,7 +1648,7 @@ cat prompts.jsonl | vrk throttle --rate 10/m | vrk prompt --system "process" --m
 
 Converts a JSON array to JSONL (one record per line) or collects JSONL lines into a JSON array.
 The bridge between JSON-land tools and line-oriented pipeline tools.
-Input: stdin only.
+Input: positional argument or stdin.
 
 ### Flags
 
@@ -1693,7 +1722,7 @@ Input: positional argument or stdin, or one or more `--file` paths.
 | `--compare` | none | Compare hashes of all `--file` inputs; outputs `match: true` or `match: false`; exits 0 either way |
 | `--hmac` | none | Compute HMAC instead of plain hash; requires `--key` |
 | `--key <secret>` | `-k` | HMAC secret key |
-| `--verify <hex>` | none | Compare computed HMAC against this hex string; exits 0 on match, 1 on mismatch (constant-time) |
+| `--verify <hex>` | none | Compare computed HMAC against this hex string or `sha256:<hex>` (the form digest prints); exits 0 on match, 1 on mismatch (constant-time). A prefix naming a different algorithm than `--algo` exits 2 |
 | `--json` | `-j` | Emit JSON object with metadata |
 
 ### --json output shapes
@@ -1820,10 +1849,11 @@ echo "$ENCODED" | vrk base decode --from base64url
 ### Gotchas
 
 - **`base` strips one trailing newline from stdin before encoding.** `echo 'hello' | vrk base encode --to hex` encodes `hello` (5 bytes), not `hello\n` (6 bytes). Use `printf 'hello\n'` if you need to encode the newline itself. This differs intentionally from `vrk digest`, which does not strip — `base` is an encoding tool where callers expect string semantics.
-- **Multi-line wrapped base64 is not supported.** Input like `base64 -w76` output (line-wrapped) will fail decoding. Strip internal newlines first: `tr -d '\n' | vrk base decode --from base64`.
-- **base64url uses no padding and URL-safe alphabet.** The output uses `-` and `_` instead of `+` and `/`, with no trailing `=`. This is the correct format for JWT headers and URL query parameters.
-- **hex output is lowercase.** `echo 'hello' | vrk base encode --to hex` produces `68656c6c6f`, not `68656C6C6F`. Decoders are case-sensitive — use the output of `vrk base encode --to hex` as the input to `vrk base decode --from hex`.
+- **Line-wrapped base64 is fine.** Output from `base64 -w76` decodes as is; newlines inside the input are ignored.
+- **base64url uses no padding and URL-safe alphabet.** The output uses `-` and `_` instead of `+` and `/`, with no trailing `=`. This is the correct format for JWT headers and URL query parameters. Padding is strict both ways: `--from base64` needs the `=`, `--from base64url` rejects it.
+- **hex output is lowercase.** `echo 'hello' | vrk base encode --to hex` produces `68656c6c6f`, not `68656C6C6F`. `--from hex` accepts upper or lower case.
 - **base32 output is uppercase.** Decoding is case-sensitive; lowercase base32 input exits 1.
+- **Decoded output has no trailing newline.** `echo aGVsbG8= | vrk base decode --from base64` prints `hello` with nothing after it.
 - **`--quiet` does not suppress the no-subcommand error.** That error fires before flag parsing; `--quiet` takes effect only inside a subcommand.
 
 ---
@@ -1876,7 +1906,7 @@ echo 'hello_world' | vrk recase --to camel --json
 # {"input":"hello_world","output":"helloWorld","from":"snake","to":"camel"}
 
 # Rename variable names in a list
-cat vars.txt | vrk recase --to camelCase
+cat vars.txt | vrk recase --to camel
 ```
 
 ### Gotchas
@@ -1884,7 +1914,7 @@ cat vars.txt | vrk recase --to camelCase
 - **`lower` and `upper` are prose-level transforms, not identifier formats.** Output is space-separated: `hello_world → lower` produces `"hello world"`, not `"hello_world"`. Use `snake` or `kebab` for identifier output.
 - **Single words with no separators and no case changes are treated as one word.** `helloworld → camel` stays `helloworld` — there are no word boundaries to detect. Use a separator (`hello_world`) to get `helloWorld`.
 - **Digits are not word boundaries.** `oauth2` is one token; `base64url` is one token. `oauth2 → pascal` = `Oauth2`.
-- **Two consecutive acronyms with no separator cannot be split.** `getHTTPSURL → snake` produces `get_httpsurl`, not `get_https_url`. The algorithm needs a lowercase letter to know where one acronym ends and the next begins. Workaround: use an explicit separator in the input: `getHTTPS_URL` or `get-https-url`.
+- **Two consecutive acronyms with no separator cannot be split.** `getHTTPSURL → snake` produces `get_httpsurl`, not `get_https_url`. The algorithm needs a lowercase letter to know where one acronym ends and the next begins. Workaround: put `-` or `_` between every word, e.g. `get-https-url`. A mixed form like `getHTTPS_URL` still fuses into `gethttps_url`.
 - **Empty lines are preserved.** A blank line in produces a blank line out. This maintains line counts in batch pipelines.
 - **Auto-detection priority:** separators (`_`, `-`, ` `) take precedence over case. `hello_world` is always detected as `snake`, even if it could theoretically be read another way.
 
@@ -1892,7 +1922,7 @@ cat vars.txt | vrk recase --to camelCase
 
 ## slug — URL/Filename Safe Slug Generator
 
-Converts text to URL/filename-safe slugs. Lowercase, hyphen-separated, unicode normalised to ASCII. One slug per input line; empty slugs (empty input or all-punctuation) produce no output.
+Converts text to URL/filename-safe slugs. Lowercase, hyphen-separated. Latin text folds to ASCII; other scripts are kept. Exactly one output line per input line; an empty slug (all-punctuation line) prints an empty line and warns `line N: empty slug` on stderr.
 Input: positional argument or stdin.
 
 ### Flags
@@ -1900,8 +1930,9 @@ Input: positional argument or stdin.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--separator <s>` | — | Word separator (default: `-`). Any string, including multi-character or empty. |
-| `--max <n>` | — | Max output length (0 = unlimited). Truncates at last word boundary at or before `n`. |
-| `--json` | `-j` | Emit `{"input":"...","output":"..."}` per input line (JSONL). Empty-slug lines suppressed. |
+| `--max <n>` | — | Max output length in characters (0 = unlimited). Truncates at last word boundary at or before `n`; never splits a character. |
+| `--ascii` | — | Strict ASCII output; other scripts are dropped |
+| `--json` | `-j` | Emit `{"input":"...","output":"..."}` per input line (JSONL). Empty-slug lines are emitted with `"output":""`. |
 | `--quiet` | `-q` | Suppress stderr; exit codes unchanged. |
 
 ### Exit codes
@@ -1950,9 +1981,9 @@ cat README.md | vrk links --bare | vrk slug
 
 ### Gotchas
 
-- **`--max` truncates at word boundary — if the first word is longer than `--max`, output is empty.** For example, `echo 'helloworld' | vrk slug --max 3` produces no output, not a truncated `hel`. Use a value larger than the longest expected word to avoid silent empty output.
-- **Empty slug lines are suppressed.** Inputs that produce no alphanumeric content (empty string, all-punctuation) emit no output line. This is intentional — slug treats empty output as a no-op, consistent with `echo '' | vrk slug` exiting 0 with no output.
-- **Non-Latin characters are dropped.** Only Latin-script characters with NFD decomposition to ASCII (`é → e`, `ü → u`, etc.) are preserved. Characters with no ASCII base (Cyrillic, CJK, Arabic) are treated as word boundaries and dropped. The spec is ASCII-only slug output.
+- **`--max` truncates at word boundary - if the first word is longer than `--max`, output is empty.** For example, `echo 'helloworld' | vrk slug --max 3` produces an empty line (plus the `empty slug` warning), not a truncated `hel`. Use a value larger than the longest expected word to avoid silent empty output.
+- **Every input line produces exactly one output line.** A line with no letters or digits prints an empty line and warns `line N: empty slug` on stderr. Filter with `grep .` if you want blanks gone.
+- **Non-Latin scripts are kept.** `日本語 abc` gives `日本語-abc`. Latin text folds to ASCII (`é → e`, `Straße → strasse`, `æ → ae`, `ø → o`). Use `--ascii` for strict ASCII output; other scripts are then dropped.
 - **`--separator` allows any string, including empty.** `--separator ''` joins words without any separator (`hello-world → helloworld`). Multi-character separators (`--separator --`) are allowed but unusual.
 
 ---
@@ -2157,7 +2188,7 @@ echo "$ENCODED_VALUE" | vrk pct --decode | vrk validate --schema '{"type":"strin
 - **Double-encode is correct behaviour.** `echo 'hello%20world' | vrk pct --encode` produces `hello%2520world` — the `%` is encoded as `%25`. This is RFC 3986 conformant. If you want to avoid double-encoding, decode first.
 - **`+` is a literal character in non-form decode.** `echo 'hello+world' | vrk pct --decode` produces `hello+world` unchanged. To treat `+` as a space, use `--form`.
 - **`%2B` decodes to `+` in both modes.** `echo 'hello%2Bworld' | vrk pct --decode` → `hello+world`. The percent-encoded form is always authoritative.
-- **In `--form` mode, `~` is encoded as `%7E`.** This is browser-compatible behaviour (`url.QueryEscape`). Strictly, `~` is an RFC 3986 unreserved character and does not need encoding, but browsers encode it in form submissions. Fighting this creates more confusion than it solves.
+- **`~` is never encoded.** It is an RFC 3986 unreserved character, so `a~b` stays `a~b` with or without `--form`.
 - **`--encode` and `--decode` are mutually exclusive.** Passing both exits 2.
 
 ---
@@ -2170,7 +2201,7 @@ Input: positional argument or stdin (single line or multiline batch).
 ### Record shape
 
 ```json
-{"scheme":"https","host":"api.example.com","port":0,"path":"/v1/users","query":{"page":"2","limit":"10"},"fragment":"","user":""}
+{"scheme":"https","host":"api.example.com","port":0,"path":"/v1/users","query":{"limit":"10","page":"2"},"fragment":"","user":""}
 ```
 
 All fields always present, including zero values. Port is 0 when not explicit in the URL string.
@@ -2245,15 +2276,16 @@ cat page.html | vrk links --bare | vrk urlinfo --field host
 - **`--field port` returns empty string when port is not explicit in the URL** — `https://example.com` has no port in the string even though HTTPS implies 443.
 - **`urlinfo` accepts any string `url.Parse` accepts** — Go's parser is lenient; a string with no scheme parses without error but produces an empty scheme field. Exit 1 only when both scheme and host are empty.
 - **`--field query.<key>` returns empty string if the key is absent** — not an error.
+- **Query keys are sorted and the first value wins.** `?a=1&a=2` gives `"query":{"a":"1"}`.
 - **`--field` suppresses the `--json` metadata trailer** — plain-text field output and a JSON trailer are incoherent; only field values are printed.
-- **Empty input exits 0 with no output.** `printf '' | vrk pct --encode` is valid; it produces nothing and exits 0.
+- **Empty input exits 0 with no output.** `printf '' | vrk urlinfo` is valid; it produces nothing and exits 0.
 
 ---
 
 ## sip — Stream Sampler
 
 Samples lines from stdin using one of four strategies. Memory-efficient for arbitrarily large streams — reservoir sampling uses O(N) memory where N is the sample size, not the stream size.
-Input: stdin only (no positional argument — sip is a pure stream filter).
+Input: stdin only (sip is a pure stream filter). A positional argument is ignored, not an error.
 
 ### Flags
 
@@ -2313,7 +2345,7 @@ seq 1000 | vrk sip --count 100 --json | tail -1
 
 - **`--sample` is probabilistic** — `--sample 10` on 1000 lines produces approximately 100, not exactly 100. Use `--count` for exact counts.
 - **`--seed 0` is valid** — seed value 0 is not a "not set" sentinel. Use it freely.
-- **Reservoir output preserves input order** — `--n 100` on a 1000-line stream emits 100 lines in the same relative order they appeared in the input, not in random order.
+- **Reservoir output preserves input order** — `--count 100` on a 1000-line stream emits 100 lines in the same relative order they appeared in the input, not in random order.
 - **Empty lines are skipped and not counted** — a line that is `""` is invisible to all strategies and does not appear in `total_seen`.
 - **`--first` and `--every` still read the full stream** — `total_seen` reflects all non-empty lines, even for `--first N` where only the first N are emitted.
 - **No positional argument** — `sip` is a pure filter; input must come from a pipe.
@@ -2381,7 +2413,7 @@ echo '{"status":"fail"}' | vrk assert '.status == "ok"' --message 'Bad API respo
 
 # JSON output mode
 echo '{"status":"ok"}' | vrk assert '.status == "ok"' --json
-# → {"passed":true,"condition":".status == \"ok\"","input":{"status":"ok"}}
+# → {"condition":".status == \"ok\"","input":{"status":"ok"},"passed":true}
 ```
 
 ### Compose patterns

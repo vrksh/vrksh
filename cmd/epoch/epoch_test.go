@@ -255,10 +255,10 @@ func TestRelativePlusDaysStdin(t *testing.T) {
 }
 
 func TestRelativeNoSignRequired(t *testing.T) {
-	// Bare '3d' without sign prefix must exit 2.
+	// Bare '3d' without sign prefix must exit 1.
 	stdout, stderr, code := runEpoch(t, []string{"3d"}, "")
-	if code != 2 {
-		t.Fatalf("exit code = %d, want 2", code)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
 	}
 	if stdout != "" {
 		t.Errorf("stdout must be empty on error, got %q", stdout)
@@ -348,8 +348,8 @@ func TestTZWithoutISO(t *testing.T) {
 
 func TestNaturalLanguageRejected(t *testing.T) {
 	stdout, stderr, code := runEpoch(t, []string{"next tuesday"}, "")
-	if code != 2 {
-		t.Fatalf("exit code = %d, want 2", code)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
 	}
 	if stdout != "" {
 		t.Errorf("stdout must be empty on error, got %q", stdout)
@@ -570,10 +570,10 @@ func TestJSONTZWithoutISOAllowed(t *testing.T) {
 }
 
 func TestJSONError(t *testing.T) {
-	// Usage error + --json → {"error":"...","code":2} on stdout, exit 2. Stderr empty.
+	// Invalid value + --json → {"error":"...","code":1} on stdout, exit 1. Stderr empty.
 	stdout, stderr, code := runEpoch(t, []string{"3d", "--json"}, "")
-	if code != 2 {
-		t.Fatalf("exit code = %d, want 2", code)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
 	}
 	if stderr != "" {
 		t.Errorf("stderr must be empty when --json active, got %q", stderr)
@@ -585,8 +585,8 @@ func TestJSONError(t *testing.T) {
 	if _, ok := obj["error"]; !ok {
 		t.Error("JSON missing key \"error\"")
 	}
-	if c, _ := obj["code"].(float64); int(c) != 2 {
-		t.Errorf("code = %v, want 2", obj["code"])
+	if c, _ := obj["code"].(float64); int(c) != 1 {
+		t.Errorf("code = %v, want 1", obj["code"])
 	}
 }
 
@@ -595,10 +595,10 @@ func TestJSONError(t *testing.T) {
 // TestQuietSuppressesStderr verifies that --quiet suppresses stderr on a usage
 // error. Exit code is unaffected.
 func TestQuietSuppressesStderr(t *testing.T) {
-	// "3d" without a sign is a usage error (exit 2).
+	// "3d" without a sign is an invalid value (exit 1).
 	stdout, stderr, code := runEpoch(t, []string{"--quiet", "3d"}, "")
-	if code != 2 {
-		t.Fatalf("exit code = %d, want 2 (usage error)", code)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (usage error)", code)
 	}
 	if stdout != "" {
 		t.Errorf("stdout must be empty on error, got %q", stdout)
@@ -659,11 +659,11 @@ func FuzzEpoch(f *testing.F) {
 }
 
 func TestJSONErrorToStdout(t *testing.T) {
-	// "next tuesday" is an unsupported format → exit 2.
+	// "next tuesday" is an unsupported format → exit 1.
 	// With --json, the error must go to stdout as JSON; stderr must be empty.
 	stdout, stderr, code := runEpoch(t, []string{"next tuesday", "--json"}, "")
-	if code != 2 {
-		t.Fatalf("exit code = %d, want 2", code)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
 	}
 	if stderr != "" {
 		t.Errorf("stderr must be empty when --json active, got %q", stderr)
@@ -675,7 +675,62 @@ func TestJSONErrorToStdout(t *testing.T) {
 	if _, ok := obj["error"]; !ok {
 		t.Error("JSON missing key \"error\"")
 	}
-	if c, _ := obj["code"].(float64); int(c) != 2 {
-		t.Errorf("code = %v, want 2", obj["code"])
+	if c, _ := obj["code"].(float64); int(c) != 1 {
+		t.Errorf("code = %v, want 1", obj["code"])
+	}
+}
+
+func TestInvalidCalendarDate(t *testing.T) {
+	for _, in := range []string{"2026-02-29", "2026-13-01", "2026-02-29T10:00:00Z"} {
+		stdout, stderr, code := runEpoch(t, []string{in}, "")
+		if code != 1 {
+			t.Errorf("%s: exit code = %d, want 1", in, code)
+		}
+		if stdout != "" {
+			t.Errorf("%s: stdout = %q, want empty", in, stdout)
+		}
+		if !strings.Contains(stderr, `invalid date "`+in+`"`) {
+			t.Errorf("%s: stderr = %q, want invalid date", in, stderr)
+		}
+	}
+}
+
+func TestMillisecondsInput(t *testing.T) {
+	stdout, _, code := runEpoch(t, []string{"--iso", "1792042275000"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if got := strings.TrimSpace(stdout); got != "2026-10-15T05:31:15Z" {
+		t.Errorf("stdout = %q, want 2026-10-15T05:31:15Z", got)
+	}
+	// Negative milliseconds use the same rule.
+	stdout, _, _ = runEpoch(t, []string{}, "-1792042275000")
+	if got := strings.TrimSpace(stdout); got != "-1792042275" {
+		t.Errorf("negative ms: stdout = %q", got)
+	}
+	// Boundaries: 1e11 is ms, just below stays seconds, 1e14 stays seconds.
+	for in, want := range map[string]string{"99999999999": "99999999999", "100000000000": "100000000", "99999999999999": "99999999999", "100000000000000": "100000000000000"} {
+		stdout, _, _ = runEpoch(t, []string{in}, "")
+		if got := strings.TrimSpace(stdout); got != want {
+			t.Errorf("%s: stdout = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestMillisecondsJSONUnit(t *testing.T) {
+	stdout, _, code := runEpoch(t, []string{"--json", "1792042275000"}, "")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &obj); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if obj["unit"] != "ms" {
+		t.Errorf("unit = %v, want ms", obj["unit"])
+	}
+	stdout, _, _ = runEpoch(t, []string{"--json", "1740009600"}, "")
+	if strings.Contains(stdout, `"unit"`) {
+		t.Errorf("seconds input must not carry unit: %q", stdout)
 	}
 }

@@ -154,12 +154,18 @@ stdout=$(echo 'hello world' | "$VRK" tok --json 2>/dev/null)
 exit_code=$(set +e; echo 'hello world' | "$VRK" tok --json > /dev/null 2>&1; echo $?)
 assert_exit "json: exit 0" 0 "$exit_code"
 assert_stdout_json_field "json: tokens = 2"           "tokens" "2"            "$stdout"
-assert_stdout_json_field "json: model = cl100k_base"  "model"  "cl100k_base"  "$stdout"
+assert_stdout_json_field "json: model = o200k_base"   "model"  "o200k_base"   "$stdout"
 
-# --json with --model flag
-stdout=$(echo 'hello world' | "$VRK" tok --json --model cl100k_base 2>/dev/null)
-exit_code=$(set +e; echo 'hello world' | "$VRK" tok --json --model cl100k_base > /dev/null 2>&1; echo $?)
-assert_exit "json+model: exit 0" 0 "$exit_code"
+# --model picks the encoding: gpt-4 counts with cl100k_base, gpt-5 with o200k_base
+hindi='यह एक साधारण वाक्य है।'
+stdout=$("$VRK" tok --json --model gpt-4 "$hindi" 2>/dev/null)
+assert_stdout_json_field "model gpt-4: model = cl100k_base" "model"  "cl100k_base" "$stdout"
+assert_stdout_json_field "model gpt-4: tokens = 24"         "tokens" "24"          "$stdout"
+stdout=$("$VRK" tok --json -m gpt-5 "$hindi" 2>/dev/null)
+assert_stdout_json_field "model gpt-5: model = o200k_base"  "model"  "o200k_base"  "$stdout"
+assert_stdout_json_field "model gpt-5: tokens = 9"          "tokens" "9"           "$stdout"
+exit_code=$(set +e; "$VRK" tok --model claude-3 hi > /dev/null 2>&1; echo $?)
+assert_exit "unknown model: exit 2" 2 "$exit_code"
 
 # ------------------------------------------------------------
 # 5. --check: within limit

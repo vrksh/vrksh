@@ -123,7 +123,7 @@ Invalid base64 input:
 
 ```bash
 $ echo '!!invalid!!' | vrk base decode --from base64
-error: base: illegal base64 data at input byte 0
+error: base: invalid base64 input
 $ echo $?
 1
 ```
@@ -132,7 +132,7 @@ Missing encoding flag:
 
 ```bash
 $ echo 'hello' | vrk base encode
-usage error: base encode: --to is required
+usage error: base: --to is required
 $ echo $?
 2
 ```

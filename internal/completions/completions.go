@@ -65,7 +65,14 @@ func genBash(tools []shared.ToolMeta) string {
 	var b strings.Builder
 	b.WriteString("_vrk() {\n")
 	b.WriteString("    local cur prev words cword\n")
-	b.WriteString("    _init_completion || return\n")
+	b.WriteString("    if declare -F _init_completion >/dev/null 2>&1; then\n")
+	b.WriteString("        _init_completion || return\n")
+	b.WriteString("    else\n")
+	b.WriteString("        cur=\"${COMP_WORDS[COMP_CWORD]}\"\n")
+	b.WriteString("        prev=\"${COMP_WORDS[COMP_CWORD-1]}\"\n")
+	b.WriteString("        words=(\"${COMP_WORDS[@]}\")\n")
+	b.WriteString("        cword=$COMP_CWORD\n")
+	b.WriteString("    fi\n")
 	b.WriteString("\n")
 	b.WriteString("    if [[ $cword -eq 1 ]]; then\n")
 

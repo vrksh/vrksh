@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
@@ -494,11 +495,18 @@ func renderMdNode(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) 
 		if inPre {
 			sb.WriteString(n.Data)
 		} else {
-			// Normalize whitespace in non-pre context.
-			normalized := strings.Join(strings.Fields(n.Data), " ")
-			if normalized != "" {
-				sb.WriteString(normalized)
-				sb.WriteString(" ")
+			// Collapse whitespace to single spaces, but keep a space at either
+			// edge where the HTML had one: "<b>bold</b> word" needs the space
+			// between the closing ** and "word".
+			fields := strings.Fields(n.Data)
+			if len(fields) == 0 || strings.TrimLeftFunc(n.Data, unicode.IsSpace) != n.Data {
+				writeSpace(sb)
+			}
+			if len(fields) > 0 {
+				sb.WriteString(strings.Join(fields, " "))
+				if strings.TrimRightFunc(n.Data, unicode.IsSpace) != n.Data {
+					sb.WriteString(" ")
+				}
 			}
 		}
 		return
@@ -599,6 +607,19 @@ func renderMdNode(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) 
 	default:
 		renderChildrenMd(n, sb, inPre, base)
 	}
+}
+
+// writeSpace adds one space unless the output is empty or already ends in whitespace.
+func writeSpace(sb *strings.Builder) {
+	s := sb.String()
+	if s == "" {
+		return
+	}
+	switch s[len(s)-1] {
+	case ' ', '\n', '\t':
+		return
+	}
+	sb.WriteString(" ")
 }
 
 func renderChildrenMd(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) {

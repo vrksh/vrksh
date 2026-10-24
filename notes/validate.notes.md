@@ -26,10 +26,11 @@ No output on stderr. Exit 0. Only clean data reaches stdout.
 ```bash
 $ printf '{"name":"Alice","age":30}\n{"name":"Bob"}\n' | \
     vrk validate --schema '{"name":"string","age":"number"}'
+warning: validate: line 2: age is missing
 {"name":"Alice","age":30}
 ```
 
-Stderr shows: `warning: validation failed: age is missing`
+Stderr shows: `warning: validate: line 2: age is missing`
 
 Bob's record was missing `age`, so it was dropped. Alice's record passed through. The pipeline continues with only clean data.
 
@@ -38,12 +39,13 @@ Bob's record was missing `age`, so it was dropped. Alice's record passed through
 ```bash
 $ printf '{"name":"Alice","age":30}\n{"name":"Bob"}\n' | \
     vrk validate --schema '{"name":"string","age":"number"}' --strict
+error: validate: line 2: age is missing
 {"name":"Alice","age":30}
 $ echo $?
 1
 ```
 
-Stderr shows: `warning: validation failed: age is missing`
+Stderr shows: `error: validate: line 2: age is missing`
 
 In strict mode, the first invalid record stops the pipeline with exit 1. Use this when partial results are worse than no results.
 
@@ -61,8 +63,9 @@ Invalid records are sent to `vrk prompt` with instructions to fix them to match 
 ```bash
 $ printf '{"name":"Alice","age":30}\n{"name":"Bob"}\n' | \
     vrk validate --schema '{"name":"string","age":"number"}' --json
+warning: validate: line 2: age is missing
 {"name":"Alice","age":30}
-{"_vrk":"validate","total":2,"valid":1,"invalid":1}
+{"_vrk":"validate","total":2,"passed":1,"failed":1}
 ```
 
 The metadata trailer tells you how many records passed and failed.
@@ -108,11 +111,11 @@ $ echo $?
 2
 ```
 
-Invalid schema JSON:
+A `--schema` value that is not a JSON object is treated as a schema file path:
 
 ```bash
 $ cat data.jsonl | vrk validate --schema 'not json'
-usage error: validate: invalid schema JSON
+usage error: validate: cannot read schema file: open not json: no such file or directory
 $ echo $?
 2
 ```
@@ -121,6 +124,7 @@ Strict mode on invalid record:
 
 ```bash
 $ printf '{"name":"Alice"}\n' | vrk validate --schema '{"name":"string","age":"number"}' --strict
+error: validate: line 1: age is missing
 $ echo $?
 1
 ```

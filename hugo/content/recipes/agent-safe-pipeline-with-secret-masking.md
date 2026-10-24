@@ -10,8 +10,8 @@ steps:
     cat user-input.txt \
       | vrk mask \
       | vrk tok --check 6000 \
-      | vrk prompt --system "Summarise" \
-      | vrk validate --schema summary.json
+      | vrk prompt --system 'Summarise as JSON: {"summary":"string"}' \
+      | vrk validate --schema summary.json --strict
 tags:
   - "mask"
   - "tok"
@@ -32,7 +32,7 @@ This is the full guard pipeline - four tools chained together, each handling one
 1. `vrk mask` - scans the input for secrets (API keys, bearer tokens, passwords, high-entropy strings) and replaces them with `[REDACTED]`. The LLM never sees the raw credentials.
 2. `vrk tok --check 6000` - counts tokens and passes through only if the input fits. Prevents sending oversized documents that would be truncated.
 3. `vrk prompt` - sends the cleaned, size-checked input to the LLM.
-4. `vrk validate --schema summary.json` - checks that the LLM's response matches your expected schema. If not, exit 1.
+4. `vrk validate --schema summary.json --strict` - checks that the LLM's response has the keys and types in your flat schema. With `--strict`, a bad response exits 1.
 
 If any step fails, the pipeline stops. No partial results, no bad data downstream.
 
@@ -48,8 +48,8 @@ For maximum safety, mask the output too - LLMs can hallucinate or reconstruct cr
 cat user-input.txt \
   | vrk mask \
   | vrk tok --check 6000 \
-  | vrk prompt --system "Summarise" \
+  | vrk prompt --system 'Summarise as JSON: {"summary":"string"}' \
   | vrk mask \
-  | vrk validate --schema summary.json
+  | vrk validate --schema summary.json --strict
 ```
 

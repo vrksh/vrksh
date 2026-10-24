@@ -240,8 +240,12 @@ func bareLink(binDir, vrkBin string, targets []string, force, dryRun bool) int {
 	}
 
 	// Summary.
+	verb := "linked"
+	if dryRun {
+		verb = "would be linked"
+	}
 	if skipped > 0 {
-		if err := barePrintf("%d linked, %d skipped.\n", linked, skipped); err != nil {
+		if err := barePrintf("%d %s, %d skipped.\n", linked, verb, skipped); err != nil {
 			return shared.Errorf("bare: %v", err)
 		}
 		if len(skippedNames) <= 5 {
@@ -255,7 +259,7 @@ func bareLink(binDir, vrkBin string, targets []string, force, dryRun bool) int {
 			}
 		}
 	} else {
-		if err := barePrintf("%d linked.\n", linked); err != nil {
+		if err := barePrintf("%d %s.\n", linked, verb); err != nil {
 			return shared.Errorf("bare: %v", err)
 		}
 	}
@@ -315,7 +319,11 @@ func bareRemove(binDir, vrkBin string, targets []string, dryRun bool) int {
 	}
 
 	if len(targets) > 1 || removed > 1 {
-		if err := barePrintf("%d removed.\n", removed); err != nil {
+		verb := "removed"
+		if dryRun {
+			verb = "would be removed"
+		}
+		if err := barePrintf("%d %s.\n", removed, verb); err != nil {
 			return shared.Errorf("bare: %v", err)
 		}
 	}
