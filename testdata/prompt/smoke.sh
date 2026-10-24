@@ -254,6 +254,62 @@ out=$("$BIN" prompt --help 2>/dev/null) || true
 echo "$out" | grep -q "field" || fail "--help: --field flag missing from output" "got: $out"
 pass "--help lists --field flag"
 
+# --- --schema request shape ---
+echo ""
+echo "--- --schema request shape ---"
+
+# OpenAI gets a real JSON Schema object, not the flat map
+out=$(echo j | env -u ANTHROPIC_API_KEY OPENAI_API_KEY=x "$BIN" prompt -m gpt-4o-mini --schema '{"a":"string"}' --explain)
+echo "$out" | grep -q '"schema":{"additionalProperties":false,"properties":{"a":{"type":"string"}},"required":\["a"\],"type":"object"}' \
+  || fail "openai --schema --explain: not a JSON Schema" "got: $out"
+echo "$out" | grep -q '"strict":true' || fail "openai --schema --explain: scalar schema should be strict" "got: $out"
+pass "openai --schema sends a JSON Schema with required keys"
+
+# array/object fields turn strict mode off
+out=$(echo j | env -u ANTHROPIC_API_KEY OPENAI_API_KEY=x "$BIN" prompt -m gpt-4o-mini --schema '{"a":"array"}' --explain)
+echo "$out" | grep -q '"strict":false' || fail "openai --schema array: want strict false" "got: $out"
+pass "openai --schema with array is not strict"
+
+# --endpoint --schema sends the schema as a system message, with json_object mode
+out=$(echo j | "$BIN" prompt --endpoint http://127.0.0.1:1/v1 -m mock --system 'be terse' --schema '{"a":"string"}' --explain)
+echo "$out" | grep -q '"role":"system","content":"be terse\\n\\nYou must respond with a valid JSON object' \
+  || fail "--endpoint --schema --explain: system message missing" "got: $out"
+echo "$out" | grep -q '"response_format":{"type":"json_object"}' || fail "--endpoint --schema --explain: json_object missing" "got: $out"
+pass "--endpoint --schema puts schema in the system message"
+
+# --- empty prompt ---
+echo ""
+echo "--- empty prompt ---"
+
+# empty stdin: exit 1, nothing sent (port 1 would fail with a different error if a request went out)
+set +e
+printf '' | "$BIN" prompt --endpoint http://127.0.0.1:1 -m mock 2>err.tmp; code=$?
+set -e
+[ "$code" -eq 1 ] || fail "empty prompt: expected exit 1, got $code" ""
+grep -q "prompt: empty prompt, nothing sent" err.tmp || fail "empty prompt: wrong message" "$(cat err.tmp)"
+rm -f err.tmp
+pass "empty prompt exits 1 without a request"
+
+# whitespace only with --json: error envelope on stdout, stderr empty
+set +e
+out=$(printf '  \n' | "$BIN" prompt --endpoint http://127.0.0.1:1 -m mock --json 2>err.tmp); code=$?
+set -e
+[ "$code" -eq 1 ] || fail "empty prompt --json: expected exit 1, got $code" ""
+echo "$out" | grep -q '"error":"prompt: empty prompt, nothing sent"' || fail "empty prompt --json: no envelope" "got: $out"
+[ -s err.tmp ] && fail "empty prompt --json: stderr not empty" "$(cat err.tmp)"
+rm -f err.tmp
+pass "empty prompt --json writes the error envelope"
+
+# --field: empty value is skipped with a warning (only line, so no request)
+set +e
+out=$(printf '{"text":""}\n' | "$BIN" prompt --field text --endpoint http://127.0.0.1:1 -m mock 2>err.tmp); code=$?
+set -e
+[ "$code" -eq 0 ] || fail "--field empty value: expected exit 0, got $code" "$(cat err.tmp)"
+[ -z "$out" ] || fail "--field empty value: expected no output" "got: $out"
+grep -q "line 1: empty prompt, skipped" err.tmp || fail "--field empty value: no skip warning" "$(cat err.tmp)"
+rm -f err.tmp
+pass "--field skips empty prompts"
+
 # --- summary ---
 echo ""
 echo "All smoke tests passed."
