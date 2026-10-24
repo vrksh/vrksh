@@ -543,3 +543,29 @@ func TestPropertyHMACVerify(t *testing.T) {
 		}
 	}
 }
+
+func TestHMACVerifyPrefixed(t *testing.T) {
+	out, _, code := runDigest(t, []string{"--hmac", "--key", "k"}, "m\n")
+	if code != 0 {
+		t.Fatalf("produce: exit %d", code)
+	}
+	prefixed := strings.TrimSpace(out)
+	_, _, code = runDigest(t, []string{"--hmac", "--key", "k", "--verify", prefixed}, "m\n")
+	if code != 0 {
+		t.Fatalf("prefixed verify: exit %d, want 0", code)
+	}
+	_, _, code = runDigest(t, []string{"--hmac", "--key", "k", "--verify", "sha256:" + strings.Repeat("de", 32)}, "m\n")
+	if code != 1 {
+		t.Fatalf("prefixed wrong: exit %d, want 1", code)
+	}
+}
+
+func TestHMACVerifyAlgoMismatch(t *testing.T) {
+	_, stderr, code := runDigest(t, []string{"--hmac", "--key", "k", "--verify", "md5:" + strings.Repeat("de", 16)}, "m\n")
+	if code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "--verify is md5 but --algo is sha256") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}

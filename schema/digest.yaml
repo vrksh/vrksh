@@ -46,7 +46,7 @@ flags:
   - flag: --verify
     short: ""
     type: string
-    description: Known HMAC hex to verify against
+    description: Known HMAC to verify against, as <algo>:<hex> or bare hex
   - flag: --json
     short: "-j"
     type: bool

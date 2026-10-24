@@ -244,6 +244,15 @@ assert_exit "--verify round-trip exits 0" 0 "$ec"
 ec=$(set +e; echo 'payload' | $VRK digest --hmac --key mysecret --verify "$(printf '0%.0s' {1..64})" >/dev/null 2>&1; echo $?)
 assert_exit "--verify mismatch exits 1" 1 "$ec"
 
+# Prefixed (default output form) round-trip → exit 0
+HMAC_PFX=$(echo 'payload' | $VRK digest --hmac --key mysecret)
+ec=$(set +e; echo 'payload' | $VRK digest --hmac --key mysecret --verify "$HMAC_PFX" >/dev/null 2>&1; echo $?)
+assert_exit "--verify prefixed round-trip exits 0" 0 "$ec"
+
+# Prefix algo differs from --algo → exit 2
+ec=$(set +e; echo 'payload' | $VRK digest --hmac --key mysecret --verify "md5:$HMAC_HEX" >/dev/null 2>&1; echo $?)
+assert_exit "--verify md5: with sha256 exits 2" 2 "$ec"
+
 # Different key → mismatch, exit 1
 ec=$(set +e; echo 'payload' | $VRK digest --hmac --key wrongkey --verify "$HMAC_HEX" >/dev/null 2>&1; echo $?)
 assert_exit "--verify different key exits 1" 1 "$ec"
