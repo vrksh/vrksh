@@ -1,0 +1,18 @@
+event: content_block_delta
+data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"# Title"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"\n\n"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"First para."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"\n\n"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"- item"}}
+
+event: message_stop
+data: {"type":"message_stop"}
+

@@ -7,7 +7,7 @@ Built-in patterns detect:
 - **High-entropy strings**: any token with Shannon entropy above the threshold (default 4.0) that looks like a secret - API keys, connection strings, hex tokens
 
 ```bash
-$ printf 'API key: sk-proj-abc123def456ghi789jkl012mno345pqr678stu901vwx234yz\nBearer ghp_xK9mN2pL4qR7sT0uW3yZ5bD8fH1jM6nP9rV2\nPassword: s3cr3t-p4ssw0rd-v3ry-l0ng\nNormal text stays untouched\n' | vrk mask
+$ printf 'API key: sk-proj-abc123def456ghi789jkl012mno345pqr678stu901vwx234yz\nBearer ghp_FAKE0000example0000notreal0000000000\nPassword: s3cr3t-p4ssw0rd-v3ry-l0ng\nNormal text stays untouched\n' | vrk mask
 API key: [REDACTED]
 Bearer [REDACTED]
 Password: [REDACTED]
@@ -19,7 +19,7 @@ Normal text stays untouched
 Appends a metadata trailer showing what was redacted:
 
 ```bash
-$ printf 'Bearer ghp_xK9mN2pL4qR7sT0uW3yZ5bD8fH1jM6nP9rV2\nNormal line\n' | vrk mask --json
+$ printf 'Bearer ghp_FAKE0000example0000notreal0000000000\nNormal line\n' | vrk mask --json
 Bearer [REDACTED] [REDACTED]
 Normal line
 {"_vrk":"mask","lines":2,"redacted":1,"patterns_matched":["bearer","entropy"]}

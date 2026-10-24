@@ -1,6 +1,6 @@
 export CGO_ENABLED=0
 
-.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate generate-og validate-schemas validate-manifest test-site
+.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate generate-og validate-schemas validate-manifest test-site doccheck recipecheck acceptance
 
 # Build the binary. CGO_ENABLED=0 is mandatory - static binary promise depends on it.
 build:
@@ -85,6 +85,19 @@ test-site: build generate-og validate-manifest
 	bash -n hugo/static/install.sh
 	hugo --minify --source hugo
 	./vrk tok < hugo/static/skills.md | awk '{if($$1+0 > 4000) {print "skills.md over 4000 tokens"; exit 1}}'
+
+# Run the `$ command` examples in docs and recipe pages against ./vrk and a mock LLM.
+# Not part of check yet. Docs are generated: run `make generate` first if schemas changed.
+doccheck: build
+	go run ./internal/doccheck
+
+# Run each recipe's steps and its testdata/recipes/<slug>/expect.sh. Not part of check yet.
+recipecheck: build
+	go test -tags recipes -count=1 -timeout 300s ./internal/recipecheck/...
+
+# The v0.2.0 acceptance list (scripts/acceptance.sh). Not part of check yet.
+acceptance: build
+	bash scripts/acceptance.sh
 
 # Remove build artifacts
 clean:

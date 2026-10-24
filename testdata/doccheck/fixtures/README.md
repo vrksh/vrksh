@@ -1,0 +1,7 @@
+# Title
+
+vrk is a set of small Unix tools for AI pipelines. Each tool reads stdin, writes stdout, and uses exit codes to report failure. The tools compose with pipes.
+
+## Details
+
+See [the docs](https://vrk.sh/docs) for more.
