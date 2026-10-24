@@ -87,6 +87,7 @@ done < urls.txt
 
 No input:
 
+<!-- doccheck: skip (needs an interactive terminal, doccheck runs with empty stdin) -->
 ```bash
 $ vrk slug
 usage error: slug: no input
