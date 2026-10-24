@@ -29,7 +29,7 @@ $ printf '{"name":"Alice","age":30}\n{"name":"Bob"}\n' | \
 {"name":"Alice","age":30}
 ```
 
-Stderr shows: `warning: validation failed: age is missing`
+Stderr shows: `warning: validate: line 2: age is missing`
 
 Bob's record was missing `age`, so it was dropped. Alice's record passed through. The pipeline continues with only clean data.
 
@@ -43,7 +43,7 @@ $ echo $?
 1
 ```
 
-Stderr shows: `warning: validation failed: age is missing`
+Stderr shows: `warning: validate: line 2: age is missing`
 
 In strict mode, the first invalid record stops the pipeline with exit 1. Use this when partial results are worse than no results.
 
