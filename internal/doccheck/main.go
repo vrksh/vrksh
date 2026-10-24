@@ -13,7 +13,10 @@ import (
 
 // usage: go run ./internal/doccheck [file.md ...]   (run from the repo root;
 // needs ./vrk built). With no files it checks hugo/content/{docs,recipes}/*.md.
-func main() {
+func main() { os.Exit(run()) }
+
+// run returns the exit code so deferred cleanup (mock server, temp dir) always runs.
+func run() int {
 	root, _ := os.Getwd()
 	files := os.Args[1:]
 	if len(files) == 0 {
@@ -26,18 +29,18 @@ func main() {
 	vrk := filepath.Join(root, "vrk")
 	if _, err := os.Stat(vrk); err != nil {
 		fmt.Fprintln(os.Stderr, "doccheck: ./vrk not found, run make build")
-		os.Exit(2)
+		return 2
 	}
 	tmp, err := os.MkdirTemp("", "doccheck")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "doccheck:", err)
-		os.Exit(2)
+		return 2
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 	mock, err := start.Start(root, tmp)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "doccheck:", err)
-		os.Exit(2)
+		return 2
 	}
 	defer mock.Stop()
 	bin := filepath.Join(tmp, "bin")
@@ -67,7 +70,7 @@ func main() {
 		res, err := checkFile(f, mk)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "doccheck:", err)
-			os.Exit(2)
+			return 2
 		}
 		for _, fl := range res.fails {
 			fmt.Print(report(fl))
@@ -81,6 +84,7 @@ func main() {
 	}
 	fmt.Printf("doccheck: %d examples, %d failed\n", total, failed)
 	if failed > 0 {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
