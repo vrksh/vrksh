@@ -114,7 +114,7 @@ func kvSet(args []string) {
 **Why:** Zero runtime dependencies, zero network calls, deterministic behaviour. The binary is self-contained. A tool that needs to download data on first run will fail in air-gapped environments, slow CI, and offline laptops.
 
 **Current embeds:**
-- `tok` - BPE vocabulary tables for cl100k_base (~2MB, tiktoken-go)
+- `tok` - BPE vocabulary table for cl100k_base (744 KB, `internal/shared/tokcount`)
 - `moniker` - adjective and noun wordlists (~50KB)
 - `main.go` - manifest.json (tool registry), SKILLS.md (agent reference), skills/ filesystem
 - `slug` - Unicode normalization tables (via golang.org/x/text)
@@ -143,11 +143,12 @@ printf '+3d' | vrk epoch # no trailing newline - also works
 
 ## 6. Tokenizer: cl100k_base Approximation
 
-**Decision:** `tok` and all token-counting tools use cl100k_base (tiktoken-go) as the tokenizer for all models.
+**Decision:** `tok` and all token-counting tools use cl100k_base as the tokenizer for all models. The encoder is our own (`internal/shared/tokcount`), checked token-for-token against tiktoken-go in tests. We dropped tiktoken-go at runtime because its constructor builds a reverse map and sorts 100k tokens on every start, which was more than half of `vrk tok` startup.
 
 **Accuracy:**
-- GPT-4, GPT-4o: exact
-- Claude (all): ~95% accurate - documented limitation
+- GPT-4, GPT-3.5: exact
+- GPT-4o and later: approximate (they use o200k_base)
+- Claude (all): approximate, not measured - documented limitation
 - Local models: rough approximation
 
 **Why not Claude's tokenizer:** it is not publicly available as a standalone library. When Anthropic ships one, add it behind `--model claude-*` detection.
