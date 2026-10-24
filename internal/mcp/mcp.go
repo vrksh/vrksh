@@ -9,7 +9,6 @@
 package mcp
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -145,9 +144,7 @@ func runStdio(
 	tools := buildToolsList(flagsFn, descriptions, stdinRequired)
 
 	enc := json.NewEncoder(os.Stdout)
-	scanner := bufio.NewScanner(os.Stdin)
-	// Increase scanner buffer for large requests.
-	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	scanner := shared.ScanLines(os.Stdin)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
