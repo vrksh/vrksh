@@ -42,7 +42,7 @@ Unknown shell:
 
 ```bash
 $ vrk completions powershell
-error: completions: unsupported shell "powershell"
+error: completions: unknown shell "powershell" (supported: bash, zsh, fish)
 $ echo $?
 1
 ```
