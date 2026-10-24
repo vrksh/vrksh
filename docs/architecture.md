@@ -114,7 +114,7 @@ func kvSet(args []string) {
 **Why:** Zero runtime dependencies, zero network calls, deterministic behaviour. The binary is self-contained. A tool that needs to download data on first run will fail in air-gapped environments, slow CI, and offline laptops.
 
 **Current embeds:**
-- `tok` - BPE vocabulary table for cl100k_base (744 KB, `internal/shared/tokcount`)
+- `tok` - BPE vocabulary tables for o200k_base (1.6 MB) and cl100k_base (744 KB), `internal/shared/tokcount`
 - `moniker` - adjective and noun wordlists (~50KB)
 - `main.go` - manifest.json (tool registry), SKILLS.md (agent reference), skills/ filesystem
 - `slug` - Unicode normalization tables (via golang.org/x/text)
@@ -141,13 +141,14 @@ printf '+3d' | vrk epoch # no trailing newline - also works
 
 ---
 
-## 6. Tokenizer: cl100k_base Approximation
+## 6. Tokenizer: OpenAI encodings, o200k_base by default
 
-**Decision:** `tok` and all token-counting tools use cl100k_base as the tokenizer for all models. The encoder is our own (`internal/shared/tokcount`), checked token-for-token against tiktoken-go in tests. We dropped tiktoken-go at runtime because its constructor builds a reverse map and sorts 100k tokens on every start, which was more than half of `vrk tok` startup.
+**Decision:** token-counting tools count with o200k_base, the encoding of OpenAI's current models (GPT-4o, GPT-4.1, GPT-5, o-series). `tok` and `chunk` take `--model`: `gpt-4`, `gpt-3.5-turbo` and the older embedding models switch to cl100k_base, following tiktoken's model table. Unknown model names exit 2 rather than silently counting with the wrong vocab. `grab`, `throttle` and `prompt` always use the default.
+
+The encoder is our own (`internal/shared/tokcount`), checked token-for-token against tiktoken-go for both encodings in tests. We dropped tiktoken-go at runtime because its constructor builds a reverse map and sorts the whole vocab on every start, which was more than half of `vrk tok` startup. Each vocab is loaded only when first used, so `--model gpt-4` never pays for o200k.
 
 **Accuracy:**
-- GPT-4, GPT-3.5: exact
-- GPT-4o and later: approximate (they use o200k_base)
+- OpenAI models with the matching `--model`: exact
 - Claude (all): approximate, not measured - documented limitation
 - Local models: rough approximation
 

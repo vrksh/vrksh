@@ -287,8 +287,9 @@ vrk uuid --v7 --count 10 --json | jq -r '.uuid'
 
 ## tok — Token Counter
 
-Counts tokens in stdin using the cl100k_base tokenizer. Exact for GPT-4 family,
-an estimate for Claude models. With `--check N`, acts as a pipeline gate: passes input
+Counts tokens in stdin with o200k_base, the tokenizer of GPT-4o, GPT-4.1, GPT-5
+and the o-series. `--model gpt-4` or `gpt-3.5-turbo` counts with cl100k_base.
+Exact for OpenAI models, an estimate for Claude. With `--check N`, acts as a pipeline gate: passes input
 through if within the token limit, exits 1 if over.
 Input: positional argument or stdin.
 
@@ -297,8 +298,8 @@ Input: positional argument or stdin.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--check <N>` | - | Pass input through if within N tokens; exit 1 with empty stdout if over. Reads all stdin before deciding. |
-| `--model <name>` | `-m` | Tokenizer model label (default: `cl100k_base`; only cl100k_base is currently implemented) |
-| `--json` | `-j` | Emit output as `{"tokens": N, "model": "cl100k_base"}` (measurement mode) or JSON error (check mode) |
+| `--model <name>` | `-m` | OpenAI model or encoding: `gpt-5`, `gpt-4o`, `o3` and other current models use `o200k_base` (default); `gpt-4`, `gpt-3.5-turbo` use `cl100k_base`. Unknown names exit 2. |
+| `--json` | `-j` | Emit output as `{"tokens": N, "model": "o200k_base"}` (measurement mode) or JSON error (check mode). `model` is the encoding used. |
 | `--quiet` | `-q` | Suppress all stderr output (exit codes unaffected) |
 
 ### Exit codes
@@ -307,7 +308,7 @@ Input: positional argument or stdin.
 |------|---------|
 | 0 | Success - count printed (or JSON emitted); `--check` within limit |
 | 1 | Over limit - `--check N` was set and token count exceeds N |
-| 2 | Usage error - unknown flag; running interactively with no piped input |
+| 2 | Usage error - unknown flag; unknown `--model`; running interactively with no piped input |
 
 ### Examples
 
@@ -321,7 +322,7 @@ vrk tok "hello world"
 
 # JSON output
 echo "hello world" | vrk tok --json
-# -> {"tokens":2,"model":"cl100k_base"}
+# -> {"tokens":2,"model":"o200k_base"}
 
 # Gate: pass through if within 8000 tokens
 echo "hello world" | vrk tok --check 8000
@@ -331,9 +332,9 @@ echo "hello world" | vrk tok --check 8000
 cat big_context.txt | vrk tok --check 100
 # -> (nothing on stdout, exits 1)
 
-# Count with explicit model label
-echo "hello world" | vrk tok --model cl100k_base
-# -> 2
+# Count for GPT-4 (cl100k_base)
+echo "hello world" | vrk tok --model gpt-4 --json
+# -> {"tokens":2,"model":"cl100k_base"}
 ```
 
 ### Compose patterns
@@ -361,8 +362,9 @@ cat generated_prompt.txt | vrk tok --check 100000 > /dev/null || { echo "Prompt 
 - **`--json` + `--check` within limit** passes raw input through, not a JSON envelope. `--json` only affects the error path.
 - **`--check 0`** exits 1 for any non-empty input. Valid but rarely useful.
 - **Positional arg passthrough** joins with space, no trailing newline. Stdin passthrough preserves raw bytes exactly including trailing newlines.
-- **`--model` is a label, not a tokenizer switch.** Passing `--model claude-3-opus` or any other value still uses cl100k_base internally - the flag exists for forward compatibility and `--json` output labelling. Only `cl100k_base` is currently implemented; any other string is accepted without error but does not change which tokenizer runs.
-- **cl100k_base is an estimate for Claude.** The exact Claude tokenizer is not publicly available. Set `--check` at 90% of the model's actual context limit to absorb the error margin.
+- **`--model` picks the tokenizer.** Matching follows tiktoken: `gpt-4`, `gpt-4-*`, `gpt-3.5*` and `text-embedding-*` count with cl100k_base; every other `gpt-*`, `chatgpt-*` and `o1`/`o3`/`o4` model counts with o200k_base. Non-OpenAI names such as `claude-*` exit 2; leave `--model` off to estimate for them.
+- **Counts differ between encodings.** English prose and code come out within about 1% of each other; Hindi, CJK and Greek are often half as many tokens in o200k_base. Pass the model you send to.
+- **OpenAI tokenizers are an estimate for Claude.** The exact Claude tokenizer is not publicly available. Set `--check` at 90% of the model's actual context limit to absorb the error margin.
 - **Empty pipe is 0 tokens, not an error.** `cat /dev/null | vrk tok` exits 0 and prints `0`. Only running `vrk tok` interactively in a terminal (no pipe) exits 2.
 
 ---
@@ -891,7 +893,7 @@ vrk coax --times 3 --backoff exp:1s --on 1 -- \
 ## chunk — Token-Aware Text Splitter
 
 Splits text from stdin into chunks, each within a token budget. Emits JSONL.
-Uses cl100k_base tokenization (exact for GPT-4 family, an estimate for Claude).
+Counts with o200k_base by default; `--model gpt-4` switches to cl100k_base (see tok).
 Input: positional argument or stdin.
 
 ### Flags
@@ -901,6 +903,7 @@ Input: positional argument or stdin.
 | `--size N` | — | Max tokens per chunk (required, must be >= 1) |
 | `--overlap N` | — | Token overlap between adjacent chunks (default 0; must be < --size) |
 | `--by <mode>` | — | Chunking strategy; only `paragraph` is currently supported |
+| `--model <name>` | `-m` | Tokenizer, same values as `tok --model` (default `o200k_base`) |
 
 ### Output format
 
@@ -914,7 +917,7 @@ One JSONL record per chunk:
 
 - `index`: 0-based, sequential across all emitted records
 - `text`: decoded token window - may split mid-word at token boundaries, but never splits a UTF-8 character (see Gotchas)
-- `tokens`: exact cl100k_base token count for the emitted text; stays within `--size` except when a single character is wider than the window (then up to 3 tokens over)
+- `tokens`: exact token count for the emitted text in the chosen encoding; stays within `--size` except when a single character is wider than the window (then up to 3 tokens over)
 
 ### Exit codes
 
@@ -922,7 +925,7 @@ One JSONL record per chunk:
 |------|---------|
 | 0 | Success (including empty input — no records emitted) |
 | 1 | Runtime error — I/O error reading stdin, tokenizer failure |
-| 2 | Usage error — `--size` absent or < 1, `--overlap` >= `--size`, unknown `--by` mode, unknown flag |
+| 2 | Usage error — `--size` absent or < 1, `--overlap` >= `--size`, unknown `--by` mode, unknown `--model`, unknown flag |
 
 ### Splitting modes
 
@@ -994,7 +997,7 @@ cat article.txt | vrk chunk --size 800 --overlap 80 --by paragraph | jq '.text'
 - **`--overlap` is in tokens, matching `--size` units.** Overlap is not a percentage.
 - **Empty input exits 0 with no output.** `printf '' | vrk chunk --size 1000` emits nothing and exits 0. This is intentional — empty input is not an error.
 - **`tokens` field is exact.** It reflects the actual token count of the emitted `text`, not an approximation. Use it for downstream budget checks.
-- **cl100k_base is an estimate for Claude.** Set `--size` at 90% of the model's actual context limit to absorb the error margin.
+- **OpenAI tokenizers are an estimate for Claude.** Set `--size` at 90% of the model's actual context limit to absorb the error margin.
 - **Stdout is always empty on error.** Errors go to stderr only.
 
 ---
@@ -1030,7 +1033,7 @@ Requests to internal network addresses (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 
 - `content`: extracted content in the active mode (markdown by default)
 - `fetched_at`: Unix timestamp (integer seconds) of when the response was received
 - `status`: HTTP status code (always 200 on exit 0)
-- `token_estimate`: cl100k_base token count of `content` (an estimate for Claude)
+- `token_estimate`: o200k_base token count of `content` (an estimate for Claude)
 
 ### Exit codes
 
@@ -1105,7 +1108,7 @@ vrk coax --times 3 --backoff exp:1s -- vrk grab https://example.com
 - **Invalid URL is a usage error (exit 2), not a runtime error (exit 1).** A URL with no scheme (`example.com`) or a non-http/https scheme (`ftp://`) exits 2 — the caller gave bad input. A valid URL that fails to fetch (DNS, timeout, 404) exits 1.
 - **Non-HTML responses pass through unchanged.** If the server returns `Content-Type: application/json` or any non-`text/html` type, the raw body is emitted to stdout without extraction. `--text` is a no-op for non-HTML. `--json` still wraps the raw body in the envelope.
 - **Max 5 redirect hops.** Chains longer than 5 redirects exit 1 with "too many redirects (> 5)". Cookies are never stored between redirects or invocations.
-- **`token_estimate` uses cl100k_base (an estimate for Claude).** The estimate reflects the extracted `content` field, not the raw HTML. Set downstream budgets at 90% of the actual model limit to absorb the error margin.
+- **`token_estimate` uses o200k_base (exact for GPT-4o and later, an estimate for Claude).** The estimate reflects the extracted `content` field, not the raw HTML. Set downstream budgets at 90% of the actual model limit to absorb the error margin.
 - **`--text` output is whitespace-normalised.** `grab --text` runs the HTML extractor then `vrk plain`'s markdown stripper. Consecutive blank lines are collapsed to one, and multiple spaces on a line are collapsed to one. The prose content is unchanged, but whitespace structure may differ from the raw page.
 - **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.
 - **Internal addresses are blocked by default.** Requests to 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, ::1, and link-local IPv6 exit 1 unless `--allow-internal` is passed. This includes addresses reached via redirects - a public URL that redirects to localhost is also blocked.

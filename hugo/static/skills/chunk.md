@@ -8,10 +8,11 @@ Composes with: grab, tok, prompt, kv, uuid
 | `--size`    |       | int    | Max tokens per chunk (required)                       |
 | `--overlap` |       | int    | Token overlap between adjacent chunks (default: 0)    |
 | `--by`      |       | string | Chunking strategy: `paragraph` (default: token-level) |
+| `--model`   | `-m`  | string | Tokenizer, as `tok --model` (default: o200k_base)     |
 
 Exit 0: success (including empty input)
 Exit 1: I/O error, tokenizer failure
-Exit 2: --size missing or < 1, --overlap >= --size, unknown --by mode, unknown flag
+Exit 2: --size missing or < 1, --overlap >= --size, unknown --by mode, unknown --model, unknown flag
 
 Example:
 

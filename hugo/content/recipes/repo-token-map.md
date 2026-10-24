@@ -29,7 +29,7 @@ The output looks like this:
      14  ./src/small.go
 ```
 
-`vrk tok` counts with cl100k_base. It is exact for GPT-4 and close for Claude, which is good enough for ranking files.
+`vrk tok` counts with o200k_base, the GPT-5 tokenizer. It is exact for OpenAI models and close for Claude, which is good enough for ranking files.
 
 ## Variations
 

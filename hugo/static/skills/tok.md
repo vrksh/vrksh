@@ -1,4 +1,4 @@
-# tok - Token Counter - cl100k_base, --check gate, --json
+# tok - Token Counter - o200k_base or cl100k_base, --check gate, --json
 
 When to use: measure token count or gate a pipeline to prevent silent truncation. Without --check: prints the count. With --check N: passes input through if within limit, exits 1 if over.
 Composes with: grab, chunk, prompt, assert
@@ -6,8 +6,8 @@ Composes with: grab, chunk, prompt, assert
 | Flag      | Short | Type   | Description                                           |
 |-----------|-------|--------|-------------------------------------------------------|
 | `--check` |       | int    | Pass input through if within N tokens, exit 1 if over |
-| `--model` | `-m`  | string | Tokenizer model label (default: cl100k_base)          |
-| `--json`  | `-j`  | bool   | Emit `{"tokens":N,"model":"cl100k_base"}`             |
+| `--model` | `-m`  | string | `gpt-4`/`gpt-3.5-turbo`: cl100k_base; other OpenAI models: o200k_base (default); unknown: exit 2 |
+| `--json`  | `-j`  | bool   | Emit `{"tokens":N,"model":"o200k_base"}` (encoding used) |
 | `--quiet` | `-q`  | bool   | Suppress stderr                                       |
 
 Exit 0: success, within limit

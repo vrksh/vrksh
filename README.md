@@ -165,7 +165,7 @@ vrk completions fish > ~/.config/fish/completions/vrk.fish
 
 - You need signature verification on JWTs. `vrk jwt` is an inspector, not a validator.
 - You want a chat interface. `vrk prompt` is a pipeline tool with temperature 0 by default.
-- You need exact token counts for Claude. `tok` uses cl100k_base, which is exact for GPT-4 and only an estimate for Claude.
+- You need exact token counts for Claude. `tok` counts with OpenAI tokenizers (o200k_base by default, cl100k_base with `--model gpt-4`), which are exact for OpenAI models and only an estimate for Claude.
 - You want a framework. vrksh is CLI filters and pipes, not an SDK.
 
 ## Docs

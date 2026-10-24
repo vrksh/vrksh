@@ -1,17 +1,20 @@
-// Package tokcount counts, encodes and decodes cl100k_base tokens with an
-// embedded vocabulary. No network access.
+// Package tokcount counts, encodes and decodes OpenAI BPE tokens with
+// embedded vocabularies: o200k_base (GPT-4o and later, the default) and
+// cl100k_base (GPT-4 and GPT-3.5). No network access.
 //
 // The encoder follows github.com/pkoukk/tiktoken-go (MIT), a Go port of
-// OpenAI's tiktoken: the same split regex and the same byte pair merge order,
-// so token IDs are identical (tokcount_test.go checks this against
+// OpenAI's tiktoken: the same split regexes and the same byte pair merge
+// order, so token IDs are identical (tokcount_test.go checks this against
 // tiktoken-go). It is built here because tiktoken-go's constructor also
-// builds a reverse map and sorts all 100k tokens, which was more than half of
+// builds a reverse map and sorts the whole vocab, which was more than half of
 // `vrk tok` startup time.
 package tokcount
 
 import (
 	_ "embed"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/dlclark/regexp2"
@@ -19,24 +22,77 @@ import (
 
 //go:generate go run gen_vocab.go
 
-// cl100kBin is the cl100k_base vocab in rank order: one length byte, then the
-// raw token bytes. Generated from data/cl100k_base.tiktoken by gen_vocab.go,
-// so startup skips base64 decoding and number parsing.
-//
-//go:embed data/cl100k_base.bin
-var cl100kBin []byte
+// The vocabs are in rank order: one length byte, then the raw token bytes.
+// Generated from data/<name>.tiktoken by gen_vocab.go, so startup skips
+// base64 decoding and number parsing.
+var (
+	//go:embed data/cl100k_base.bin
+	cl100kBin []byte
+	//go:embed data/o200k_base.bin
+	o200kBin []byte
+)
 
-// cl100kSize is the number of mergeable tokens in cl100k_base.
-const cl100kSize = 100256
+// Encoding is one BPE vocabulary plus its pre-tokenizer regex. The encoder
+// is built on first use and cached for the life of the process.
+type Encoding struct {
+	Name    string
+	bin     []byte
+	size    int // number of mergeable tokens
+	pattern string
+	once    sync.Once
+	enc     *encoder
+	err     error
+}
 
-// cl100kPattern is the cl100k_base pre-tokenizer regex.
-const cl100kPattern = `(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+`
+var (
+	// O200k is the vocab of GPT-4o, GPT-4.1, GPT-5 and the o-series.
+	O200k = &Encoding{
+		Name: "o200k_base", bin: o200kBin, size: 199998,
+		pattern: strings.Join([]string{
+			`[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?`,
+			`[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?`,
+			`\p{N}{1,3}`,
+			` ?[^\s\p{L}\p{N}]+[\r\n/]*`,
+			`\s*[\r\n]+`,
+			`\s+(?!\S)`,
+			`\s+`,
+		}, "|"),
+	}
+	// Cl100k is the vocab of GPT-4, GPT-3.5 and text-embedding-3.
+	Cl100k = &Encoding{
+		Name: "cl100k_base", bin: cl100kBin, size: 100256,
+		pattern: `(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+`,
+	}
+	// Default is what tools count with when no --model is given: the vocab
+	// of OpenAI's current models.
+	Default = O200k
+)
+
+// ForModel returns the encoding for a model or encoding name. Empty means
+// Default. Matching follows tiktoken's model table: gpt-4, gpt-3.5 and the
+// older embedding models use cl100k_base; gpt-4o, gpt-4.1, gpt-5 and later,
+// and the o-series use o200k_base.
+func ForModel(model string) (*Encoding, error) {
+	m := strings.ToLower(strings.TrimSpace(model))
+	switch {
+	case m == "":
+		return Default, nil
+	case m == "cl100k_base", m == "gpt-4", strings.HasPrefix(m, "gpt-4-"),
+		strings.HasPrefix(m, "gpt-3.5"), strings.HasPrefix(m, "gpt-35"),
+		strings.HasPrefix(m, "text-embedding-"):
+		return Cl100k, nil
+	case m == "o200k_base", strings.HasPrefix(m, "gpt-"), strings.HasPrefix(m, "chatgpt-"),
+		len(m) >= 2 && m[0] == 'o' && m[1] >= '1' && m[1] <= '9':
+		return O200k, nil
+	}
+	return nil, fmt.Errorf("unknown model %q: use an OpenAI model name (gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo) or o200k_base / cl100k_base", model)
+}
 
 // loadBinaryVocab builds the token-to-rank map and the rank-indexed token
 // table from the binary vocab. Table entries are slices of data, not copies.
-func loadBinaryVocab(data []byte) (map[string]int, [][]byte, error) {
-	ranks := make(map[string]int, cl100kSize)
-	tokens := make([][]byte, 0, cl100kSize)
+func loadBinaryVocab(data []byte, size int) (map[string]int, [][]byte, error) {
+	ranks := make(map[string]int, size)
+	tokens := make([][]byte, 0, size)
 	for i := 0; i < len(data); {
 		n := int(data[i])
 		i++
@@ -51,7 +107,7 @@ func loadBinaryVocab(data []byte) (map[string]int, [][]byte, error) {
 	return ranks, tokens, nil
 }
 
-// encoder is a cl100k_base byte pair encoder.
+// encoder is a byte pair encoder for one vocab.
 type encoder struct {
 	ranks  map[string]int
 	tokens [][]byte // tokens[rank] is the raw bytes of that token
@@ -85,69 +141,65 @@ func (e *encoder) decode(ids []int) []byte {
 	return out
 }
 
-var (
-	encOnce   sync.Once
-	cachedEnc *encoder
-	encErr    error
-)
-
-// getEncoder returns the cl100k_base encoder, built once per process.
-func getEncoder() (*encoder, error) {
-	encOnce.Do(func() {
-		ranks, tokens, err := loadBinaryVocab(cl100kBin)
+// get returns the encoder, built once per process.
+func (e *Encoding) get() (*encoder, error) {
+	e.once.Do(func() {
+		ranks, tokens, err := loadBinaryVocab(e.bin, e.size)
 		if err != nil {
-			encErr = err
+			e.err = err
 			return
 		}
-		split, err := regexp2.Compile(cl100kPattern, regexp2.None)
+		split, err := regexp2.Compile(e.pattern, regexp2.None)
 		if err != nil {
-			encErr = err
+			e.err = err
 			return
 		}
-		cachedEnc = &encoder{ranks: ranks, tokens: tokens, split: split}
+		e.enc = &encoder{ranks: ranks, tokens: tokens, split: split}
 	})
-	return cachedEnc, encErr
+	return e.enc, e.err
 }
 
-// CountTokens returns the number of cl100k_base tokens in text. Empty text
-// returns 0 without touching the encoder. Returns an error if the embedded
-// vocabulary cannot be loaded.
-func CountTokens(text string) (int, error) {
-	ids, err := EncodeTokens(text)
+// Count returns the number of tokens in text. Empty text returns 0 without
+// touching the encoder. Returns an error if the embedded vocabulary cannot be
+// loaded.
+func (e *Encoding) Count(text string) (int, error) {
+	ids, err := e.Encode(text)
 	return len(ids), err
 }
 
-// EncodeTokens returns the cl100k_base token ID slice for text.
-// Returns nil for empty text without touching the encoder. Special tokens
-// such as <|endoftext|> are encoded as ordinary text.
-func EncodeTokens(text string) ([]int, error) {
+// Encode returns the token IDs for text. Returns nil for empty text without
+// touching the encoder. Special tokens such as <|endoftext|> are encoded as
+// ordinary text.
+func (e *Encoding) Encode(text string) ([]int, error) {
 	if text == "" {
 		return nil, nil
 	}
-	e, err := getEncoder()
+	enc, err := e.get()
 	if err != nil {
 		return nil, err
 	}
-	return e.encode(text)
+	return enc.encode(text)
 }
 
-// DecodeTokens converts a slice of cl100k_base token IDs back to text.
-// Returns "" for an empty slice. A window of tokens can end inside a
+// Decode converts token IDs back to text. A window of tokens can end inside a
 // multi-byte character; use DecodeBytes and utf8.Valid when that matters.
-func DecodeTokens(ids []int) string {
-	return string(DecodeBytes(ids))
+func (e *Encoding) Decode(ids []int) string {
+	return string(e.DecodeBytes(ids))
 }
 
-// DecodeBytes returns the raw bytes for a slice of cl100k_base token IDs.
-// The bytes are not always valid UTF-8: one token can hold part of a
-// character. Unknown IDs are skipped. Returns nil for an empty slice.
-func DecodeBytes(ids []int) []byte {
+// DecodeBytes returns the raw bytes for token IDs. The bytes are not always
+// valid UTF-8: one token can hold part of a character. Unknown IDs are
+// skipped. Returns nil for an empty slice.
+func (e *Encoding) DecodeBytes(ids []int) []byte {
 	if len(ids) == 0 {
 		return nil
 	}
-	e, err := getEncoder()
+	enc, err := e.get()
 	if err != nil {
 		return nil
 	}
-	return e.decode(ids)
+	return enc.decode(ids)
 }
+
+// CountTokens counts with the Default encoding.
+func CountTokens(text string) (int, error) { return Default.Count(text) }

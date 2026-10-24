@@ -54,12 +54,13 @@ cat contract.pdf.txt | vrk chunk --size 4000 --overlap 200
 
 ## Flags
 
-| Flag        | Short | Type   | Description                           |
-|-------------|-------|--------|---------------------------------------|
-| `--size`    |       | int    | Max tokens per chunk (required)       |
-| `--overlap` |       | int    | Token overlap between adjacent chunks |
-| `--by`      |       | string | Chunking strategy: paragraph          |
-| `--quiet`   | -q    | bool   | Suppress stderr output                |
+| Flag        | Short | Type   | Description                                                                                                   |
+|-------------|-------|--------|---------------------------------------------------------------------------------------------------------------|
+| `--size`    |       | int    | Max tokens per chunk (required)                                                                               |
+| `--overlap` |       | int    | Token overlap between adjacent chunks                                                                         |
+| `--by`      |       | string | Chunking strategy: paragraph                                                                                  |
+| `--model`   | -m    | string | OpenAI model or encoding to count for: gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo, o200k_base (default), cl100k_base |
+| `--quiet`   | -q    | bool   | Suppress stderr output                                                                                        |
 
 
 <!-- notes - edit in notes/chunk.notes.md -->
@@ -126,7 +127,7 @@ Use `--by paragraph` when your content has natural paragraph structure and you w
 
 ## Multi-byte text
 
-One cl100k token can hold part of a character (Hindi, emoji, Greek, CJK). `chunk` never cuts a character in half: each chunk ends and starts on a character boundary, so every `text` is valid UTF-8. With `--overlap 0`, joining every `text` in order gives back the input exactly.
+One token can hold part of a character (Hindi, emoji, Greek, CJK). `chunk` never cuts a character in half: each chunk ends and starts on a character boundary, so every `text` is valid UTF-8. With `--overlap 0`, joining every `text` in order gives back the input exactly.
 
 To stay on a boundary, a chunk ends a token or two early. In the rare case where one character spans more tokens than `--size` allows (for example `--size 1` on an emoji), the chunk grows to fit that character, up to 3 tokens over `--size`. The `tokens` field always reports the real count.
 

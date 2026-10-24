@@ -1,8 +1,8 @@
 //go:build ignore
 
-// gen_vocab converts data/cl100k_base.tiktoken (base64 token, rank per line)
-// into data/cl100k_base.bin: for each rank in order, one length byte followed
-// by the raw token bytes. Run with `go generate ./internal/shared/tokcount`.
+// gen_vocab converts each data/<name>.tiktoken (base64 token, rank per line)
+// into data/<name>.bin: for each rank in order, one length byte followed by
+// the raw token bytes. Run with `go generate ./internal/shared/tokcount`.
 package main
 
 import (
@@ -16,14 +16,16 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "gen_vocab:", err)
-		os.Exit(1)
+	for _, name := range []string{"cl100k_base", "o200k_base"} {
+		if err := run(name); err != nil {
+			fmt.Fprintln(os.Stderr, "gen_vocab:", name+":", err)
+			os.Exit(1)
+		}
 	}
 }
 
-func run() error {
-	src, err := os.ReadFile("data/cl100k_base.tiktoken")
+func run(name string) error {
+	src, err := os.ReadFile("data/" + name + ".tiktoken")
 	if err != nil {
 		return err
 	}
@@ -59,5 +61,5 @@ func run() error {
 	if err := sc.Err(); err != nil {
 		return err
 	}
-	return os.WriteFile("data/cl100k_base.bin", out.Bytes(), 0o644)
+	return os.WriteFile("data/"+name+".bin", out.Bytes(), 0o644)
 }

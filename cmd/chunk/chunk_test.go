@@ -95,7 +95,7 @@ func assertInvariant(t *testing.T, records []record, size int) {
 // ── basic split ──────────────────────────────────────────────────────────────
 
 func TestBasicSplit(t *testing.T) {
-	// Build a deterministic input: " hello" is one cl100k_base token.
+	// Build a deterministic input: " hello" is one token.
 	// Prepend "hello" (1 token) so the total is 1 + 2499 = 2500 tokens.
 	input := "hello" + strings.Repeat(" hello", 2499)
 	total, err := tokcount.CountTokens(input)
@@ -163,14 +163,14 @@ func TestOverlap(t *testing.T) {
 	}
 
 	// chunk[1] must begin with the last 100 tokens of chunk[0].
-	ids0, err := tokcount.EncodeTokens(records[0].Text)
+	ids0, err := tokcount.Default.Encode(records[0].Text)
 	if err != nil {
 		t.Fatalf("EncodeTokens chunk[0]: %v", err)
 	}
 	if len(ids0) < 100 {
 		t.Fatalf("chunk[0] has %d tokens, need >= 100 to test overlap", len(ids0))
 	}
-	overlapText := tokcount.DecodeTokens(ids0[len(ids0)-100:])
+	overlapText := tokcount.Default.Decode(ids0[len(ids0)-100:])
 	if !strings.HasPrefix(records[1].Text, overlapText) {
 		t.Errorf("chunk[1] does not start with last 100 tokens of chunk[0]\n"+
 			"want prefix: %q\n got prefix:  %q",
@@ -495,7 +495,7 @@ func minInt(a, b int) int {
 
 // ── UTF-8 safety (multi-byte scripts) ────────────────────────────────────────
 
-// multiByteSamples are sentences where cl100k tokens hold parts of characters.
+// multiByteSamples are sentences where tokens hold parts of characters.
 var multiByteSamples = []string{
 	"यह एक साधारण वाक्य है। ",
 	"Emoji party 🎉🚀🔥 time. ",
@@ -671,4 +671,19 @@ func abs(n int) int {
 		return -n
 	}
 	return n
+}
+
+// TestModelFlag checks --model picks the encoding: the Hindi sentence is 24
+// cl100k_base tokens and 9 o200k_base tokens.
+func TestModelFlag(t *testing.T) {
+	const hindi = "यह एक साधारण वाक्य है।"
+	for args, want := range map[string]string{"": `"tokens":9`, "gpt-5": `"tokens":9`, "gpt-4": `"tokens":24`} {
+		code, stdout, _ := runChunk(hindi, []string{"--size", "100", "--model", args})
+		if code != 0 || !strings.Contains(stdout, want) {
+			t.Errorf("--model %q: exit %d stdout %q, want %s", args, code, stdout, want)
+		}
+	}
+	if code, stdout, _ := runChunk(hindi, []string{"--size", "100", "-m", "llama3"}); code != 2 || stdout != "" {
+		t.Errorf("unknown model: exit %d stdout %q, want exit 2 and no output", code, stdout)
+	}
 }

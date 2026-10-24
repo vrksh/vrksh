@@ -40,7 +40,7 @@ internal/
     plaintext/
       plaintext.go              — StripMarkdown() — goldmark-based markdown-to-plain-text
     tokcount/
-      tokcount.go               — CountTokens(), EncodeTokens(), DecodeTokens() — cl100k_base BPE
+      tokcount.go               — ForModel(), O200k/Cl100k Encode/Count/Decode; CountTokens() uses o200k_base
     testutil/
       contract.go               — RunContractTests, ContractCase, assertion helpers
 testdata/
@@ -258,7 +258,7 @@ Read the source in `internal/shared/` for full signatures. Key functions and whe
 | `SilenceStderr(quiet)` | flags.go | `defer shared.SilenceStderr(quietFlag)()` |
 | `IsTerminal` | terminal.go | Var, override in tests: `var isTerminal = shared.IsTerminal` |
 | `plaintext.StripMarkdown(s)` | plaintext/ | Markdown to plain text. Uses goldmark. |
-| `tokcount.CountTokens(s)` | tokcount/ | cl100k_base token count. Embedded vocab, no network. |
+| `tokcount.CountTokens(s)` | tokcount/ | o200k_base token count. `ForModel(m)` picks cl100k_base for gpt-4/3.5. Embedded vocab, no network. |
 
 ## JSON output conventions
 
@@ -280,7 +280,7 @@ The last record emitted when `--json` is active:
 
 A single JSON object with primary data and metadata:
 ```json
-{"tokens":42,"model":"cl100k_base","budget":4000,"over_budget":false}
+{"tokens":42,"model":"o200k_base","budget":4000,"over_budget":false}
 ```
 
 ### `--json` error envelope

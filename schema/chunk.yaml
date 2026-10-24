@@ -32,6 +32,10 @@ flags:
     short: ""
     type: string
     description: "Chunking strategy: paragraph"
+  - flag: --model
+    short: "-m"
+    type: string
+    description: "OpenAI model or encoding to count for: gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo, o200k_base (default), cl100k_base"
   - flag: --quiet
     short: "-q"
     type: bool

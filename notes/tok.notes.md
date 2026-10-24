@@ -9,7 +9,7 @@ $ cat system-prompt.txt | vrk tok
 11
 
 $ cat system-prompt.txt | vrk tok --json
-{"tokens":11,"model":"cl100k_base"}
+{"tokens":11,"model":"o200k_base"}
 ```
 
 ### Gate mode (--check N)
@@ -40,7 +40,7 @@ In measurement mode, `--json` wraps the count in a JSON object:
 
 ```bash
 $ echo 'Hello, world!' | vrk tok --json
-{"tokens":4,"model":"cl100k_base"}
+{"tokens":4,"model":"o200k_base"}
 ```
 
 When `--check` fails and `--json` is active, the error goes to stdout as JSON (stderr stays empty):

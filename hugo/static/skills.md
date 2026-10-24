@@ -55,12 +55,13 @@ echo 'hello' | vrk base encode --to base64
 
 ## chunk - token-aware text splitter - JSONL chunks within a token budget
 
-| Flag        | Short | Description                           |
-|-------------|-------|---------------------------------------|
-| `--size`    |       | Max tokens per chunk (required)       |
-| `--overlap` |       | Token overlap between adjacent chunks |
-| `--by`      |       | Chunking strategy: paragraph          |
-| `--quiet`   | -q    | Suppress stderr output                |
+| Flag        | Short | Description                                                                                                   |
+|-------------|-------|---------------------------------------------------------------------------------------------------------------|
+| `--size`    |       | Max tokens per chunk (required)                                                                               |
+| `--overlap` |       | Token overlap between adjacent chunks                                                                         |
+| `--by`      |       | Chunking strategy: paragraph                                                                                  |
+| `--model`   | -m    | OpenAI model or encoding to count for: gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo, o200k_base (default), cl100k_base |
+| `--quiet`   | -q    | Suppress stderr output                                                                                        |
 
 Exit 0: Success, including empty input
 Exit 1: I/O error
@@ -432,16 +433,16 @@ cat records.jsonl | vrk throttle --rate 10/s --burst 5
 
 ## tok - Count tokens. Gate pipelines before they fail.
 
-| Flag      | Short | Description                                                              |
-|-----------|-------|--------------------------------------------------------------------------|
-| `--check` |       | Pass input through if ≤N tokens; exit 1 with empty stdout if over        |
-| `--model` |       | Tokenizer - cl100k_base (default)                                        |
-| `--json`  | -j    | Emit JSON (measurement) or JSON error (gate). Does not wrap passthrough. |
-| `--quiet` | -q    | Suppress stderr on failure                                               |
+| Flag      | Short | Description                                                                                                   |
+|-----------|-------|---------------------------------------------------------------------------------------------------------------|
+| `--check` |       | Pass input through if ≤N tokens; exit 1 with empty stdout if over                                             |
+| `--model` | -m    | OpenAI model or encoding to count for: gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo, o200k_base (default), cl100k_base |
+| `--json`  | -j    | Emit JSON (measurement) or JSON error (gate). Does not wrap passthrough.                                      |
+| `--quiet` | -q    | Suppress stderr on failure                                                                                    |
 
 Exit 0: Measurement success; or --check within limit
 Exit 1: --check over limit; I/O error; tokenizer error
-Exit 2: Usage error - unknown flag, no stdin, --check without value
+Exit 2: Usage error - unknown flag, unknown --model, no stdin, --check without value
 
 ```bash
 cat system-prompt.txt | vrk tok --check 8000

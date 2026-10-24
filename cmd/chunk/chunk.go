@@ -33,6 +33,7 @@ func init() {
 			{Name: "size", Usage: "max tokens per chunk (required, >= 1)"},
 			{Name: "overlap", Usage: "token overlap between adjacent chunks (must be < --size)"},
 			{Name: "by", Usage: `chunking strategy; supported: "paragraph"`},
+			{Name: "model", Shorthand: "m", Usage: "tokenizer: an OpenAI model (gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo) or encoding (default o200k_base)"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
 	})
@@ -47,10 +48,12 @@ func Run() int {
 	var size int
 	var overlap int
 	var by string
+	var model string
 	var quietFlag bool
 	fs.IntVar(&size, "size", 0, "max tokens per chunk (required, >= 1)")
 	fs.IntVar(&overlap, "overlap", 0, `token overlap between adjacent chunks (must be < --size)`)
 	fs.StringVar(&by, "by", "", `chunking strategy; supported: "paragraph"`)
+	fs.StringVarP(&model, "model", "m", "", "tokenizer: an OpenAI model (gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo) or encoding (default o200k_base)")
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -79,6 +82,10 @@ func Run() int {
 	if by != "" && by != "paragraph" {
 		return shared.UsageErrorf("chunk: unknown --by mode: %q; supported: paragraph", by)
 	}
+	tk, err := tokcount.ForModel(model)
+	if err != nil {
+		return shared.UsageErrorf("chunk: %v", err)
+	}
 
 	// TTY guard: an interactive terminal with no args is a usage error. An empty
 	// stdin pipe is intentional (0 chunks) and must pass through normally.
@@ -101,7 +108,7 @@ func Run() int {
 	}
 
 	// Encode full text to token IDs.
-	ids, err := tokcount.EncodeTokens(input)
+	ids, err := tk.Encode(input)
 	if err != nil {
 		return shared.Errorf("chunk: tokenizer error: %v", err)
 	}
@@ -112,9 +119,9 @@ func Run() int {
 	// Split into records.
 	var records []chunkRecord
 	if by == "paragraph" {
-		records, err = splitByParagraph(input, size, overlap)
+		records, err = splitByParagraph(tk, input, size, overlap)
 	} else {
-		records, err = splitByTokens(ids, size, overlap, 0)
+		records, err = splitByTokens(tk, ids, size, overlap, 0)
 	}
 	if err != nil {
 		return shared.Errorf("chunk: %v", err)
@@ -139,19 +146,19 @@ func Run() int {
 // tokens shared between adjacent chunks. startIndex offsets the Index field
 // (used when called from splitByParagraph to continue a sequence).
 //
-// A cl100k token can hold part of a multi-byte character, so window edges
+// A token can hold part of a multi-byte character, so window edges
 // only land between tokens that sit on a character boundary. The end moves
 // back to the nearest boundary; if that would empty the window it moves
 // forward instead (at most 3 tokens past size, the only allowed overflow).
 // Tokens reports the real token count of the emitted text.
-func splitByTokens(ids []int, size, overlap, startIndex int) ([]chunkRecord, error) {
+func splitByTokens(tk *tokcount.Encoding, ids []int, size, overlap, startIndex int) ([]chunkRecord, error) {
 	n := len(ids)
-	raw := tokcount.DecodeBytes(ids)
+	raw := tk.DecodeBytes(ids)
 
 	// offs[k] is the byte offset in raw where token k starts.
 	offs := make([]int, n+1)
 	for i, id := range ids {
-		offs[i+1] = offs[i] + len(tokcount.DecodeBytes([]int{id}))
+		offs[i+1] = offs[i] + len(tk.DecodeBytes([]int{id}))
 	}
 	// runeStart[b] is true when byte offset b starts a character (or is the end).
 	runeStart := make([]bool, len(raw)+1)
@@ -179,7 +186,7 @@ func splitByTokens(ids []int, size, overlap, startIndex int) ([]chunkRecord, err
 		// Re-encoding a window can give a different count than the window
 		// length (BPE merges differ at the edges). Shrink until it fits.
 		text := string(raw[offs[start]:offs[e]])
-		count, err := tokcount.CountTokens(text)
+		count, err := tk.Count(text)
 		if err != nil {
 			return nil, err
 		}
@@ -193,7 +200,7 @@ func splitByTokens(ids []int, size, overlap, startIndex int) ([]chunkRecord, err
 			}
 			e = e2
 			text = string(raw[offs[start]:offs[e]])
-			if count, err = tokcount.CountTokens(text); err != nil {
+			if count, err = tk.Count(text); err != nil {
 				return nil, err
 			}
 		}
@@ -226,7 +233,7 @@ func splitByTokens(ids []int, size, overlap, startIndex int) ([]chunkRecord, err
 // Paragraphs that exceed size tokens fall back to token-level splitting.
 // With overlap, a chunk starts with the last overlap tokens of the previous
 // chunk, trimmed forward to a character boundary.
-func splitByParagraph(text string, size, overlap int) ([]chunkRecord, error) {
+func splitByParagraph(tk *tokcount.Encoding, text string, size, overlap int) ([]chunkRecord, error) {
 	var records []chunkRecord
 	var parts []string // pieces of the chunk being built
 	approx := 0        // token estimate for parts: sum of counts + 1 per separator
@@ -240,7 +247,7 @@ func splitByParagraph(text string, size, overlap int) ([]chunkRecord, error) {
 		// ponytail: packing uses the per-paragraph estimate; the real count of
 		// the joined text is reported. Joins only merge whitespace, so the
 		// real count is not expected to exceed the estimate.
-		n, err := tokcount.CountTokens(s)
+		n, err := tk.Count(s)
 		if err != nil {
 			return err
 		}
@@ -255,16 +262,16 @@ func splitByParagraph(text string, size, overlap int) ([]chunkRecord, error) {
 		if overlap == 0 || prev == "" {
 			return "", 0, nil
 		}
-		ids, err := tokcount.EncodeTokens(prev)
+		ids, err := tk.Encode(prev)
 		if err != nil {
 			return "", 0, err
 		}
 		tail := ids[max(len(ids)-overlap, 0):]
-		for len(tail) > 0 && !utf8.Valid(tokcount.DecodeBytes(tail)) {
+		for len(tail) > 0 && !utf8.Valid(tk.DecodeBytes(tail)) {
 			tail = tail[1:]
 		}
-		s := string(tokcount.DecodeBytes(tail))
-		n, err := tokcount.CountTokens(s)
+		s := string(tk.DecodeBytes(tail))
+		n, err := tk.Count(s)
 		return s, n, err
 	}
 
@@ -284,7 +291,7 @@ func splitByParagraph(text string, size, overlap int) ([]chunkRecord, error) {
 		if strings.TrimSpace(p) == "" {
 			continue
 		}
-		ids, err := tokcount.EncodeTokens(p)
+		ids, err := tk.Encode(p)
 		if err != nil {
 			return nil, fmt.Errorf("tokenizer error: %v", err)
 		}
@@ -294,7 +301,7 @@ func splitByParagraph(text string, size, overlap int) ([]chunkRecord, error) {
 			if err := flush(); err != nil {
 				return nil, err
 			}
-			subs, err := splitByTokens(ids, size, overlap, len(records))
+			subs, err := splitByTokens(tk, ids, size, overlap, len(records))
 			if err != nil {
 				return nil, err
 			}
@@ -333,6 +340,7 @@ func Flags() *pflag.FlagSet {
 	fs.Int("size", 0, "max tokens per chunk (required, >= 1)")
 	fs.Int("overlap", 0, `token overlap between adjacent chunks (must be < --size)`)
 	fs.String("by", "", `chunking strategy; supported: "paragraph"`)
+	fs.StringP("model", "m", "", "tokenizer: an OpenAI model (gpt-5, gpt-4o, gpt-4, gpt-3.5-turbo) or encoding (default o200k_base)")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs
 }

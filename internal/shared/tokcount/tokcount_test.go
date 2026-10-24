@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"math/rand"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,13 +35,13 @@ var countTests = []struct {
 
 func TestCountTokens(t *testing.T) {
 	for _, tc := range countTests {
-		got, err := CountTokens(tc.input)
+		got, err := Cl100k.Count(tc.input)
 		if err != nil {
-			t.Errorf("CountTokens(%q): unexpected error: %v", tc.input, err)
+			t.Errorf("Cl100k.Count(%q): unexpected error: %v", tc.input, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("CountTokens(%q) = %d, want %d", tc.input, got, tc.want)
+			t.Errorf("Cl100k.Count(%q) = %d, want %d", tc.input, got, tc.want)
 		}
 	}
 }
@@ -48,12 +49,12 @@ func TestCountTokens(t *testing.T) {
 // TestCountTokensEmpty ensures the fast path (empty string) returns 0
 // without invoking the encoder at all.
 func TestCountTokensEmpty(t *testing.T) {
-	got, err := CountTokens("")
+	got, err := Cl100k.Count("")
 	if err != nil {
-		t.Fatalf("CountTokens(%q): unexpected error: %v", "", err)
+		t.Fatalf("Cl100k.Count(%q): unexpected error: %v", "", err)
 	}
 	if got != 0 {
-		t.Errorf("CountTokens(%q) = %d, want 0", "", got)
+		t.Errorf("Cl100k.Count(%q) = %d, want 0", "", got)
 	}
 }
 
@@ -62,16 +63,16 @@ func TestCountTokensEmpty(t *testing.T) {
 func TestCountTokensMonotone(t *testing.T) {
 	base := "hello"
 	extended := "hello world"
-	a, err := CountTokens(base)
+	a, err := Cl100k.Count(base)
 	if err != nil {
-		t.Fatalf("CountTokens(%q): %v", base, err)
+		t.Fatalf("Cl100k.Count(%q): %v", base, err)
 	}
-	b, err := CountTokens(extended)
+	b, err := Cl100k.Count(extended)
 	if err != nil {
-		t.Fatalf("CountTokens(%q): %v", extended, err)
+		t.Fatalf("Cl100k.Count(%q): %v", extended, err)
 	}
 	if b < a {
-		t.Errorf("CountTokens(%q)=%d < CountTokens(%q)=%d: more text produced fewer tokens",
+		t.Errorf("Cl100k.Count(%q)=%d < Cl100k.Count(%q)=%d: more text produced fewer tokens",
 			extended, b, base, a)
 	}
 }
@@ -80,16 +81,16 @@ func TestCountTokensMonotone(t *testing.T) {
 // same input returns the same result (the global BPE loader must be stable).
 func TestCountTokensIdempotent(t *testing.T) {
 	input := "idempotent check"
-	a, err := CountTokens(input)
+	a, err := Cl100k.Count(input)
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
-	b, err := CountTokens(input)
+	b, err := Cl100k.Count(input)
 	if err != nil {
 		t.Fatalf("second call: %v", err)
 	}
 	if a != b {
-		t.Errorf("CountTokens(%q) not idempotent: first=%d second=%d", input, a, b)
+		t.Errorf("Cl100k.Count(%q) not idempotent: first=%d second=%d", input, a, b)
 	}
 }
 
@@ -112,14 +113,14 @@ var pinnedIDs = []struct {
 
 func TestPinnedIDs(t *testing.T) {
 	for _, tc := range pinnedIDs {
-		got, err := EncodeTokens(tc.input)
+		got, err := Cl100k.Encode(tc.input)
 		if err != nil {
-			t.Fatalf("EncodeTokens(%q): %v", tc.input, err)
+			t.Fatalf("Cl100k.Encode(%q): %v", tc.input, err)
 		}
 		if !slices.Equal(got, tc.want) {
-			t.Errorf("EncodeTokens(%q) = %v, want %v", tc.input, got, tc.want)
+			t.Errorf("Cl100k.Encode(%q) = %v, want %v", tc.input, got, tc.want)
 		}
-		if back := DecodeBytes(got); string(back) != tc.input {
+		if back := Cl100k.DecodeBytes(got); string(back) != tc.input {
 			t.Errorf("DecodeBytes round trip for %q = %q", tc.input, back)
 		}
 	}
@@ -128,16 +129,16 @@ func TestPinnedIDs(t *testing.T) {
 // TestEncoderBuiltOnce checks the encoder is cached. Rebuilding it per call
 // made chunk 65 times slower than tok.
 func TestEncoderBuiltOnce(t *testing.T) {
-	a, err := getEncoder()
+	a, err := Cl100k.get()
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := getEncoder()
+	b, err := Cl100k.get()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a != b {
-		t.Error("getEncoder returned a new encoder on the second call")
+		t.Error("get returned a new encoder on the second call")
 	}
 }
 
@@ -145,12 +146,12 @@ func TestEncoderBuiltOnce(t *testing.T) {
 // token that holds only part of a multi-byte character, so callers can test
 // utf8.Valid before converting.
 func TestDecodeBytesPartialRune(t *testing.T) {
-	got := DecodeBytes([]int{138})
+	got := Cl100k.DecodeBytes([]int{138})
 	if utf8.Valid(got) {
-		t.Errorf("DecodeBytes([138]) = %q, want an invalid partial rune", got)
+		t.Errorf("Cl100k.DecodeBytes([138]) = %q, want an invalid partial rune", got)
 	}
-	if DecodeBytes(nil) != nil {
-		t.Error("DecodeBytes(nil) should be nil")
+	if Cl100k.DecodeBytes(nil) != nil {
+		t.Error("Cl100k.DecodeBytes(nil) should be nil")
 	}
 }
 
@@ -184,14 +185,20 @@ func parseTiktokenFile(t *testing.T, path string) map[string]int {
 }
 
 // TestBinaryVocabMatchesSource checks the generated binary vocab holds exactly
-// the upstream cl100k_base entries with the same ranks. If it fails, run
+// the upstream entries with the same ranks. If it fails, run
 // `go generate ./internal/shared/tokcount`.
 func TestBinaryVocabMatchesSource(t *testing.T) {
-	want := parseTiktokenFile(t, "data/cl100k_base.tiktoken")
-	if len(want) != 100256 {
-		t.Fatalf("source vocab has %d entries, want 100256", len(want))
+	for _, e := range []*Encoding{Cl100k, O200k} {
+		t.Run(e.Name, func(t *testing.T) { checkBinaryVocab(t, e) })
 	}
-	got, tokens, err := loadBinaryVocab(cl100kBin)
+}
+
+func checkBinaryVocab(t *testing.T, e *Encoding) {
+	want := parseTiktokenFile(t, "data/"+e.Name+".tiktoken")
+	if len(want) != e.size {
+		t.Fatalf("source vocab has %d entries, want %d", len(want), e.size)
+	}
+	got, tokens, err := loadBinaryVocab(e.bin, e.size)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,22 +219,31 @@ func TestBinaryVocabMatchesSource(t *testing.T) {
 }
 
 func TestLoadBinaryVocabTruncated(t *testing.T) {
-	if _, _, err := loadBinaryVocab([]byte{5, 'a', 'b'}); err == nil {
+	if _, _, err := loadBinaryVocab([]byte{5, 'a', 'b'}, 1); err == nil {
 		t.Error("want an error for a truncated vocab")
 	}
 }
 
 // tiktokenGo is the reference encoder: tiktoken-go loading the same upstream
-// vocab file. Built once for all differential tests.
-var tiktokenGo = sync.OnceValues(func() (*tiktoken.Tiktoken, error) {
+// vocab files. Built once per encoding for all differential tests.
+var tiktokenGo = sync.OnceValue(func() map[string]*tiktoken.Tiktoken {
 	tiktoken.SetBpeLoader(fileLoader{})
-	return tiktoken.GetEncoding("cl100k_base")
+	refs := map[string]*tiktoken.Tiktoken{}
+	for _, name := range []string{"cl100k_base", "o200k_base"} {
+		enc, err := tiktoken.GetEncoding(name)
+		if err != nil {
+			panic(err)
+		}
+		refs[name] = enc
+	}
+	return refs
 })
 
 type fileLoader struct{}
 
-func (fileLoader) LoadTiktokenBpe(string) (map[string]int, error) {
-	data, err := os.ReadFile("data/cl100k_base.tiktoken")
+// LoadTiktokenBpe reads data/<name>.tiktoken for the upstream URL tiktoken-go asks for.
+func (fileLoader) LoadTiktokenBpe(url string) (map[string]int, error) {
+	data, err := os.ReadFile("data/" + path.Base(url))
 	if err != nil {
 		return nil, err
 	}
@@ -250,14 +266,11 @@ func (fileLoader) LoadTiktokenBpe(string) (map[string]int, error) {
 	return ranks, nil
 }
 
-func assertSameAsTiktokenGo(t *testing.T, input string) {
+func assertSameAsTiktokenGo(t *testing.T, e *Encoding, input string) {
 	t.Helper()
-	ref, err := tiktokenGo()
-	if err != nil {
-		t.Fatal(err)
-	}
+	ref := tiktokenGo()[e.Name]
 	want := ref.Encode(input, nil, nil)
-	got, err := EncodeTokens(input)
+	got, err := e.Encode(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,41 +278,47 @@ func assertSameAsTiktokenGo(t *testing.T, input string) {
 		return
 	}
 	if !slices.Equal(got, want) {
-		t.Fatalf("EncodeTokens(%q) = %v, tiktoken-go gives %v", input, got, want)
+		t.Fatalf("%s: Encode(%q) = %v, tiktoken-go gives %v", e.Name, input, got, want)
 	}
-	if g, w := DecodeBytes(got), []byte(ref.Decode(want)); string(g) != string(w) {
-		t.Fatalf("DecodeBytes differs for %q: %q vs %q", input, g, w)
+	if g, w := e.DecodeBytes(got), []byte(ref.Decode(want)); string(g) != string(w) {
+		t.Fatalf("%s: DecodeBytes differs for %q: %q vs %q", e.Name, input, g, w)
 	}
 }
 
 // TestMatchesTiktokenGo is a differential property test: for any input, token
-// IDs equal tiktoken-go's. Covers every script, invalid UTF-8, special-token
-// text, digits, whitespace runs and long repeated runs.
+// IDs equal tiktoken-go's in both encodings. Covers every script, invalid
+// UTF-8, special-token text, digits, whitespace runs, contractions, case
+// changes and long repeated runs.
 func TestMatchesTiktokenGo(t *testing.T) {
-	for _, tc := range pinnedIDs {
-		assertSameAsTiktokenGo(t, tc.input)
-	}
 	fixed := []string{
 		"", " ", "\n\n\n", "  \t  x", "it's we'll THEY'RE", "12345678901234567890",
 		"\xff\xfe\x00bad\xe0\xa4", "<|endoftext|><|fim_prefix|>", strings.Repeat("x", 3000),
 		strings.Repeat("ab", 1500), strings.Repeat("🎉", 300), strings.Repeat(" ", 2000) + "a",
 		"https://example.com/a?b=c&d=e#f", "naïve café Straße ﬁ",
+		"HTTPServer parseJSON iPhone McDonald's DON'T", "a/b/c\n/usr/local/bin/\r\n",
 	}
-	for _, s := range fixed {
-		assertSameAsTiktokenGo(t, s)
+	for _, tc := range pinnedIDs {
+		fixed = append(fixed, tc.input)
 	}
 	rng := rand.New(rand.NewSource(1))
-	alphabet := []rune("aZ09 _-.,'\n\t\r🎉🚀東京日本語यहएक्षΕλληνικά한국어éß\u200d\u0301")
-	for i := 0; i < 400; i++ {
-		var sb strings.Builder
-		for j := rng.Intn(300); j > 0; j-- {
-			if rng.Intn(20) == 0 {
-				sb.WriteByte(byte(rng.Intn(256)))
-				continue
+	alphabet := []rune("aZ09 _-.,'/\n\t\r🎉🚀東京日本語यहएक्षΕλληνικά한국어éßÉǅʰ\u200d\u0301")
+	for _, e := range []*Encoding{Cl100k, O200k} {
+		t.Run(e.Name, func(t *testing.T) {
+			for _, s := range fixed {
+				assertSameAsTiktokenGo(t, e, s)
 			}
-			sb.WriteRune(alphabet[rng.Intn(len(alphabet))])
-		}
-		assertSameAsTiktokenGo(t, sb.String())
+			for i := 0; i < 400; i++ {
+				var sb strings.Builder
+				for j := rng.Intn(300); j > 0; j-- {
+					if rng.Intn(20) == 0 {
+						sb.WriteByte(byte(rng.Intn(256)))
+						continue
+					}
+					sb.WriteRune(alphabet[rng.Intn(len(alphabet))])
+				}
+				assertSameAsTiktokenGo(t, e, sb.String())
+			}
+		})
 	}
 }
 
@@ -312,7 +331,8 @@ func FuzzMatchesTiktokenGo(f *testing.F) {
 		if len(input) > 2048 {
 			return
 		}
-		assertSameAsTiktokenGo(t, input)
+		assertSameAsTiktokenGo(t, Cl100k, input)
+		assertSameAsTiktokenGo(t, O200k, input)
 	})
 }
 
@@ -320,7 +340,7 @@ func FuzzMatchesTiktokenGo(f *testing.F) {
 // character used to take ~30 s with the quadratic merge.
 func TestLongRepeatedRunIsFast(t *testing.T) {
 	start := time.Now()
-	n, err := CountTokens(strings.Repeat("x", 200000))
+	n, err := Cl100k.Count(strings.Repeat("x", 200000))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,5 +349,45 @@ func TestLongRepeatedRunIsFast(t *testing.T) {
 	}
 	if d := time.Since(start); d > 5*time.Second {
 		t.Fatalf("took %v, want well under 5s", d)
+	}
+}
+
+func TestForModel(t *testing.T) {
+	cases := map[string]*Encoding{
+		"": O200k, "o200k_base": O200k, "gpt-5": O200k, "gpt-5.5": O200k, "GPT-4o": O200k,
+		"gpt-4o-mini": O200k, "gpt-4.1": O200k, "o1": O200k, "o3-mini": O200k, "o4-mini": O200k,
+		"chatgpt-4o-latest": O200k, "gpt-6.1": O200k,
+		"cl100k_base": Cl100k, "gpt-4": Cl100k, "gpt-4-turbo": Cl100k, "gpt-3.5": Cl100k,
+		"gpt-3.5-turbo": Cl100k, "gpt-35-turbo": Cl100k, "text-embedding-3-small": Cl100k,
+	}
+	for model, want := range cases {
+		got, err := ForModel(model)
+		if err != nil || got != want {
+			t.Errorf("ForModel(%q) = %v, %v; want %s", model, got, err, want.Name)
+		}
+	}
+	for _, bad := range []string{"claude-sonnet-4", "llama3", "o", "p50k_base"} {
+		if _, err := ForModel(bad); err == nil {
+			t.Errorf("ForModel(%q): want an error", bad)
+		}
+	}
+}
+
+// TestDefaultIsO200k pins the default and a few o200k IDs, so a change to
+// either shows up here first.
+func TestDefaultIsO200k(t *testing.T) {
+	if Default != O200k {
+		t.Fatalf("Default = %s, want o200k_base", Default.Name)
+	}
+	n, err := CountTokens("hello world")
+	if err != nil || n != 2 {
+		t.Fatalf("CountTokens(hello world) = %d, %v; want 2", n, err)
+	}
+	ids, err := O200k.Encode("hello world")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(ids, []int{24912, 2375}) {
+		t.Errorf("o200k Encode(hello world) = %v, want [24912 2375]", ids)
 	}
 }
