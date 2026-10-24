@@ -58,7 +58,7 @@ func Run() int {
 	var sepFlag string
 	var maxFlag int
 	var jsonFlag, quietFlag, asciiFlag bool
-	fs.StringVar(&sepFlag, "separator", "-", "word separator (default: -)")
+	fs.StringVar(&sepFlag, "separator", "-", "word separator")
 	fs.IntVar(&maxFlag, "max", 0, "max output length, truncated at word boundary (0 = unlimited)")
 	fs.BoolVar(&asciiFlag, "ascii", false, "keep only ASCII; other scripts are dropped")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `emit {"input":"...","output":"..."} per line`)
@@ -235,7 +235,7 @@ func slugify(input, sep string, maxLen int, ascii bool) string {
 func Flags() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("slug", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.String("separator", "-", "word separator (default: -)")
+	fs.String("separator", "-", "word separator")
 	fs.Int("max", 0, "max output length, truncated at word boundary (0 = unlimited)")
 	fs.Bool("ascii", false, "keep only ASCII; other scripts are dropped")
 	fs.BoolP("json", "j", false, `emit {"input":"...","output":"..."} per line`)
