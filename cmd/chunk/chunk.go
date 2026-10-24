@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
@@ -137,40 +138,148 @@ func Run() int {
 // splitByTokens splits ids into chunks of at most size tokens with overlap
 // tokens shared between adjacent chunks. startIndex offsets the Index field
 // (used when called from splitByParagraph to continue a sequence).
+//
+// A cl100k token can hold part of a multi-byte character, so window edges
+// only land between tokens that sit on a character boundary. The end moves
+// back to the nearest boundary; if that would empty the window it moves
+// forward instead (at most 3 tokens past size, the only allowed overflow).
+// Tokens reports the real token count of the emitted text.
 func splitByTokens(ids []int, size, overlap, startIndex int) ([]chunkRecord, error) {
-	step := size - overlap
-	if step < 1 {
-		step = 1
+	n := len(ids)
+	raw := tokcount.DecodeBytes(ids)
+
+	// offs[k] is the byte offset in raw where token k starts.
+	offs := make([]int, n+1)
+	for i, id := range ids {
+		offs[i+1] = offs[i] + len(tokcount.DecodeBytes([]int{id}))
 	}
+	// runeStart[b] is true when byte offset b starts a character (or is the end).
+	runeStart := make([]bool, len(raw)+1)
+	for b := 0; b < len(raw); {
+		runeStart[b] = true
+		_, w := utf8.DecodeRune(raw[b:])
+		b += w
+	}
+	runeStart[len(raw)] = true
+	isBoundary := func(k int) bool { return runeStart[offs[k]] }
+
 	var records []chunkRecord
-	for i := 0; i < len(ids); i += step {
-		end := i + size
-		if end > len(ids) {
-			end = len(ids)
+	for start := 0; start < n; {
+		end := min(start+size, n)
+		e := end
+		for e > start && !isBoundary(e) {
+			e--
 		}
-		window := ids[i:end]
+		if e == start {
+			for e = end; !isBoundary(e); e++ {
+			}
+		}
+		limit := max(size, e-start)
+
+		// Re-encoding a window can give a different count than the window
+		// length (BPE merges differ at the edges). Shrink until it fits.
+		text := string(raw[offs[start]:offs[e]])
+		count, err := tokcount.CountTokens(text)
+		if err != nil {
+			return nil, err
+		}
+		for count > limit {
+			e2 := e - 1
+			for e2 > start && !isBoundary(e2) {
+				e2--
+			}
+			if e2 == start {
+				break
+			}
+			e = e2
+			text = string(raw[offs[start]:offs[e]])
+			if count, err = tokcount.CountTokens(text); err != nil {
+				return nil, err
+			}
+		}
+
 		records = append(records, chunkRecord{
 			Index:  startIndex + len(records),
-			Text:   tokcount.DecodeTokens(window),
-			Tokens: len(window),
+			Text:   text,
+			Tokens: count,
 		})
-		if end >= len(ids) {
+		if e >= n {
 			break
 		}
+
+		// Next window starts overlap tokens back, also on a boundary.
+		next := max(e-overlap, start+1)
+		for next > start && !isBoundary(next) {
+			next--
+		}
+		if next == start {
+			for next = max(e-overlap, start+1); !isBoundary(next); next++ {
+			}
+		}
+		start = next
 	}
 	return records, nil
 }
 
 // splitByParagraph splits text at double-newline boundaries, greedily packing
-// paragraphs into chunks of at most size tokens. Paragraphs that exceed size
-// tokens fall back to token-level splitting. Overlap is applied by prepending
-// the last overlap token IDs from the previous chunk at the start of the next.
+// paragraphs (joined by a blank line) into chunks of at most size tokens.
+// Paragraphs that exceed size tokens fall back to token-level splitting.
+// With overlap, a chunk starts with the last overlap tokens of the previous
+// chunk, trimmed forward to a character boundary.
 func splitByParagraph(text string, size, overlap int) ([]chunkRecord, error) {
-	// Parse and encode each paragraph.
-	type paraInfo struct {
-		ids []int
+	var records []chunkRecord
+	var parts []string // pieces of the chunk being built
+	approx := 0        // token estimate for parts: sum of counts + 1 per separator
+	prev := ""         // text of the last emitted chunk
+
+	flush := func() error {
+		if len(parts) == 0 {
+			return nil
+		}
+		s := strings.Join(parts, "\n\n")
+		// ponytail: packing uses the per-paragraph estimate; the real count of
+		// the joined text is reported. Joins only merge whitespace, so the
+		// real count is not expected to exceed the estimate.
+		n, err := tokcount.CountTokens(s)
+		if err != nil {
+			return err
+		}
+		records = append(records, chunkRecord{Index: len(records), Text: s, Tokens: n})
+		prev, parts, approx = s, nil, 0
+		return nil
 	}
-	var paras []paraInfo
+
+	// overlapTail returns the last overlap tokens of prev, starting on a
+	// character boundary, and their count.
+	overlapTail := func() (string, int, error) {
+		if overlap == 0 || prev == "" {
+			return "", 0, nil
+		}
+		ids, err := tokcount.EncodeTokens(prev)
+		if err != nil {
+			return "", 0, err
+		}
+		tail := ids[max(len(ids)-overlap, 0):]
+		for len(tail) > 0 && !utf8.Valid(tokcount.DecodeBytes(tail)) {
+			tail = tail[1:]
+		}
+		s := string(tokcount.DecodeBytes(tail))
+		n, err := tokcount.CountTokens(s)
+		return s, n, err
+	}
+
+	// startChunk seeds a new chunk with the overlap tail when tail + p fits.
+	startChunk := func(pTokens int) error {
+		tail, n, err := overlapTail()
+		if err != nil {
+			return err
+		}
+		if tail != "" && n+1+pTokens <= size {
+			parts, approx = []string{tail}, n
+		}
+		return nil
+	}
+
 	for _, p := range strings.Split(text, "\n\n") {
 		if strings.TrimSpace(p) == "" {
 			continue
@@ -179,90 +288,40 @@ func splitByParagraph(text string, size, overlap int) ([]chunkRecord, error) {
 		if err != nil {
 			return nil, fmt.Errorf("tokenizer error: %v", err)
 		}
-		paras = append(paras, paraInfo{ids})
-	}
-
-	var records []chunkRecord
-	var prevIDs []int // token IDs of the most recently emitted chunk
-
-	// overlapPrefix returns the last overlap token IDs from prevIDs (copy).
-	overlapPrefix := func() []int {
-		if overlap == 0 || len(prevIDs) == 0 {
-			return nil
-		}
-		start := len(prevIDs) - overlap
-		if start < 0 {
-			start = 0
-		}
-		cp := make([]int, len(prevIDs)-start)
-		copy(cp, prevIDs[start:])
-		return cp
-	}
-
-	// emit appends a record for the given IDs and updates prevIDs.
-	emit := func(ids []int) {
-		cp := make([]int, len(ids))
-		copy(cp, ids)
-		records = append(records, chunkRecord{
-			Index:  len(records),
-			Text:   tokcount.DecodeTokens(cp),
-			Tokens: len(cp),
-		})
-		prevIDs = cp
-	}
-
-	i := 0
-	for i < len(paras) {
-		p := paras[i]
 
 		// Oversized paragraph: fall back to token-level split.
-		if len(p.ids) > size {
-			subs, err := splitByTokens(p.ids, size, overlap, len(records))
+		if len(ids) > size {
+			if err := flush(); err != nil {
+				return nil, err
+			}
+			subs, err := splitByTokens(ids, size, overlap, len(records))
 			if err != nil {
 				return nil, err
 			}
 			records = append(records, subs...)
-			if len(subs) > 0 {
-				last := subs[len(subs)-1]
-				lastIDs, err := tokcount.EncodeTokens(last.Text)
-				if err != nil {
-					return nil, err
-				}
-				prevIDs = lastIDs
-			}
-			i++
+			prev = subs[len(subs)-1].Text
 			continue
 		}
 
-		// Start a new chunk with the overlap prefix.
-		prefix := overlapPrefix()
-		// If prefix + this paragraph would exceed size, drop the prefix.
-		// The paragraph alone is guaranteed to fit (len(p.ids) <= size).
-		if len(prefix)+len(p.ids) > size {
-			prefix = nil
-		}
-
-		chunkIDs := append([]int(nil), prefix...)
-
-		// Greedily pack paragraphs until the next one would overflow.
-		for i < len(paras) {
-			p = paras[i]
-			if len(p.ids) > size {
-				// Oversized — leave for the next outer iteration.
-				break
+		if len(parts) > 0 && approx+1+len(ids) > size {
+			if err := flush(); err != nil {
+				return nil, err
 			}
-			if len(chunkIDs)+len(p.ids) > size {
-				break
+		}
+		if len(parts) == 0 {
+			if err := startChunk(len(ids)); err != nil {
+				return nil, err
 			}
-			chunkIDs = append(chunkIDs, p.ids...)
-			i++
 		}
-
-		if len(chunkIDs) > 0 {
-			emit(chunkIDs)
+		if len(parts) > 0 {
+			approx++ // separator
 		}
+		parts = append(parts, p)
+		approx += len(ids)
 	}
-
+	if err := flush(); err != nil {
+		return nil, err
+	}
 	return records, nil
 }
 
