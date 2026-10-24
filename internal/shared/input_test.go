@@ -340,3 +340,37 @@ func TestScanLinesMultipleLargeLines(t *testing.T) {
 		t.Errorf("line[1] len = %d, want %d", len(lines[1]), 90*1024)
 	}
 }
+
+// TestScanLines2MiBLine verifies a 2 MiB line (above the old 1 MiB cap) scans.
+func TestScanLines2MiBLine(t *testing.T) {
+	big := strings.Repeat("x", 2<<20)
+	s := ScanLines(strings.NewReader(big + "\nnext\n"))
+	if !s.Scan() || len(s.Text()) != len(big) {
+		t.Fatalf("2 MiB line not scanned; err = %v", s.Err())
+	}
+	if !s.Scan() || s.Text() != "next" {
+		t.Fatalf("line after the big one lost; err = %v", s.Err())
+	}
+}
+
+// TestScanLinesTooLong verifies the error text when a line passes the limit.
+func TestScanLinesTooLong(t *testing.T) {
+	old := maxLineBytes
+	maxLineBytes = 100
+	defer func() { maxLineBytes = old }()
+
+	for _, in := range []string{strings.Repeat("x", 500) + "\n", strings.Repeat("x", 500)} {
+		s := ScanLines(strings.NewReader(in))
+		if s.Scan() {
+			t.Fatalf("Scan() = true on over-long line")
+		}
+		if err := s.Err(); err == nil || !strings.Contains(err.Error(), "line exceeds 64 MiB limit") {
+			t.Errorf("err = %v, want 'line exceeds 64 MiB limit'", err)
+		}
+	}
+	// A line exactly at the limit still passes.
+	s := ScanLines(strings.NewReader(strings.Repeat("x", 100) + "\n"))
+	if !s.Scan() {
+		t.Errorf("line at the limit rejected: %v", s.Err())
+	}
+}

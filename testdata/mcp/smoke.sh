@@ -199,6 +199,19 @@ else
 fi
 
 # ------------------------------------------------------------
+# Test 11: serverInfo.version matches vrk --version
+# ------------------------------------------------------------
+VER=$("$VRK" --version)
+MV=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n' \
+  | "$VRK" mcp 2>/dev/null \
+  | python3 -c 'import sys,json; print(json.loads(sys.stdin.readline())["result"]["serverInfo"]["version"])')
+if [ "vrk $MV" = "$VER" ]; then
+  ok "test 11: serverInfo.version matches --version ($MV)"
+else
+  fail "test 11: serverInfo.version" "mcp '$MV' vs '$VER'"
+fi
+
+# ------------------------------------------------------------
 echo ""
 echo "---"
 echo "Results: $PASS passed, $FAIL failed"

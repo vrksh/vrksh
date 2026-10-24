@@ -377,6 +377,24 @@ assert_exit "list+dry-run: exit 2" 2 "$exit_code"
 assert_stderr_contains "list+dry-run: message" "cannot be combined" "$stderr"
 
 # ------------------------------------------------------------
+# 18. `vrk bare` is an alias of `vrk --bare`
+# ------------------------------------------------------------
+echo ""
+echo "--- 18. bare alias ---"
+
+set +e
+out=$("$T" bare --list 2>&1)
+exit_code=$?
+set -e
+assert_exit "bare --list: exit 0" 0 "$exit_code"
+
+set +e
+out=$("$T" bare --dry-run 2>&1)
+exit_code=$?
+set -e
+assert_exit "bare --dry-run: exit 0" 0 "$exit_code"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

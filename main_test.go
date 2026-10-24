@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -83,19 +84,9 @@ func TestUnknownTool(t *testing.T) {
 
 func TestNoArgs(t *testing.T) {
 	bin := buildBinary(t)
-
-	// Run with argv[0] == "vrk" and no additional args.
-	cmd := exec.Command(bin)
-	err := cmd.Run()
-	if err == nil {
-		t.Fatal("expected non-zero exit when called with no args, got 0")
-	}
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("expected ExitError, got %T: %v", err, err)
-	}
-	if exitErr.ExitCode() != 2 {
-		t.Errorf("exit code = %d, want 2", exitErr.ExitCode())
+	out, _, code := runVrk(t, bin)
+	if code != 0 || !strings.Contains(out, "tools:") {
+		t.Errorf("no args: code=%d, want 0 with tool list; out=%q", code, out)
 	}
 }
 
@@ -110,4 +101,60 @@ func TestStdinRequiredCoversAllTools(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	os.Exit(m.Run())
+}
+
+func runVrk(t *testing.T, bin string, args ...string) (stdout, stderr string, code int) {
+	t.Helper()
+	cmd := exec.Command(bin, args...)
+	var o, e strings.Builder
+	cmd.Stdout, cmd.Stderr = &o, &e
+	err := cmd.Run()
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	return o.String(), e.String(), code
+}
+
+func TestVersion(t *testing.T) {
+	bin := buildBinary(t)
+	for _, a := range []string{"--version", "version"} {
+		out, _, code := runVrk(t, bin, a)
+		if code != 0 || !strings.HasPrefix(out, "vrk ") {
+			t.Errorf("%s: code=%d out=%q", a, code, out)
+		}
+	}
+}
+
+func TestHelpListsTools(t *testing.T) {
+	bin := buildBinary(t)
+	for _, a := range [][]string{{}, {"-h"}, {"--help"}, {"help"}} {
+		out, errOut, code := runVrk(t, bin, a...)
+		if code != 0 || errOut != "" {
+			t.Errorf("%v: code=%d stderr=%q", a, code, errOut)
+		}
+		for _, want := range []string{"tools:", "\n  tok ", "\n  assert ", "meta:", "vrk completions"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%v: stdout lacks %q", a, want)
+			}
+		}
+	}
+}
+
+func TestUnknownToolHint(t *testing.T) {
+	bin := buildBinary(t)
+	_, errOut, code := runVrk(t, bin, "nope")
+	if code != 2 || !strings.Contains(errOut, `unknown tool "nope"`) || !strings.Contains(errOut, "run 'vrk help' for the tool list") {
+		t.Errorf("code=%d stderr=%q", code, errOut)
+	}
+}
+
+func TestBareAlias(t *testing.T) {
+	bin := buildBinary(t)
+	a, _, ca := runVrk(t, bin, "bare", "--list")
+	b, _, cb := runVrk(t, bin, "--bare", "--list")
+	if ca != 0 || ca != cb || a != b {
+		t.Errorf("bare vs --bare differ: %d/%d\n%q\n%q", ca, cb, a, b)
+	}
 }
