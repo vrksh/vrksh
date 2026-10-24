@@ -11,7 +11,7 @@ You're working with LLMs. Maybe you're building pipelines in Python. Maybe your 
 
 These aren't hard problems. But the solutions are scattered. Token counting is a Python library. Retry with backoff is another library. Secret redaction is a third. Schema validation is a fourth. Each one pulls in dependencies, needs a runtime, and only works inside your Python process. Your agent can't call them. Your CI pipeline can't call them. The developer SSHed into a production box at 2 AM definitely can't call them.
 
-vrk puts all of it in one place. 27 Unix tools for the things that come up constantly when you work with LLMs - token counting, API calls, schema validation, secret redaction, retry logic, rate limiting, state persistence. Each one is a Unix command: stdin in, stdout out, exit codes that mean something. A developer can run them from the terminal. A Python script can shell out to them. An agent can call them as tools. A cron job can chain them together. One static binary, no runtime dependencies, works the same on every platform.
+vrk puts all of it in one place. 28 Unix tools for the things that come up constantly when you work with LLMs - token counting, API calls, schema validation, secret redaction, retry logic, rate limiting, state persistence. Each one is a Unix command: stdin in, stdout out, exit codes that mean something. A developer can run them from the terminal. A Python script can shell out to them. An agent can call them as tools. A cron job can chain them together. One static binary, no runtime dependencies, works the same on every platform.
 
 ## The name
 
@@ -72,7 +72,7 @@ error-handling code around it. The Unix pipeline handles it.
 
 ## How the binary works
 
-One binary, 27 tools. vrk uses multicall dispatch - the first argument selects which tool runs:
+One binary, 28 tools. vrk uses multicall dispatch - the first argument selects which tool runs:
 
 ```bash
 vrk tok              # count tokens
@@ -82,7 +82,7 @@ vrk mask             # redact secrets
 vrk chunk            # split text into token-sized pieces
 ```
 
-25 of 27 tools need zero configuration. Only [prompt](/docs/prompt/) and [kv](/docs/kv/) read [environment variables](/env/). No config file.
+26 of 28 tools need zero configuration. Only [prompt](/docs/prompt/) and [kv](/docs/kv/) read [environment variables](/env/). No config file.
 
 Two built-in flags for agent discovery:
 
@@ -137,7 +137,7 @@ You can. But your Python script only works inside Python. It needs a virtualenv,
 <details>
 <summary>Why not jq + curl + shell functions?</summary>
 
-jq is great for JSON reshaping. curl is great for HTTP. But neither counts tokens, validates against a JSON schema, redacts secrets by entropy, or retries with exponential backoff. vrk fills the gaps that come up specifically when building LLM pipelines. And every vrk tool uses the same exit code contract (0/1/2), so pipeline error handling is consistent across all 27 tools.
+jq is great for JSON reshaping. curl is great for HTTP. But neither counts tokens, validates against a JSON schema, redacts secrets by entropy, or retries with exponential backoff. vrk fills the gaps that come up specifically when building LLM pipelines. And every vrk tool uses the same exit code contract (0/1/2), so pipeline error handling is consistent across all 28 tools.
 </details>
 
 <details>
@@ -147,7 +147,7 @@ Yes. `vrk prompt --endpoint http://localhost:11434/v1` works with any OpenAI-com
 </details>
 
 <details>
-<summary>Why 27 tools? Isn't that scope creep?</summary>
+<summary>Why 28 tools? Isn't that scope creep?</summary>
 
 Every tool solves a problem that comes up repeatedly when working with LLMs. The utility tools (uuid, epoch, slug, recase) are things agents need constantly - generating run IDs, converting timestamps, normalizing names. They're free because they ship in the same binary. You don't install what you don't use; you just don't call it.
 </details>

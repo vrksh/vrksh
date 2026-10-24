@@ -185,6 +185,23 @@ vrk pdf -p 4- report.pdf           # page 4 to the end
 
 ---
 
+### `--query <sql>` (sql)
+
+**Meaning:** The SQL query, given as a flag. With `--query`, every positional argument is a CSV file. Without it, the first positional is the query. No short form.
+
+```bash
+vrk sql --query "SELECT * FROM users" users.csv
+vrk sql "SELECT * FROM users" users.csv   # same thing
+```
+
+---
+
+### `--no-header` (sql)
+
+**Meaning:** Leave the header row out of CSV output. It does not change how input is read: the first row of every input CSV is always the header. No effect with `--json`.
+
+---
+
 ## Reserved Shorthands
 
 These single-letter shorthands are permanently reserved. **Do not use them for any other flag**, even if the long flag name seems unrelated. Their meanings are fixed Unix conventions that users will assume globally.

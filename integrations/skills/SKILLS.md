@@ -2540,6 +2540,96 @@ vrk pdf scan.pdf | vrk prompt --system 'Summarise.' || echo "no text layer, need
 
 ---
 
+## sql - SQL over CSV
+
+Runs a SQL query over CSV files in an in-memory SQLite database. Each file is a table named after its basename (`users.csv` -> `users`). Piped CSV is the table `stdin`.
+Output is CSV with a header row by default. With `--json`, one object per row, then `{"_vrk":"sql","count":N}`.
+Input: the query is the first positional argument (or `--query`), the rest are CSV file paths. Stdin is read only when the query mentions `stdin`.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--query` | | SQL query. Every positional argument is then a CSV file |
+| `--no-header` | | Leave the header row out of CSV output |
+| `--json` | `-j` | One JSON object per row (keys in column order), then `{"_vrk":"sql","count":N}` |
+| `--quiet` | `-q` | Suppress stderr output |
+
+### Type inference
+
+| Column values (empty cells ignored) | Type |
+|------|------|
+| All integers that fit in int64, no leading zeros | `INTEGER` |
+| Integers and decimals like `1.5` or `-0.25` | `REAL` |
+| Anything else, including `007`, `1e3`, `" 30"` or an all-empty column | `TEXT` |
+
+Empty cells in INTEGER and REAL columns are NULL. In TEXT columns they are empty strings.
+
+### --json output shapes
+
+| Flags | Shape |
+|-------|-------|
+| `--json` | `{"col":value,...}` per row + `{"_vrk":"sql","count":N}` |
+| Zero matching rows | trailer only, `count:0` |
+| Duplicate result column names | later ones get `_1`, `_2` (`id`, `id_1`) |
+| Any error + `--json` | `{"error":"msg","code":N}` on stdout; stderr empty |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success, including empty stdin when the query reads `stdin` |
+| 1 | SQL error (syntax, no such table or column, runtime), file not found, CSV parse error, empty file |
+| 2 | Usage error - no query, a table but no files given, duplicate table name, `stdin` in the query with nothing piped, unknown flag |
+
+### Examples
+
+```bash
+# Filter one file
+vrk sql 'SELECT name, city FROM users WHERE age > 25' users.csv
+
+# Join two files
+vrk sql 'SELECT u.name, sum(o.total) AS spent FROM users u JOIN orders o ON o.user_id = u.id GROUP BY u.name' users.csv orders.csv
+
+# Query piped CSV as the table stdin
+cat users.csv | vrk sql 'SELECT city, count(*) AS n FROM stdin GROUP BY city'
+
+# JSONL out
+vrk sql --json 'SELECT * FROM users' users.csv
+
+# Values only, no header
+vrk sql --no-header 'SELECT count(*) FROM users' users.csv
+```
+
+### Compose patterns
+
+```bash
+# Rows as JSONL into an LLM, one call per row
+vrk sql --json 'SELECT id, feedback FROM survey WHERE rating < 3' survey.csv \
+  | jq -c 'select(.id)' | vrk prompt --field feedback --system 'Classify this complaint.'
+
+# Gate a pipeline on a count
+n="$(vrk sql --no-header 'SELECT count(*) FROM orders WHERE total < 0' orders.csv)"
+[ "$n" -eq 0 ] || echo "negative totals found"
+
+# Count tokens in a column before sending it
+vrk sql --no-header 'SELECT body FROM tickets' tickets.csv | vrk tok
+```
+
+### Gotchas
+
+- **Table names come from file names** - characters outside `[A-Za-z0-9_]` become `_`, so `sales-2024.csv` is `sales_2024`. Two files with the same name (case-insensitive) exit 2.
+- **Header names are cleaned the same way** - `first name` is `first_name`, an empty header is `col_N` (1-indexed), and repeats get `_1`, `_2`. Quote reserved words: `SELECT "order" FROM t`.
+- **`stdin` is found by word match** - any `stdin` in the query, even inside a string literal, makes `vrk sql` read stdin. A file called `stdin.csv` clashes with it.
+- **`007` stays text** - leading zeros keep a column TEXT, so ZIP codes and IDs aren't mangled. Cast if you want numbers: `CAST(zip AS INTEGER)`.
+- **No such table without files is exit 2** - `vrk sql 'SELECT * FROM t'` means you forgot the file. With files given it is exit 1 with SQLite's message.
+- **ATTACH and VACUUM INTO are blocked** - they exit 1 with `too many attached databases - max 0`, so a query can't read or write other files.
+- **Multiple statements run, last result is printed** - `CREATE TABLE x AS SELECT ...; SELECT * FROM x` works. Statements like `DELETE` print nothing.
+- **Ragged rows fail** - every row must have as many fields as the header. The error names the line.
+- **Whole files are held in memory** - fine for files up to a few hundred MB.
+
+---
+
 # Utilities
 
 These are not pipeline tools — they support discovery and integration.

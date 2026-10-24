@@ -413,6 +413,23 @@ Exit 2: Interactive TTY with no stdin
 echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
 ```
 
+## sql - SQL over CSV files - SQLite in memory, CSV or JSONL out
+
+| Flag          | Short | Description                                             |
+|---------------|-------|---------------------------------------------------------|
+| `--query`     |       | SQL query; every positional argument is then a CSV file |
+| `--no-header` |       | Leave the header row out of CSV output                  |
+| `--json`      | -j    | One JSON object per row, then a metadata trailer        |
+| `--quiet`     | -q    | Suppress stderr output                                  |
+
+Exit 0: Success, including empty stdin when the query reads stdin
+Exit 1: SQL error, file not found, CSV parse error, or empty file
+Exit 2: No query, a table but no files, duplicate table name, stdin in the query with nothing piped, or unknown flag
+
+```bash
+vrk sql --json 'SELECT * FROM users WHERE age > 25' users.csv | jq -c 'select(.id)'
+```
+
 ## sse - SSE stream parser - text/event-stream to JSONL
 
 | Flag      | Short | Description                                                                                                     |

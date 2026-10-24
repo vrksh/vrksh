@@ -28,7 +28,7 @@ Your agent needs to know three things: what tools exist, what each tool does, an
 
 | Endpoint                          | Format     | What it provides                                         | CLI equivalent     |
 |-----------------------------------|------------|----------------------------------------------------------|--------------------|
-| [`/manifest.json`](/manifest.json) | JSON       | Tool registry - name and one-line description for all 27 tools | `vrk --manifest`   |
+| [`/manifest.json`](/manifest.json) | JSON       | Tool registry - name and one-line description for all 28 tools | `vrk --manifest`   |
 | [`/skills.md`](/skills.md)         | Markdown   | Complete reference: every flag, exit code, and compose pattern  | `vrk --skills`     |
 | [`/skills/tok.md`](/skills/tok.md) | Markdown   | Single-tool reference (one file per tool, lower token cost)    | `vrk --skills tok` |
 | [`/agents.md`](/agents.md)         | Markdown   | Agent orientation, anti-patterns, MCP config                   | -                  |
@@ -58,7 +58,7 @@ Drop this block into your agent's `CLAUDE.md`, system prompt, or tool-use instru
 ```markdown
 ## vrk tools
 
-vrk is 27 Unix tools for working with LLMs, shipped as one static binary.
+vrk is 28 Unix tools for working with LLMs, shipped as one static binary.
 
 Discovery:
 - `vrk --manifest` lists all tools (JSON)

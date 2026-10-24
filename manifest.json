@@ -94,6 +94,10 @@
       "description": "PDF text extractor - plain text or JSONL per page, --pages"
     },
     {
+      "name": "sql",
+      "description": "SQL over CSV files - SQLite in memory, CSV or JSONL out"
+    },
+    {
       "name": "pct",
       "description": "percent encoder/decoder - RFC 3986, --encode, --decode, --form"
     },
