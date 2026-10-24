@@ -37,13 +37,14 @@ If all retries fail, `vrk coax` exits with the last command's exit code. The pip
 
 ## Wrapping a full pipeline
 
-Retry an entire multi-step pipeline by wrapping it in `sh -c`:
+Retry an entire multi-step pipeline by wrapping it in `bash -c`. Check the token budget first, outside the retry: an oversized document fails the same way every time, so retrying it only adds backoff.
 
 ```bash
+vrk tok --check 8000 < doc.txt > /dev/null && \
 vrk coax --times 3 --backoff exp:2s --on 1 -- \
   bash -c 'set -o pipefail; cat doc.txt \
-    | vrk tok --check 8000 \
-    | vrk prompt --system "Summarise" \
-    | vrk validate --schema out.json --strict'
+    | vrk mask \
+    | vrk prompt --system "Summarise as JSON: {\"summary\":\"string\"}" \
+    | vrk validate --schema "{\"summary\":\"string\"}" --strict'
 ```
 
