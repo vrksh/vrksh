@@ -1,3 +1,32 @@
+## How the command runs
+
+coax runs the command directly, not through a shell. For pipes or redirects, use `-- sh -c '...'`.
+
+Arguments reach the command exactly as you typed them, so quoting survives and data is never run as code:
+
+```bash
+$ vrk coax --times 1 -- printf '%s\n' 'a b'
+a b
+$ vrk coax --times 1 -- echo 'x; echo INJECTED'
+x; echo INJECTED
+```
+
+The exit code is the command's own. A command killed by a signal gives 128 plus the signal number (143 for SIGTERM). coax forwards SIGINT and SIGTERM to the running command and does not retry after it receives one.
+
+### Migrating from v0.1
+
+v0.1 joined everything after `--` into one string and ran it with `sh -c`. One-string commands like `vrk coax -- 'curl x | jq'` no longer work: coax now looks for a program literally named `curl x | jq`. Wrap them in `sh -c`:
+
+```bash
+vrk coax --times 3 -- sh -c 'curl -sf https://api.example.com | jq .data'
+```
+
+## Stdin replay
+
+coax does not read stdin up front. The first attempt reads stdin as it needs it, and coax keeps a copy. A retry gets the saved bytes followed by any stdin the first attempt never read, so every attempt sees the same input. A command that ignores stdin starts and finishes at once, even when stdin is a pipe that never closes.
+
+coax keeps up to 64 MiB for replay. Bigger input still streams through on the first attempt, but a retry fails with `coax: stdin larger than 64 MiB cannot be replayed` (exit 1).
+
 ## Backoff strategies
 
 ### Fixed delay
@@ -51,17 +80,17 @@ vrk coax --until 'vrk kv get --ns deploy status | grep -q complete' \
   --times 30 --backoff 10s -- echo 'checking...'
 ```
 
-This runs the command, then checks the `--until` condition. If the condition exits 0, coax stops.
+This runs the command, then checks the `--until` condition. If the condition exits 0, coax stops. Unlike the command, `--until` is a shell string and runs through `sh -c`.
 
 ### What retry progress looks like
 
 Without `--quiet`, coax prints progress to stderr:
 
 ```
-coax: attempt 1/4 failed (exit 1), waiting 200ms
-coax: attempt 2/4 failed (exit 1), waiting 400ms
-coax: attempt 3/4 failed (exit 1), waiting 800ms
-coax: attempt 4/4 failed (exit 1), all retries exhausted
+coax: attempt 1 failed (exit 1), retrying in 200ms (1/3)
+coax: attempt 2 failed (exit 1), retrying in 400ms (2/3)
+coax: attempt 3 failed (exit 1), retrying in 800ms (3/3)
+coax: all 4 attempts failed (last exit 1)
 ```
 
 With `--quiet`, stderr from coax is silent (subprocess stderr still passes through). The exit code still reflects success or failure.
@@ -108,20 +137,29 @@ All retries exhausted:
 
 ```bash
 $ vrk coax --times 2 --backoff 100ms -- false
-coax: attempt 1/3 failed (exit 1), waiting 100ms
-coax: attempt 2/3 failed (exit 1), waiting 100ms
-coax: attempt 3/3 failed (exit 1), all retries exhausted
+coax: attempt 1 failed (exit 1), retrying in 100ms (1/2)
+coax: attempt 2 failed (exit 1), retrying in 100ms (2/2)
+coax: all 3 attempts failed (last exit 1)
 $ echo $?
 1
 ```
 
 The exit code from the last attempt is returned.
 
+Command not found (not retried):
+
+```bash
+$ vrk coax --times 3 -- no-such-command
+coax: command not found: no-such-command
+$ echo $?
+1
+```
+
 Missing command:
 
 ```bash
 $ vrk coax --times 3
-usage error: coax: no command specified (use -- before the command)
+usage error: missing command: use -- to separate command from coax flags
 $ echo $?
 2
 ```

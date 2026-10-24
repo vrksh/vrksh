@@ -1,13 +1,15 @@
 package coax
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -17,7 +19,7 @@ import (
 func init() {
 	shared.Register(shared.ToolMeta{
 		Name:  "coax",
-		Short: "Retry wrapper — re-runs a command on failure with backoff",
+		Short: "Retry wrapper - re-runs a command on failure with backoff",
 		Flags: []shared.FlagMeta{
 			{Name: "times", Usage: "number of retries (first attempt is free; total attempts = N+1)"},
 			{Name: "backoff", Usage: "delay between retries: 100ms for fixed, exp:100ms for exponential"},
@@ -74,36 +76,63 @@ func Run() int {
 		return shared.UsageErrorf("--backoff: %v", err)
 	}
 
-	// Buffer stdin only when it's a pipe or regular file — not a TTY.
-	// On a terminal, io.ReadAll blocks forever waiting for EOF.
-	var stdinData []byte
-	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
-		stdinData, err = io.ReadAll(os.Stdin)
-		if err != nil {
-			return shared.Errorf("reading stdin: %v", err)
+	// fail reports a runtime error as plain stderr or, with --json, on stdout.
+	fail := func(msg string) int {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": msg, "code": 1})
 		}
+		fmt.Fprintln(os.Stderr, msg)
+		return shared.ExitError
 	}
 
-	cmdStr := strings.Join(cmdArgs, " ")
+	// Stdin is replayed lazily: nothing is read until a child asks for it, so an
+	// open pipe that never closes cannot block a child that ignores stdin.
+	// On a terminal there is nothing to replay; the child gets no input.
+	var in *replayStdin
+	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
+		in = newReplayStdin(os.Stdin)
+	}
+
+	// Forward SIGINT and SIGTERM to the running child, and stop retrying once
+	// coax itself has been told to stop.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+	var signalled atomic.Bool
+
 	maxAttempts := *times + 1
 	var lastCode int
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		lastCode = runSubcmd(cmdStr, stdinData)
+		if attempt > 0 && in != nil && in.overflow {
+			return fail("coax: stdin larger than 64 MiB cannot be replayed")
+		}
 
-		if lastCode == 0 {
+		var startErr error
+		lastCode, startErr = runSubcmd(cmdArgs, in, sigs, &signalled)
+		if errors.Is(startErr, exec.ErrNotFound) {
+			return fail("coax: command not found: " + cmdArgs[0])
+		}
+		if startErr != nil {
+			return fail(fmt.Sprintf("coax: cannot run %s: %v", cmdArgs[0], startErr))
+		}
+
+		if lastCode == 0 || signalled.Load() {
 			break
 		}
 
 		if !shouldRetry(lastCode, onCodes, *untilCmd) {
 			if *untilCmd != "" {
-				// --until condition passed despite command failing — treat as success
+				// --until condition passed despite command failing - treat as success
 				return shared.ExitOK
 			}
 			break // --on exit code not in list; exit immediately
 		}
 
 		if attempt == maxAttempts-1 {
+			if !*quiet {
+				fmt.Fprintf(os.Stderr, "coax: all %d attempts failed (last exit %d)\n", maxAttempts, lastCode)
+			}
 			break // retries exhausted
 		}
 
@@ -127,20 +156,132 @@ func Run() int {
 	return lastCode
 }
 
-// runSubcmd runs a shell command string, re-supplying buffered stdin, and
-// returns the exit code. stdout and stderr pass through to the process.
-func runSubcmd(cmdStr string, stdinData []byte) int {
-	cmd := exec.Command("sh", "-c", cmdStr)
-	cmd.Stdin = bytes.NewReader(stdinData)
+// runSubcmd runs argv directly (no shell), feeding it replayed stdin, and
+// returns the exit code. A child killed by a signal returns 128+signal.
+// startErr is set when the child could not be started at all.
+func runSubcmd(argv []string, in *replayStdin, sigs <-chan os.Signal, signalled *atomic.Bool) (code int, startErr error) {
+	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
+
+	var pipe io.WriteCloser
+	if in != nil {
+		var err error
+		if pipe, err = cmd.StdinPipe(); err != nil {
+			return shared.ExitError, err
 		}
-		return shared.ExitError
 	}
-	return shared.ExitOK
+	if err := cmd.Start(); err != nil {
+		return shared.ExitError, err
+	}
+
+	// The feeder is ours, not exec's, so Wait does not block on a stdin read
+	// that may never return. Wait closes the pipe once the child exits, which
+	// unblocks any pending write; done unblocks a pending read.
+	done := make(chan struct{})
+	fed := make(chan struct{})
+	if in != nil {
+		go func() {
+			in.feed(pipe, done)
+			close(fed)
+		}()
+	} else {
+		close(fed)
+	}
+
+	waited := make(chan error, 1)
+	go func() { waited <- cmd.Wait() }()
+
+	var err error
+loop:
+	for {
+		select {
+		case s := <-sigs:
+			signalled.Store(true)
+			_ = cmd.Process.Signal(s)
+		case err = <-waited:
+			break loop
+		}
+	}
+	close(done)
+	<-fed
+
+	if err == nil {
+		return shared.ExitOK, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+			return 128 + int(ws.Signal()), nil
+		}
+		return exitErr.ExitCode(), nil
+	}
+	return shared.ExitError, nil
+}
+
+// maxReplay caps how much stdin coax keeps for later attempts. A var so
+// tests can lower it.
+var maxReplay = 64 << 20
+
+type chunk struct {
+	b   []byte
+	err error
+}
+
+// replayStdin hands stdin to one child at a time and remembers what it has
+// seen, so a retry gets the same bytes. A single goroutine owns the reads
+// and stays at most one chunk ahead of the children.
+type replayStdin struct {
+	chunks   chan chunk
+	buf      []byte
+	eof      bool
+	overflow bool
+}
+
+func newReplayStdin(r io.Reader) *replayStdin {
+	s := &replayStdin{chunks: make(chan chunk)}
+	go func() {
+		for {
+			p := make([]byte, 32*1024)
+			n, err := r.Read(p)
+			if n > 0 {
+				s.chunks <- chunk{b: p[:n]}
+			}
+			if err != nil {
+				s.chunks <- chunk{err: err}
+				return
+			}
+		}
+	}()
+	return s
+}
+
+// feed writes the replay buffer, then live stdin, to w until stdin ends, the
+// child stops reading, or done closes. Only one feed runs at a time.
+func (s *replayStdin) feed(w io.WriteCloser, done <-chan struct{}) {
+	defer func() { _ = w.Close() }()
+	if _, err := w.Write(s.buf); err != nil {
+		return
+	}
+	for !s.eof {
+		select {
+		case <-done:
+			return
+		case c := <-s.chunks:
+			if c.err != nil {
+				s.eof = true
+				return
+			}
+			if len(s.buf)+len(c.b) > maxReplay {
+				s.overflow = true
+			} else if !s.overflow {
+				s.buf = append(s.buf, c.b...)
+			}
+			if _, err := w.Write(c.b); err != nil {
+				return
+			}
+		}
+	}
 }
 
 // shouldRetry returns true if the loop should attempt another run.
@@ -150,7 +291,7 @@ func runSubcmd(cmdStr string, stdinData []byte) int {
 func shouldRetry(cmdCode int, onCodes []int, untilCmd string) bool {
 	if untilCmd != "" {
 		cmd := exec.Command("sh", "-c", untilCmd)
-		// suppress condition command's own output — it is a side-effect check only
+		// suppress condition command's own output - it is a side-effect check only
 		return cmd.Run() != nil
 	}
 	if len(onCodes) > 0 {
@@ -166,7 +307,7 @@ func shouldRetry(cmdCode int, onCodes []int, untilCmd string) bool {
 
 // parseBackoff parses a backoff spec string.
 // Returns isExp=true for "exp:<duration>", false for a plain duration.
-// An empty spec returns (false, 0, nil) — no delay.
+// An empty spec returns (false, 0, nil) - no delay.
 func parseBackoff(spec string) (isExp bool, base time.Duration, err error) {
 	if spec == "" {
 		return false, 0, nil
@@ -186,7 +327,7 @@ func parseBackoff(spec string) (isExp bool, base time.Duration, err error) {
 }
 
 // Flags returns flag metadata for MCP schema generation.
-// This FlagSet is never used for parsing — Run() creates its own.
+// This FlagSet is never used for parsing - Run() creates its own.
 func Flags() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("coax", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -203,10 +344,13 @@ func Flags() *pflag.FlagSet {
 // printCoaxUsage writes usage to stdout and returns 0. Called when --help is passed.
 func printCoaxUsage(fs *pflag.FlagSet) int {
 	lines := []string{
-		"usage: vrk coax [flags] -- <command>",
+		"usage: vrk coax [flags] -- <command> [args...]",
 		"       vrk coax --times 5 --backoff exp:100ms -- curl https://example.com",
 		"",
-		"Retry wrapper — re-runs a command on failure with optional backoff.",
+		"Retry wrapper - re-runs a command on failure with optional backoff.",
+		"",
+		"The command runs directly, not through a shell. For pipes or redirects,",
+		"use: vrk coax -- sh -c 'cat doc.txt | vrk prompt'",
 		"",
 		"flags:",
 	}
