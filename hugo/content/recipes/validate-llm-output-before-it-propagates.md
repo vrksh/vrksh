@@ -25,7 +25,7 @@ Schema validation at the source catches this immediately. The pipeline stops at 
 
 ## How the pipeline works
 
-`vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against a flat schema. It checks top-level keys and their types, nothing deeper. If the response matches, the data passes through. If not, `--strict` makes `vrk validate` exit 1 and `vrk kv set` never runs. Without `--strict`, a bad line is only warned about on stderr.
+`vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against a flat schema. It checks top-level keys and their types, nothing deeper. If the response matches, the data passes through. If not, `--strict` makes `vrk validate` exit 1 with no output, so `vrk kv set` gets nothing to store, exits 2 with `kv set: no value`, and the key is never written. Without `--strict`, a bad line is only warned about on stderr.
 
 No bad data reaches storage. No downstream code processes an invalid response.
 
@@ -45,10 +45,10 @@ LLMs sometimes produce valid JSON that doesn't match your schema. Combine with `
 
 ```bash
 vrk coax --times 3 --backoff exp:1s --on 1 -- \
-  sh -c 'cat doc.txt \
+  bash -c 'set -o pipefail; cat doc.txt \
       | vrk prompt --system "Extract entities as JSON: {\"entities\":\"array\"}" \
       | vrk validate --schema entities.json --strict'
 ```
 
-If validation fails (exit 1), `vrk coax` retries the entire sub-pipeline up to 3 times with exponential backoff.
+If the API call or the validation fails (exit 1), `vrk coax` retries the entire sub-pipeline up to 3 times with exponential backoff. `set -o pipefail` is what lets a failed API call reach coax: without it the pipeline exits with validate's status, and validate exits 0 on empty input.
 

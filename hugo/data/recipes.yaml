@@ -18,7 +18,7 @@
 
     ## How the pipeline works
 
-    `vrk tok --check 4000` reads stdin, counts tokens, and makes a decision. If the count is 4000 or under, it passes the text through unchanged to stdout. If over, it exits 1 with empty stdout. The pipe stops. `vrk prompt` never runs.
+    `vrk tok --check 4000` reads stdin, counts tokens, and makes a decision. If the count is 4000 or under, it passes the text through unchanged to stdout. If over, it exits 1 with empty stdout. `vrk prompt` gets no input, exits 1 with `prompt: empty prompt, nothing sent`, and no request reaches the API.
 
     No wasted API call. No truncated output. No silent failure.
 
@@ -32,7 +32,7 @@
 
     ```bash
     for f in docs/*.md; do
-      cat "$f" | vrk tok --check 8000 | vrk prompt --system "Extract key points" >> output.jsonl 2>/dev/null
+      cat "$f" | vrk tok --check 8000 | vrk prompt --system "Extract key points" >> output.txt 2>/dev/null
     done
     ```
 
@@ -87,8 +87,8 @@
       cat doc.txt \
         | vrk chunk --size 512 --overlap 64 \
         | while read -r chunk; do
-            idx=$(echo "$chunk" | jq -r '.index')
-            text=$(echo "$chunk" | jq -r '.text')
+            idx=$(printf '%s\n' "$chunk" | jq -r '.index')
+            text=$(printf '%s\n' "$chunk" | jq -r '.text')
             vrk kv set "doc:${DOC_ID}:chunk:${idx}" "$text"
           done
   tags:
@@ -123,7 +123,7 @@
   steps:
     - |-
       vrk coax --times 3 --backoff exp:1s --on 1 \
-        -- sh -c 'vrk prompt --system "Return JSON like {\"summary\":\"string\"}" < doc.txt \
+        -- bash -c 'set -o pipefail; vrk prompt --system "Return JSON like {\"summary\":\"string\"}" < doc.txt \
           | vrk validate --schema "{\"summary\":\"string\"}" --strict'
   tags:
     - coax
@@ -137,7 +137,9 @@
 
     ## How the pipeline works
 
-    `vrk coax` runs the command after `--`. It runs the command directly, not through a shell, so pipes and redirects need `sh -c '...'`, as above.
+    `vrk coax` runs the command after `--`. It runs the command directly, not through a shell, so pipes and redirects need a shell, as above.
+
+    `set -o pipefail` matters. A shell pipeline exits with the status of its last command. When the API returns a 500, `vrk prompt` exits 1 and prints nothing, `vrk validate` gets empty input and exits 0, and without pipefail coax would see success and never retry. Use `bash -c`, not `sh -c`: some `sh` builds (dash on older Debian and Ubuntu) have no pipefail.
 
     Here the retried unit is the prompt plus the check. `vrk validate --strict` exits 1 when the response is not valid JSON with a string `summary` key. Without `--strict`, validate only warns and exits 0, and coax would never see a failure. If the command exits with code 1 (matching `--on 1`), coax waits and retries. The backoff is exponential starting at 1 second: first retry after 1s, second after 2s, third after 4s.
 
@@ -153,7 +155,7 @@
 
     ```bash
     vrk coax --times 3 --backoff exp:2s --on 1 -- \
-      sh -c 'cat doc.txt \
+      bash -c 'set -o pipefail; cat doc.txt \
         | vrk tok --check 8000 \
         | vrk prompt --system "Summarise" \
         | vrk validate --schema out.json --strict'
@@ -352,7 +354,7 @@
 
     ## How the pipeline works
 
-    `vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against a flat schema. It checks top-level keys and their types, nothing deeper. If the response matches, the data passes through. If not, `--strict` makes `vrk validate` exit 1 and `vrk kv set` never runs. Without `--strict`, a bad line is only warned about on stderr.
+    `vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against a flat schema. It checks top-level keys and their types, nothing deeper. If the response matches, the data passes through. If not, `--strict` makes `vrk validate` exit 1 with no output, so `vrk kv set` gets nothing to store, exits 2 with `kv set: no value`, and the key is never written. Without `--strict`, a bad line is only warned about on stderr.
 
     No bad data reaches storage. No downstream code processes an invalid response.
 
@@ -372,12 +374,12 @@
 
     ```bash
     vrk coax --times 3 --backoff exp:1s --on 1 -- \
-      sh -c 'cat doc.txt \
+      bash -c 'set -o pipefail; cat doc.txt \
           | vrk prompt --system "Extract entities as JSON: {\"entities\":\"array\"}" \
           | vrk validate --schema entities.json --strict'
     ```
 
-    If validation fails (exit 1), `vrk coax` retries the entire sub-pipeline up to 3 times with exponential backoff.
+    If the API call or the validation fails (exit 1), `vrk coax` retries the entire sub-pipeline up to 3 times with exponential backoff. `set -o pipefail` is what lets a failed API call reach coax: without it the pipeline exits with validate's status, and validate exits 0 on empty input.
 - name: Agent-safe pipeline with secret masking
   why: When agents handle user data, mask before any logging or storage - secrets should never reach an LLM or a kv store unredacted.
   description: Full guard pipeline - mask secrets, gate on token budget, prompt, validate output.

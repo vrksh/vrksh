@@ -37,3 +37,6 @@ mockllm replies: JSON with the right keys if a system message contains a
 
 `expect.sh` must encode the CORRECT behaviour of the recipe, not what the code
 does today.
+- `MOCKLLM` is the mockllm binary, for recipes that need a second mock with
+  different flags (for example `--fail-first 1` to test retries). Start it with
+  `--port 0` and read the address from its `listening on` stderr line.

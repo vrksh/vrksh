@@ -8,7 +8,7 @@ slug: "retry-flaky-api-call"
 steps:
   - |-
     vrk coax --times 3 --backoff exp:1s --on 1 \
-      -- sh -c 'vrk prompt --system "Return JSON like {\"summary\":\"string\"}" < doc.txt \
+      -- bash -c 'set -o pipefail; vrk prompt --system "Return JSON like {\"summary\":\"string\"}" < doc.txt \
         | vrk validate --schema "{\"summary\":\"string\"}" --strict'
 tags:
   - "coax"
@@ -23,7 +23,9 @@ The usual fix is a retry decorator in Python (tenacity, backoff). But that only 
 
 ## How the pipeline works
 
-`vrk coax` runs the command after `--`. It runs the command directly, not through a shell, so pipes and redirects need `sh -c '...'`, as above.
+`vrk coax` runs the command after `--`. It runs the command directly, not through a shell, so pipes and redirects need a shell, as above.
+
+`set -o pipefail` matters. A shell pipeline exits with the status of its last command. When the API returns a 500, `vrk prompt` exits 1 and prints nothing, `vrk validate` gets empty input and exits 0, and without pipefail coax would see success and never retry. Use `bash -c`, not `sh -c`: some `sh` builds (dash on older Debian and Ubuntu) have no pipefail.
 
 Here the retried unit is the prompt plus the check. `vrk validate --strict` exits 1 when the response is not valid JSON with a string `summary` key. Without `--strict`, validate only warns and exits 0, and coax would never see a failure. If the command exits with code 1 (matching `--on 1`), coax waits and retries. The backoff is exponential starting at 1 second: first retry after 1s, second after 2s, third after 4s.
 
@@ -39,7 +41,7 @@ Retry an entire multi-step pipeline by wrapping it in `sh -c`:
 
 ```bash
 vrk coax --times 3 --backoff exp:2s --on 1 -- \
-  sh -c 'cat doc.txt \
+  bash -c 'set -o pipefail; cat doc.txt \
     | vrk tok --check 8000 \
     | vrk prompt --system "Summarise" \
     | vrk validate --schema out.json --strict'

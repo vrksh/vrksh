@@ -107,6 +107,7 @@ func TestRecipes(t *testing.T) {
 				"OPENAI_API_KEY=dummy-key",
 				"VRK_DEFAULT_MODEL=mock",
 				"MOCK_LOG=" + mock.Log,
+				"MOCKLLM=" + filepath.Join(shared, "mockllm"),
 				"OUT=" + outFile,
 				"STEPS=" + stepsFile,
 				"SITE_URL=" + site.URL,

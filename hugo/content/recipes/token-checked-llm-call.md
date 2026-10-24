@@ -23,7 +23,7 @@ This is the most expensive bug in LLM pipelines because it looks like success. T
 
 ## How the pipeline works
 
-`vrk tok --check 4000` reads stdin, counts tokens, and makes a decision. If the count is 4000 or under, it passes the text through unchanged to stdout. If over, it exits 1 with empty stdout. The pipe stops. `vrk prompt` never runs.
+`vrk tok --check 4000` reads stdin, counts tokens, and makes a decision. If the count is 4000 or under, it passes the text through unchanged to stdout. If over, it exits 1 with empty stdout. `vrk prompt` gets no input, exits 1 with `prompt: empty prompt, nothing sent`, and no request reaches the API.
 
 No wasted API call. No truncated output. No silent failure.
 
@@ -37,7 +37,7 @@ Gate before a batch job to skip oversized documents:
 
 ```bash
 for f in docs/*.md; do
-  cat "$f" | vrk tok --check 8000 | vrk prompt --system "Extract key points" >> output.jsonl 2>/dev/null
+  cat "$f" | vrk tok --check 8000 | vrk prompt --system "Extract key points" >> output.txt 2>/dev/null
 done
 ```
 
