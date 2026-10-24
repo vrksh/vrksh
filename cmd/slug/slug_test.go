@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // runSlug replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and returns
@@ -348,14 +349,75 @@ func TestJSONOutput(t *testing.T) {
 	}
 }
 
-// Extra: empty input produces no output (empty string slug is suppressed).
-func TestAllPunctuationNoOutput(t *testing.T) {
-	stdout, _, code := runSlug(t, nil, "!!!\n")
+// Extra: an all-punctuation line still yields one (empty) output line plus a warning.
+func TestAllPunctuationEmptyLine(t *testing.T) {
+	stdout, stderr, code := runSlug(t, nil, "!!!\n")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	if strings.TrimSpace(stdout) != "" {
-		t.Errorf("stdout = %q, want empty for all-punctuation input", stdout)
+	if stdout != "\n" {
+		t.Errorf("stdout = %q, want one empty line", stdout)
+	}
+	if !strings.Contains(stderr, "line 1: empty slug") {
+		t.Errorf("stderr = %q, want empty-slug warning", stderr)
+	}
+}
+
+// One output line per input line, always (D5).
+func TestNonLatinKeepsLines(t *testing.T) {
+	in := "a\nनमस्ते दुनिया\nStraße\n東京 2026\n"
+	stdout, _, code := runSlug(t, nil, in)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	want := "a\nनमस्ते-दुनिया\nstrasse\n東京-2026\n"
+	if stdout != want {
+		t.Errorf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+func TestFoldTable(t *testing.T) {
+	cases := map[string]string{
+		"Über Größe":    "uber-grosse",
+		"Café au Lait!": "cafe-au-lait",
+		"Æon Øl Łódź":   "aeon-ol-lodz",
+		"Þór Đorđe Ðan": "thor-dorde-dan",
+		"Œuvre ẞ":       "oeuvre-ss",
+	}
+	for in, want := range cases {
+		got, _, _ := runSlug(t, nil, in+"\n")
+		if strings.TrimRight(got, "\n") != want {
+			t.Errorf("slug(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestASCIIFlag(t *testing.T) {
+	stdout, stderr, code := runSlug(t, []string{"--ascii"}, "東京 2026\nनमस्ते\nStraße\n")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != "2026\n\nstrasse\n" {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !strings.Contains(stderr, "line 2: no ASCII characters, empty slug") {
+		t.Errorf("stderr = %q, want ascii warning", stderr)
+	}
+}
+
+func TestMaxRuneBoundary(t *testing.T) {
+	stdout, _, _ := runSlug(t, []string{"--max", "7"}, "東京 大阪 名古屋\n")
+	// runes: 東京-大阪-名古屋; first 7 runes = 東京-大阪-名, cut back to last separator.
+	if stdout != "東京-大阪\n" {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !utf8.ValidString(stdout) {
+		t.Errorf("invalid utf8: %q", stdout)
+	}
+	// word ends exactly at the limit: keep it, no trailing separator.
+	stdout, _, _ = runSlug(t, []string{"--max", "6"}, "ab cde fg\n")
+	if stdout != "ab-cde\n" {
+		t.Errorf("exact-fit stdout = %q, want %q", stdout, "ab-cde\n")
 	}
 }
 

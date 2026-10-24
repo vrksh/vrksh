@@ -35,6 +35,24 @@ second-post
 third-post
 ```
 
+### Non-Latin text
+
+Latin letters fold to ASCII. Other scripts are kept as they are, so a Hindi or Japanese title still gets a slug:
+
+```bash
+$ printf 'Straße\nनमस्ते दुनिया\n東京 2026\n' | vrk slug
+strasse
+नमस्ते-दुनिया
+東京-2026
+```
+
+Every input line produces exactly one output line. If a line has nothing to keep, you get an empty line and a warning on stderr, so batch output stays aligned with the input. Use `--ascii` when the target needs strict ASCII:
+
+```bash
+$ echo '東京 2026' | vrk slug --ascii
+2026
+```
+
 ### JSON output
 
 ```bash

@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/spf13/pflag"
 	"golang.org/x/text/unicode/norm"
@@ -42,6 +43,7 @@ func init() {
 		Flags: []shared.FlagMeta{
 			{Name: "separator", Usage: "word separator (default: -)"},
 			{Name: "max", Usage: "max output length, truncated at word boundary (0 = unlimited)"},
+			{Name: "ascii", Usage: "keep only ASCII; other scripts are dropped"},
 			{Name: "json", Shorthand: "j", Usage: `emit {"input":"...","output":"..."} per line`},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr; exit codes unchanged"},
 		},
@@ -55,9 +57,10 @@ func Run() int {
 
 	var sepFlag string
 	var maxFlag int
-	var jsonFlag, quietFlag bool
+	var jsonFlag, quietFlag, asciiFlag bool
 	fs.StringVar(&sepFlag, "separator", "-", "word separator (default: -)")
 	fs.IntVar(&maxFlag, "max", 0, "max output length, truncated at word boundary (0 = unlimited)")
+	fs.BoolVar(&asciiFlag, "ascii", false, "keep only ASCII; other scripts are dropped")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `emit {"input":"...","output":"..."} per line`)
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr; exit codes unchanged")
 
@@ -85,11 +88,17 @@ func Run() int {
 
 	enc := json.NewEncoder(os.Stdout)
 
+	lineNo := 0
 	processLine := func(line string) error {
-		output := slugify(line, sepFlag, maxFlag)
-		if output == "" {
-			// Empty slug (empty input or all-punctuation) — suppress output.
-			return nil
+		lineNo++
+		output := slugify(line, sepFlag, maxFlag, asciiFlag)
+		if output == "" && !jsonFlag {
+			// One output line per input line, always: print an empty line and warn.
+			if asciiFlag && strings.TrimSpace(line) != "" && slugify(line, sepFlag, maxFlag, false) != "" {
+				shared.Warn("line %d: no ASCII characters, empty slug", lineNo)
+			} else {
+				shared.Warn("line %d: empty slug", lineNo)
+			}
 		}
 		if jsonFlag {
 			return enc.Encode(map[string]any{
@@ -132,68 +141,93 @@ func Run() int {
 	return 0
 }
 
+// foldTable maps Latin letters that have no NFD decomposition to ASCII.
+var foldTable = map[rune]string{
+	'ß': "ss", 'ẞ': "ss", 'æ': "ae", 'Æ': "ae", 'œ': "oe", 'Œ': "oe",
+	'ø': "o", 'Ø': "o", 'đ': "d", 'Đ': "d", 'ł': "l", 'Ł': "l",
+	'þ': "th", 'Þ': "th", 'ð': "d", 'Ð': "d",
+}
+
+// foldRune returns the ASCII letters/digits for r (accents stripped, fold
+// table applied), or "" if r has no ASCII form.
+func foldRune(r rune) string {
+	if s, ok := foldTable[r]; ok {
+		return s
+	}
+	var b strings.Builder
+	for _, d := range norm.NFD.String(string(r)) {
+		switch {
+		case unicode.IsMark(d):
+		case d < 128 && (unicode.IsLetter(d) || unicode.IsDigit(d)):
+			b.WriteRune(unicode.ToLower(d))
+		default:
+			return ""
+		}
+	}
+	return b.String()
+}
+
 // slugify converts a single line to a URL/filename-safe slug.
 //
-// Pipeline:
-//  1. NFD normalisation — decomposes accented chars into base + combining marks
-//     (e.g. "é" → "e" + U+0301 combining-acute-accent)
-//  2. Filter runes — keep lowercase ASCII [a-z0-9]; drop combining marks (Mn);
-//     everything else marks a word boundary
-//  3. Join words with sep
-//  4. If maxLen > 0, truncate at the last sep at or before maxLen;
-//     if no sep exists in range, return ""
-func slugify(input, sep string, maxLen int) string {
-	// NFD decomposes accented characters into base letter + combining marks.
-	s := norm.NFD.String(input)
-
-	// Walk runes, building words (runs of [a-z0-9]) separated by everything else.
+// Per rune of the NFC input: Latin letters fold to ASCII (accents stripped,
+// ß→ss etc.); letters, marks and digits of other scripts are kept as-is,
+// lowercased; everything else is a word boundary. With ascii set, non-ASCII
+// runes are word boundaries too. If maxLen > 0 (counted in runes), the slug is
+// cut at the last separator that fits; if none fits, "" is returned.
+func slugify(input, sep string, maxLen int, ascii bool) string {
 	var parts []string
 	var cur strings.Builder
+	flush := func() {
+		if cur.Len() > 0 {
+			parts = append(parts, cur.String())
+			cur.Reset()
+		}
+	}
+	lastASCII := false // last rune written to cur was ASCII
 
-	for _, r := range s {
-		lo := unicode.ToLower(r)
-		switch {
-		case lo >= 'a' && lo <= 'z':
-			cur.WriteRune(lo)
-		case lo >= '0' && lo <= '9':
-			cur.WriteRune(lo)
-		case unicode.Is(unicode.Mn, r):
-			// Combining mark (diacritic) — drop silently; the base letter was
-			// already written to cur in the previous iteration.
-		default:
-			// Any other character (space, punctuation, non-Latin, etc.) is a
-			// word boundary. Flush the current word, if any.
-			if cur.Len() > 0 {
-				parts = append(parts, cur.String())
-				cur.Reset()
+	for _, r := range norm.NFC.String(input) {
+		if f := foldRune(r); f != "" {
+			cur.WriteString(f)
+			lastASCII = true
+			continue
+		}
+		keep := !ascii && (unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsDigit(r))
+		if keep && unicode.IsMark(r) && (cur.Len() == 0 || lastASCII) {
+			// Stray mark on a Latin letter (or with no base): drop it.
+			if cur.Len() == 0 {
+				keep = false
+			} else {
+				continue
 			}
 		}
+		if !keep {
+			flush()
+			continue
+		}
+		cur.WriteRune(unicode.ToLower(r))
+		lastASCII = false
 	}
-	if cur.Len() > 0 {
-		parts = append(parts, cur.String())
-	}
+	flush()
 
 	result := strings.Join(parts, sep)
-	if result == "" {
-		return ""
+	if maxLen <= 0 || utf8.RuneCountInString(result) <= maxLen {
+		return result
 	}
-
-	// Apply --max: truncate at the last word boundary at or before maxLen.
-	if maxLen > 0 && len(result) > maxLen {
-		truncated := result[:maxLen]
-		if sep == "" {
-			// No separator means no word boundary; hard-truncate at maxLen.
-			return truncated
-		}
-		idx := strings.LastIndex(truncated, sep)
-		if idx > 0 {
-			return truncated[:idx]
-		}
-		// No separator found in range — the first word is longer than maxLen.
-		return ""
+	cut := 0
+	for i := 0; i < maxLen; i++ {
+		_, n := utf8.DecodeRuneInString(result[cut:])
+		cut += n
 	}
-
-	return result
+	if sep == "" {
+		return result[:cut]
+	}
+	if strings.HasPrefix(result[cut:], sep) {
+		return result[:cut] // the last word ends exactly at the limit
+	}
+	if idx := strings.LastIndex(result[:cut], sep); idx > 0 {
+		return result[:idx]
+	}
+	return ""
 }
 
 // Flags returns flag metadata for MCP schema generation.
@@ -203,6 +237,7 @@ func Flags() *pflag.FlagSet {
 	fs.SetOutput(io.Discard)
 	fs.String("separator", "-", "word separator (default: -)")
 	fs.Int("max", 0, "max output length, truncated at word boundary (0 = unlimited)")
+	fs.Bool("ascii", false, "keep only ASCII; other scripts are dropped")
 	fs.BoolP("json", "j", false, `emit {"input":"...","output":"..."} per line`)
 	fs.BoolP("quiet", "q", false, "suppress stderr; exit codes unchanged")
 	return fs
@@ -215,8 +250,9 @@ func printUsage(fs *pflag.FlagSet) int {
 		"       vrk slug 'Hello World'",
 		"       printf 'Line 1\\nLine 2\\n' | vrk slug",
 		"",
-		"Convert text to URL/filename-safe slugs. Lowercase, hyphen-separated,",
-		"unicode normalised to ASCII. One slug per input line.",
+		"Convert text to URL/filename-safe slugs. Lowercase, hyphen-separated.",
+		"Latin text folds to ASCII, other scripts are kept (--ascii to drop them).",
+		"Exactly one output line per input line; empty slugs print an empty line.",
 		"",
 		"flags:",
 	}
