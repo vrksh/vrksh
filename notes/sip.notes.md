@@ -50,7 +50,11 @@ Each line has a 10% chance of being included. The output count is approximate.
 
 ```bash
 $ seq 100 | vrk sip --count 5 --seed 42
-# Same output every time
+11
+67
+71
+80
+81
 ```
 
 Use `--seed` for reproducible samples in tests and CI pipelines.
@@ -62,7 +66,7 @@ $ seq 100 | vrk sip --count 3 --seed 42 --json
 7
 55
 58
-{"_vrk":"sip","strategy":"count","requested":3,"emitted":3,"seed":42}
+{"_vrk":"sip","strategy":"reservoir","requested":3,"returned":3,"total_seen":100}
 ```
 
 ## Pipeline integration
@@ -98,7 +102,7 @@ No strategy specified:
 
 ```bash
 $ seq 10 | vrk sip
-usage error: sip: specify exactly one of --first, --count, --every, --sample
+usage error: sip: a sampling flag is required
 $ echo $?
 2
 ```
@@ -107,7 +111,7 @@ Multiple strategies:
 
 ```bash
 $ seq 10 | vrk sip --first 5 --count 3
-usage error: sip: specify exactly one of --first, --count, --every, --sample
+usage error: sip: only one sampling strategy may be used at a time
 $ echo $?
 2
 ```

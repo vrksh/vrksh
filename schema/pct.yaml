@@ -33,7 +33,7 @@ flags:
   - flag: --json
     short: "-j"
     type: bool
-    description: "Emit JSON per line: {input, output, op, mode}"
+    description: "Emit JSON per line: {input, output, op, mode}, where mode is percent or form"
   - flag: --quiet
     short: "-q"
     type: bool

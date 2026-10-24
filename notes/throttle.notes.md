@@ -41,7 +41,7 @@ $ seq 5 | vrk throttle --rate 10/s --json
 3
 4
 5
-{"_vrk":"throttle","rate":"10/s","lines":5,"elapsed_ms":500}
+{"_vrk":"throttle","rate":"10/s","lines":5,"elapsed_ms":...}
 ```
 
 ## Pipeline integration
@@ -95,7 +95,7 @@ Invalid rate format:
 
 ```bash
 $ seq 10 | vrk throttle --rate 10/h
-usage error: throttle: invalid rate format (use N/s or N/m)
+usage error: throttle: invalid rate format: use N/s or N/m
 $ echo $?
 2
 ```
