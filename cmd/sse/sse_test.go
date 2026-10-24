@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // runSSE replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and returns
@@ -406,11 +407,11 @@ func TestFieldExtractionEventField(t *testing.T) {
 }
 
 func TestFieldNotFound(t *testing.T) {
-	// Path not found in the record → skip silently (no output), exit 0.
+	// Path not found in the record → no output, exit 1 (D6).
 	input := "data: {\"a\":1}\n\n"
 	stdout, _, code := runSSE(t, []string{"--field", "data.b"}, input)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
 	}
 	if stdout != "" {
 		t.Errorf("stdout = %q, want empty (path not found → skip silently)", stdout)
@@ -421,8 +422,8 @@ func TestFieldOnNonJSONData(t *testing.T) {
 	// --field on a record where data is not JSON → skip silently.
 	input := "data: not-json\n\n"
 	stdout, _, code := runSSE(t, []string{"--field", "data.text"}, input)
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0", code)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
 	}
 	if stdout != "" {
 		t.Errorf("stdout = %q, want empty (non-JSON data → skip silently)", stdout)
@@ -660,4 +661,112 @@ func FuzzSSE(f *testing.F) {
 			t.Errorf("exit code = %d, want 0, 1, or 2", code)
 		}
 	})
+}
+
+// --- array paths, --raw, no-match exit (D6) ---
+
+func TestFieldArrayIndexForms(t *testing.T) {
+	input := "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n"
+	for _, path := range []string{"data.choices[0].delta.content", "data.choices.0.delta.content"} {
+		stdout, _, code := runSSE(t, []string{"--field", path}, input)
+		if code != 0 || stdout != "Hi\n" {
+			t.Errorf("path %q: code=%d stdout=%q, want 0 and %q", path, code, stdout, "Hi\n")
+		}
+	}
+}
+
+func TestFieldArrayOutOfRange(t *testing.T) {
+	input := "data: {\"a\":[1]}\n\n"
+	for _, path := range []string{"data.a[5]", "data.a.x", "data.a[-1]"} {
+		_, stderr, code := runSSE(t, []string{"--field", path}, input)
+		if code != 1 || !strings.Contains(stderr, "matched no events") {
+			t.Errorf("path %q: code=%d stderr=%q, want 1 and no-match message", path, code, stderr)
+		}
+	}
+}
+
+func TestFieldNoMatchExit1(t *testing.T) {
+	_, stderr, code := runSSE(t, []string{"--field", "data.b"}, "data: {\"a\":1}\n\n")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, "sse: --field data.b matched no events") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestFieldNoMatchAfterDoneExit1(t *testing.T) {
+	_, _, code := runSSE(t, []string{"--field", "data.b"}, "data: {\"a\":1}\n\ndata: [DONE]\n\n")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+}
+
+func TestFieldNoEventsExit0(t *testing.T) {
+	for _, in := range []string{"", "data: [DONE]\n\n"} {
+		_, _, code := runSSE(t, []string{"--field", "data.b"}, in)
+		if code != 0 {
+			t.Errorf("input %q: exit code = %d, want 0 (no events seen)", in, code)
+		}
+	}
+}
+
+func TestFieldPartialMatchExit0(t *testing.T) {
+	input := "data: {\"a\":1}\n\ndata: {\"b\":2}\n\n"
+	stdout, _, code := runSSE(t, []string{"--field", "data.b"}, input)
+	if code != 0 || stdout != "2\n" {
+		t.Errorf("code=%d stdout=%q, want 0 and %q", code, stdout, "2\n")
+	}
+}
+
+func TestRawNoSeparator(t *testing.T) {
+	input := "data: {\"t\":\"# Title\"}\n\ndata: {\"t\":\"\\n\\n\"}\n\ndata: {\"t\":\"para\"}\n\n"
+	stdout, _, code := runSSE(t, []string{"--field", "data.t", "--raw"}, input)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if stdout != "# Title\n\npara" {
+		t.Errorf("stdout = %q, want %q", stdout, "# Title\n\npara")
+	}
+}
+
+func TestRawStreamsLive(t *testing.T) {
+	pr, pw := io.Pipe()
+	stdinReader = pr
+	defer func() { stdinReader = nil }()
+
+	origStdout, origArgs := os.Stdout, os.Args
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = outW
+	os.Args = []string{"sse", "--field", "data.t", "--raw"}
+	defer func() { os.Stdout, os.Args = origStdout, origArgs }()
+
+	done := make(chan int, 1)
+	go func() { done <- Run() }()
+
+	if _, err := io.WriteString(pw, "data: {\"t\":\"first\"}\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 5)
+		_, _ = io.ReadFull(outR, buf)
+		got <- string(buf)
+	}()
+	select {
+	case s := <-got:
+		if s != "first" {
+			t.Errorf("first value = %q, want %q", s, "first")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("first value not written before the stream ended")
+	}
+	_ = pw.Close()
+	if code := <-done; code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	_ = outW.Close()
 }

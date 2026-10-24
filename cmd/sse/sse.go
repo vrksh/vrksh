@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -31,7 +33,8 @@ func init() {
 		Short: "SSE stream parser — text/event-stream to JSONL",
 		Flags: []shared.FlagMeta{
 			{Name: "event", Shorthand: "e", Usage: "only emit events of this type; skip all others"},
-			{Name: "field", Shorthand: "F", Usage: "extract dot-path field from the record and print as plain text"},
+			{Name: "field", Shorthand: "F", Usage: "extract dot-path field (a.b[0].c or a.b.0.c) and print as plain text"},
+			{Name: "raw", Usage: "with --field, write values exactly with no newline after each"},
 		},
 	})
 }
@@ -41,8 +44,10 @@ func Run() int {
 	fs := pflag.NewFlagSet("sse", pflag.ContinueOnError)
 	var eventFilter string
 	var fieldPath string
+	var rawFlag bool
 	fs.StringVarP(&eventFilter, "event", "e", "", "only emit events of this type; skip all others")
-	fs.StringVarP(&fieldPath, "field", "F", "", "extract dot-path field from the record and print as plain text")
+	fs.StringVarP(&fieldPath, "field", "F", "", "extract dot-path field (a.b[0].c or a.b.0.c) and print as plain text")
+	fs.BoolVar(&rawFlag, "raw", false, "with --field, write values exactly with no newline after each")
 
 	// Suppress pflag's automatic printing so all output goes through shared helpers.
 	fs.SetOutput(io.Discard)
@@ -73,6 +78,16 @@ func Run() int {
 	var eventName string
 	var dataLines []string
 	hasData := false
+	st := &fieldStats{}
+
+	// finish maps the end of the stream to an exit code: --field that matched
+	// nothing, on a stream that did carry events, is a runtime error.
+	finish := func() int {
+		if fieldPath != "" && st.seen > 0 && st.matched == 0 {
+			return shared.Errorf("sse: --field %s matched no events", fieldPath)
+		}
+		return 0
+	}
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -80,10 +95,10 @@ func Run() int {
 		if line == "" {
 			// Blank line: dispatch the current block if it has data.
 			if hasData {
-				code := dispatch(w, eventFilter, fieldPath, eventName, dataLines)
+				code := dispatch(w, eventFilter, fieldPath, rawFlag, st, eventName, dataLines)
 				if code == -1 {
 					// [DONE] sentinel — stop cleanly.
-					return 0
+					return finish()
 				}
 				if code != 0 {
 					return code
@@ -121,15 +136,19 @@ func Run() int {
 	}
 
 	// EOF mid-block (no trailing blank line): pending block is dropped per SSE spec.
-	return 0
+	return finish()
 }
+
+// fieldStats counts events that passed the --event filter and how many of
+// them produced a --field value.
+type fieldStats struct{ seen, matched int }
 
 // dispatch processes a completed SSE block and writes output. Returns:
 //
 //	-1  — caller should stop and return 0 ([DONE] sentinel)
 //	 0  — success, continue
 //	 1  — runtime error
-func dispatch(w *bufio.Writer, eventFilter, fieldPath, eventName string, dataLines []string) int {
+func dispatch(w *bufio.Writer, eventFilter, fieldPath string, raw bool, st *fieldStats, eventName string, dataLines []string) int {
 	dataStr := strings.Join(dataLines, "\n")
 
 	// [DONE] is the Anthropic/OpenAI stream termination sentinel.
@@ -149,6 +168,8 @@ func dispatch(w *bufio.Writer, eventFilter, fieldPath, eventName string, dataLin
 		return 0
 	}
 
+	st.seen++
+
 	// Parse data as JSON (using UseNumber to preserve large integers and avoid
 	// float64 precision loss). Fall back to raw string on parse failure.
 	var dataVal interface{}
@@ -164,12 +185,19 @@ func dispatch(w *bufio.Writer, eventFilter, fieldPath, eventName string, dataLin
 			"event": name,
 			"data":  dataVal,
 		}
-		val, ok := navigatePath(root, strings.Split(fieldPath, "."))
+		val, ok := navigatePath(root, splitPath(fieldPath))
 		if !ok {
 			// Path not found or non-navigable type — skip silently.
 			return 0
 		}
-		if _, err := fmt.Fprintln(w, renderValue(val)); err != nil {
+		st.matched++
+		var err error
+		if raw {
+			_, err = fmt.Fprint(w, renderValue(val))
+		} else {
+			_, err = fmt.Fprintln(w, renderValue(val))
+		}
+		if err != nil {
 			return shared.Errorf("sse: writing output: %v", err)
 		}
 		if err := w.Flush(); err != nil {
@@ -202,18 +230,34 @@ func stripOneSpace(s string) string {
 	return s
 }
 
-// navigatePath walks a dot-split path through a nested map[string]interface{}.
+var indexRe = regexp.MustCompile(`\[(\d+)\]`)
+
+// splitPath turns "data.a[0].b" or "data.a.0.b" into ["data","a","0","b"].
+func splitPath(path string) []string {
+	return strings.Split(indexRe.ReplaceAllString(path, ".$1"), ".")
+}
+
+// navigatePath walks a path through nested maps and arrays. A part indexes an
+// array when it is a non-negative integer; otherwise it is an object key.
 // Returns the value and true on success, or nil and false if any step fails
-// (key missing, non-object encountered, or empty path).
+// (key missing, index out of range, scalar encountered, or empty path).
 func navigatePath(root map[string]interface{}, parts []string) (interface{}, bool) {
 	var current interface{} = root
 	for _, part := range parts {
-		m, ok := current.(map[string]interface{})
-		if !ok {
-			return nil, false
-		}
-		current, ok = m[part]
-		if !ok {
+		switch c := current.(type) {
+		case map[string]interface{}:
+			v, ok := c[part]
+			if !ok {
+				return nil, false
+			}
+			current = v
+		case []interface{}:
+			i, err := strconv.Atoi(part)
+			if err != nil || i < 0 || i >= len(c) {
+				return nil, false
+			}
+			current = c[i]
+		default:
 			return nil, false
 		}
 	}
@@ -242,7 +286,8 @@ func Flags() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("sse", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringP("event", "e", "", "only emit events of this type; skip all others")
-	fs.StringP("field", "F", "", "extract dot-path field from the record and print as plain text")
+	fs.StringP("field", "F", "", "extract dot-path field (a.b[0].c or a.b.0.c) and print as plain text")
+	fs.Bool("raw", false, "with --field, write values exactly with no newline after each")
 	return fs
 }
 
