@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,20 +10,16 @@ import (
 	"testing"
 )
 
-// buildBinary builds the vrk binary into a temp dir and returns its path.
-// The binary is built once per test binary run; the temp dir is cleaned up
-// when the test process exits.
+// testBin is the vrk binary built once in TestMain and shared by every test.
+var testBin string
+
+// buildBinary returns the binary TestMain built.
 func buildBinary(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "vrk")
-	cmd := exec.Command("go", "build", "-o", bin, ".")
-	cmd.Dir = "."
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go build failed: %v\n%s", err, out)
+	if testBin == "" {
+		t.Fatal("vrk binary was not built")
 	}
-	return bin
+	return testBin
 }
 
 func TestManifest(t *testing.T) {
@@ -100,7 +97,23 @@ func TestStdinRequiredCoversAllTools(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	os.Exit(m.Run())
+	os.Exit(runTests(m))
+}
+
+func runTests(m *testing.M) int {
+	dir, err := os.MkdirTemp("", "vrk-test")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	bin := filepath.Join(dir, "vrk")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "go build failed: %v\n%s", err, out)
+		return 1
+	}
+	testBin = bin
+	return m.Run()
 }
 
 func runVrk(t *testing.T, bin string, args ...string) (stdout, stderr string, code int) {
