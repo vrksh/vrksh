@@ -9,8 +9,7 @@ steps:
   - |-
     curl -sN $API \
       | vrk sse --event content_block_delta \
-          --field data.delta.text \
-      | tr -d '\n'
+          --field data.delta.text --raw
 tags:
   - "sse"
 ---
@@ -31,21 +30,30 @@ You can't pipe this directly into another tool. You need to parse the SSE framin
 
 ## How the pipeline works
 
-`vrk sse` reads the SSE stream from stdin, parses the `event:` and `data:` lines, and emits one JSONL record per event. `--event content_block_delta` filters to only that event type. `--field data.delta.text` extracts the nested text value and prints it directly.
+`vrk sse` reads the SSE stream from stdin and parses the `event:` and `data:` lines. `--event content_block_delta` keeps only that event type. `--field data.delta.text` pulls the nested text value out of each event.
 
-The `tr -d '\n'` at the end joins the text fragments into a continuous string. Without it, each token would be on its own line.
+By default `sse` prints one value per line. `--raw` writes each value exactly as it is, with no separator added, so the fragments join into the model's real text, newlines and all. No `tr` needed.
+
+## OpenAI streams
+
+OpenAI puts the text in an array, so use an index in the path:
+
+```bash
+curl -sN $API | vrk sse --field 'data.choices[0].delta.content' --raw
+```
+
+If events arrive but the field matches none of them, `vrk sse` exits 1 and says so on stderr. A wrong path no longer looks like an empty answer.
 
 ## Variations
 
-Capture the full stream as JSONL for debugging:
+Capture the events as JSONL for debugging:
 
 ```bash
-curl -sN $API | vrk sse --json > stream.jsonl
+curl -sN $API | vrk sse > stream.jsonl
 ```
 
 Filter for a specific event and count occurrences:
 
 ```bash
-curl -sN $API | vrk sse --event content_block_delta --json | wc -l
+curl -sN $API | vrk sse --event content_block_delta | wc -l
 ```
-

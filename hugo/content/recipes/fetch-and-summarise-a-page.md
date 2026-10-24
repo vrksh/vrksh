@@ -28,10 +28,10 @@ Each step can fail independently. URL unreachable? `vrk grab` exits 1. Page too 
 
 ## Variations
 
-Fetch and extract just the links:
+Fetch and extract just the links. `links --bare` prints a URL every time it appears, so `sort -u` removes the duplicates:
 
 ```bash
-vrk grab https://example.com | vrk links --bare
+vrk grab https://example.com | vrk links --bare | sort -u
 ```
 
 Fetch, strip markdown formatting, then count tokens:

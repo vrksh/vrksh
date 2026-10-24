@@ -8,7 +8,8 @@ slug: "retry-flaky-api-call"
 steps:
   - |-
     vrk coax --times 3 --backoff exp:1s --on 1 \
-      -- vrk prompt --system "Summarise this" < doc.txt
+      -- sh -c 'vrk prompt --system "Return JSON with a summary key" < doc.txt \
+        | vrk validate --schema "{\"summary\":\"string\"}" --strict'
 tags:
   - "coax"
   - "prompt"
@@ -22,7 +23,9 @@ The usual fix is a retry decorator in Python (tenacity, backoff). But that only 
 
 ## How the pipeline works
 
-`vrk coax` runs the command after `--`. If it exits with code 1 (matching `--on 1`), coax waits and retries. The backoff is exponential starting at 1 second: first retry after 1s, second after 2s, third after 4s.
+`vrk coax` runs the command after `--`. It runs the command directly, not through a shell, so pipes and redirects need `sh -c '...'`, as above.
+
+Here the retried unit is the prompt plus the check. `vrk validate --strict` exits 1 when the response is not valid JSON with a string `summary` key. Without `--strict`, validate only warns and exits 0, and coax would never see a failure. If the command exits with code 1 (matching `--on 1`), coax waits and retries. The backoff is exponential starting at 1 second: first retry after 1s, second after 2s, third after 4s.
 
 If all retries fail, `vrk coax` exits with the last command's exit code. The pipeline stops cleanly.
 
@@ -39,6 +42,6 @@ vrk coax --times 3 --backoff exp:2s --on 1 -- \
   sh -c 'cat doc.txt \
     | vrk tok --check 8000 \
     | vrk prompt --system "Summarise" \
-    | vrk validate --schema out.json'
+    | vrk validate --schema out.json --strict'
 ```
 

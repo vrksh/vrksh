@@ -25,10 +25,10 @@ No JSON parsing. No base64 decoding. No splitting on dots. One command extracts 
 
 ## Variations
 
-Check if the token is expired before using it:
+Check if the token is expired before using it. `--expired` prints the payload when the token is still valid, so the check sends that to `/dev/null` and only uses the exit code:
 
 ```bash
-if ! vrk jwt --expired "$TOKEN"; then
+if ! vrk jwt --expired "$TOKEN" >/dev/null; then
   echo "Token expired" >&2
   exit 1
 fi

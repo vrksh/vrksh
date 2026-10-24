@@ -9,7 +9,7 @@ steps:
   - |-
     cat doc.txt \
       | vrk prompt --system "Extract entities as JSON" \
-      | vrk validate --schema entities.json \
+      | vrk validate --schema '{"entities":"array"}' --strict \
       | vrk kv set entities
 tags:
   - "prompt"
@@ -25,33 +25,19 @@ Schema validation at the source catches this immediately. The pipeline stops at 
 
 ## How the pipeline works
 
-`vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against `entities.json` (a JSON Schema file). If it matches, the data passes through. If not, `vrk validate` exits 1 and `vrk kv set` never runs.
+`vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against a flat schema. It checks top-level keys and their types, nothing deeper. If the response matches, the data passes through. If not, `--strict` makes `vrk validate` exit 1 and `vrk kv set` never runs. Without `--strict`, a bad line is only warned about on stderr.
 
 No bad data reaches storage. No downstream code processes an invalid response.
 
-## The schema file
+## The schema
 
-A simple JSON Schema that defines what you expect:
+The schema is a flat object: each key is a required top-level field, each value is a type (`string`, `number`, `boolean`, `array` or `object`). Extra keys in the response are ignored. Inline JSON works, or point `--schema` at a file. The retry example below keeps it in `entities.json` to avoid shell quoting.
 
 ```json
-{
-  "type": "object",
-  "required": ["entities"],
-  "properties": {
-    "entities": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name", "type"],
-        "properties": {
-          "name": { "type": "string" },
-          "type": { "type": "string" }
-        }
-      }
-    }
-  }
-}
+{"entities":"array"}
 ```
+
+vrk validate does not read JSON Schema (`type`, `properties`, `$schema`). If you pass one it exits 2 and tells you so. It does not look inside arrays, so item shapes are not checked.
 
 ## Combining with retries
 
@@ -61,7 +47,7 @@ LLMs sometimes produce valid JSON that doesn't match your schema. Combine with `
 vrk coax --times 3 --backoff exp:1s --on 1 -- \
   sh -c 'cat doc.txt \
       | vrk prompt --system "Extract entities as JSON" \
-      | vrk validate --schema entities.json'
+      | vrk validate --schema entities.json --strict'
 ```
 
 If validation fails (exit 1), `vrk coax` retries the entire sub-pipeline up to 3 times with exponential backoff.
