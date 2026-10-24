@@ -399,6 +399,7 @@ Intentionally absent: `--config`, `--verbose`, `--output <file>`, `--interactive
   ```
   This applies to `jwt`, `epoch`, `kv`, `prompt --json`, and any tool that unmarshals JSONL records.
 - **SSE streams in smoke tests**: never store SSE streams in bash variables (`$()` strips trailing `\n\n` which breaks SSE dispatch). Use bash functions that `printf` the stream and pipe directly into the binary.
+- **Streaming LLM text out of `sse`**: use `sse --field data.choices[0].delta.content --raw`. Without `--raw` each value gets a newline and the reassembled text is wrong.
 - **`coax` runs argv, not a shell string.** The args after `--` go straight to `exec.Command`. Pipes, redirects and builtins need `-- sh -c '...'`. `--until` is the only shell string coax takes. Don't add a shell join back.
 - **Long lines.** `ScanLines()` accepts lines up to 64 MiB (`shared.MaxLineBytes`) and errors past that. Don't build your own `bufio.Scanner` with the 64 KiB default.
 - **Version string.** `main.version` defaults to `dev` and is set at release time with `-ldflags "-X main.version=..."`. Never hard-code a version in a tool; `vrk --version` and the MCP server both read this var.
