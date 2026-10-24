@@ -100,6 +100,7 @@ done
 
 Unreachable URL:
 
+<!-- doccheck: skip (needs DNS) -->
 ```bash
 $ vrk grab https://nonexistent.example.com/page
 error: grab: fetch failed: Get "https://nonexistent.example.com/page": lookup nonexistent.example.com: no such host

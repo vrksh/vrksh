@@ -50,7 +50,7 @@ cross:
 	@GOOS=darwin GOARCH=arm64 go build -o /dev/null . && echo "ok  darwin/arm64"
 
 # Full pre-commit check. Run before every commit. Takes ~30 seconds.
-check: build test lint cross smoke validate-schemas
+check: build test lint cross smoke validate-schemas doccheck recipecheck
 	@echo ""
 	@echo "all checks passed"
 
