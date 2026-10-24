@@ -1,13 +1,16 @@
 ---
 title: "Cache LLM response"
 meta_title: "Cache LLM response - vrk pipeline recipe"
-description: "Avoids duplicate API calls for identical prompts - the content hash keys the cache so reruns are free. Hash the input, look it up in kv, call the model only on a miss."
+description: "Avoids duplicate API calls for identical prompts - the content hash keys the cache so reruns are free. Hash the input, look it up in kv, call the ..."
 why: "Avoids duplicate API calls for identical prompts - the content hash keys the cache so reruns are free."
 body: "Hash the input, look it up in kv, call the model only on a miss."
 slug: "cache-llm-response"
 steps:
   - "K=\"llm:$(vrk digest --bare < doc.txt)\""
-  - "vrk kv get \"$K\" 2>/dev/null || { R=$(vrk prompt < doc.txt) && printf '%s\\n' \"$R\" | vrk kv set \"$K\" && echo \"$R\"; }"
+  - |-
+    vrk kv get "$K" 2>/dev/null || {
+      R=$(vrk prompt < doc.txt) && printf '%s\n' "$R" | vrk kv set "$K" && echo "$R"
+    }
 tags:
   - "prompt"
   - "kv"
@@ -44,3 +47,4 @@ K="llm:$(cat doc.txt system.txt | vrk digest --bare)"
 ## Why this works
 
 `vrk kv` is a SQLite-backed key-value store on disk. No Redis, no external service. The cache survives restarts and reruns. A lookup takes microseconds, an API call takes seconds. Add `--ttl 24h` to `kv set` if you want entries to expire.
+

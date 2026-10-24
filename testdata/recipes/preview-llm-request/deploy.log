@@ -1,0 +1,4 @@
+2026-10-24 10:01:02 INFO starting deploy of web-7
+2026-10-24 10:01:09 INFO api_key=sk-proj-FAKE0000example0000notreal0000000 loaded
+2026-10-24 10:01:15 ERROR migration 0042 failed: relation "users" already exists
+2026-10-24 10:01:15 INFO rolling back

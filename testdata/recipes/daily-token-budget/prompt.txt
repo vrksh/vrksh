@@ -1,0 +1,1 @@
+Summarise the main risks in this migration plan: drop the legacy table, backfill in batches, then switch reads over.
