@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 const testHTML = `<!DOCTYPE html>
@@ -870,5 +872,24 @@ func TestMaxSizeDefault(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Hello World") {
 		t.Errorf("stdout = %q, want it to contain 'Hello World'", stdout)
+	}
+}
+
+// --- inline elements keep the spaces around them ---
+
+func TestRenderMarkdownInlineSpacing(t *testing.T) {
+	cases := map[string]string{
+		`<p>A <b>bold</b> word and <a href="https://x.y">link</a> here.</p>`: "A **bold** word and [link](https://x.y) here.",
+		`<p>an <em>emphasised</em>, <code>x</code>!</p>`:                     "an *emphasised*, `x`!",
+		`<p>one</p>  <p>two</p>`:                                             "one\n\ntwo",
+	}
+	for in, want := range cases {
+		doc, err := html.Parse(strings.NewReader(in))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := renderMarkdown(doc, nil); got != want {
+			t.Errorf("renderMarkdown(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
