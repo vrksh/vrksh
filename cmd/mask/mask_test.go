@@ -490,3 +490,74 @@ func TestPropertyRedactedNeverLeaksOriginal(t *testing.T) {
 		t.Errorf("stdout contains original secret %q: %q", secret, stdout)
 	}
 }
+
+// --- Corpus: recall on secrets, no false positives on decoys ---
+
+func readCorpus(t *testing.T, name string) []string {
+	t.Helper()
+	b, err := os.ReadFile("../../testdata/mask/" + name)
+	if err != nil {
+		t.Fatalf("read %s: %v", name, err)
+	}
+	return strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
+}
+
+func TestCorpusSecretsRedacted(t *testing.T) {
+	for _, line := range readCorpus(t, "secrets.txt") {
+		out, _ := redactLine(line, nil, 4.0)
+		if !strings.Contains(out, "[REDACTED]") {
+			t.Errorf("secret not redacted: %q", line)
+		}
+	}
+}
+
+func TestCorpusDecoysUnchanged(t *testing.T) {
+	for _, line := range readCorpus(t, "decoys.txt") {
+		if out, _ := redactLine(line, nil, 4.0); out != line {
+			t.Errorf("decoy changed:\n  in:  %q\n  out: %q", line, out)
+		}
+	}
+}
+
+func TestSecretValuesDoNotLeak(t *testing.T) {
+	cases := []struct{ in, secret string }{
+		{"https://api.example.com/v1/data?api_key=Zx8Pq2Lm7Nv4Rt9Ks1Wc6Yb3Hd0Gf5Ja8U", "Zx8Pq2Lm7Nv4Rt9Ks1Wc6Yb3Hd0Gf5Ja8U"},
+		{"https://user:Zx8Pq2Lm7Nv4Rt9Ks1@git.example.com/repo.git", "Zx8Pq2Lm7Nv4Rt9Ks1"},
+		{"DATABASE_URL=postgres://admin:Tr0ub4dor&3xK9@db.internal:5432/prod", "Tr0ub4dor&3xK9"},
+		{"see https://x.example.com/cb?token=Zx8Pq2Lm7Nv4Rt9Ks1Wc6Yb3Hd0Gf5Ja8U&page=2", "Zx8Pq2Lm7Nv4Rt9Ks1Wc6Yb3Hd0Gf5Ja8U"},
+		{"see https://x.example.com/cb?SIG=Zx8Pq2Lm7Nv4Rt9Ks1Wc6Yb3Hd0Gf5Ja8U", "Zx8Pq2Lm7Nv4Rt9Ks1Wc6Yb3Hd0Gf5Ja8U"},
+		{"(sk-proj-FAKE0000example0000notreal0000000)", "FAKE0000example0000notreal0000000"},
+		{"/tmp/sk-proj-FAKE0000example0000notreal0000000", "FAKE0000example0000notreal0000000"},
+		{"registry.example.com/img:ghp_FAKE0000example0000notreal0000000000", "xK9mN2pL4qR7sT0uW3yZ5bD8fH1jM6nP9rV2"},
+	}
+	for _, c := range cases {
+		out, _ := redactLine(c.in, nil, 4.0)
+		if strings.Contains(out, c.secret) {
+			t.Errorf("secret leaked: in %q, out %q", c.in, out)
+		}
+	}
+}
+
+func TestKeepsPunctuation(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"key sk-proj-FAKE0000example0000notreal0000000, please", "key [REDACTED], please"},
+		{"(sk-proj-FAKE0000example0000notreal0000000).", "([REDACTED])."},
+		{`"sk-proj-FAKE0000example0000notreal0000000";`, `"[REDACTED]";`},
+		{"see https://api.example.com/v1?sig=Zx8Pq2Lm7Nv4Rt9Ks1Wc6Yb3Hd0Gf5Ja8U&page=2.", "see https://api.example.com/v1?sig=[REDACTED]&page=2."},
+		{"hook https://hooks.example.com/services/T0001/B0001/Zx8Pq2Lm7Nv4Rt9Ks1Wc6Yb3", "hook https://hooks.example.com/services/T0001/B0001/[REDACTED]"},
+		{"at /tmp/Zx8Pq2Lm7Nv4Rt9Ks1Wc6Yb3/out.log;", "at /tmp/[REDACTED]/out.log;"},
+	}
+	for _, c := range cases {
+		if out, _ := redactLine(c.in, nil, 4.0); out != c.want {
+			t.Errorf("redactLine(%q) = %q, want %q", c.in, out, c.want)
+		}
+	}
+}
+
+func TestDeployLogKeepsContext(t *testing.T) {
+	in := "GET https://payments.internal/v1/charges failed\npulling registry.example.com/api-gateway:2.31.4\n"
+	stdout, _, code := runMask(t, nil, in)
+	if code != 0 || stdout != in {
+		t.Errorf("exit %d, stdout %q, want %q", code, stdout, in)
+	}
+}
