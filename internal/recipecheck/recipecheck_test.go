@@ -126,6 +126,12 @@ func TestRecipes(t *testing.T) {
 				}
 				return 0, string(out)
 			}
+			// optional setup.sh prepares state the fixtures can't hold (git repos, servers)
+			if _, err := os.Stat(filepath.Join(dir, "setup.sh")); err == nil {
+				if rc, out := run("bash", "setup.sh"); rc != 0 {
+					t.Fatalf("setup.sh exit %d\n%s", rc, out)
+				}
+			}
 			// steps: stdout+stderr go to $OUT; stdin is closed.
 			stepsRC := 0
 			cmd := exec.Command("bash", "-c", `bash "$STEPS" >"$OUT" 2>&1 </dev/null`)
