@@ -47,9 +47,9 @@ exit_codes:
   - code: 0
     meaning: Success
   - code: 1
-    meaning: Runtime error (I/O failure)
+    meaning: Invalid input value (unsupported format, invalid date, missing sign on a relative offset) or I/O failure
   - code: 2
-    meaning: Unsupported format, ambiguous timezone, --tz without --iso/--json
+    meaning: No input, unknown flag, ambiguous timezone, --tz without --iso/--json
 og_image:
   headline: "Convert timestamps. Unix, ISO, relative."
   code: "vrk epoch 1740009600 --iso"
