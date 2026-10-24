@@ -10,7 +10,7 @@ steps:
     cat user-input.txt \
       | vrk mask \
       | vrk tok --check 6000 \
-      | vrk prompt --system "Summarise" \
+      | vrk prompt --system 'Summarise as JSON: {"summary":"string"}' \
       | vrk validate --schema summary.json --strict
 tags:
   - "mask"
@@ -48,7 +48,7 @@ For maximum safety, mask the output too - LLMs can hallucinate or reconstruct cr
 cat user-input.txt \
   | vrk mask \
   | vrk tok --check 6000 \
-  | vrk prompt --system "Summarise" \
+  | vrk prompt --system 'Summarise as JSON: {"summary":"string"}' \
   | vrk mask \
   | vrk validate --schema summary.json --strict
 ```

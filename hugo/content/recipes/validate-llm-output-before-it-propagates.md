@@ -8,7 +8,7 @@ slug: "validate-llm-output-before-it-propagates"
 steps:
   - |-
     cat doc.txt \
-      | vrk prompt --system "Extract entities as JSON" \
+      | vrk prompt --system 'Extract entities as JSON: {"entities":"array"}' \
       | vrk validate --schema '{"entities":"array"}' --strict \
       | vrk kv set entities
 tags:
@@ -46,7 +46,7 @@ LLMs sometimes produce valid JSON that doesn't match your schema. Combine with `
 ```bash
 vrk coax --times 3 --backoff exp:1s --on 1 -- \
   sh -c 'cat doc.txt \
-      | vrk prompt --system "Extract entities as JSON" \
+      | vrk prompt --system "Extract entities as JSON: {\"entities\":\"array\"}" \
       | vrk validate --schema entities.json --strict'
 ```
 

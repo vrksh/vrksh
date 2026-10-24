@@ -8,7 +8,7 @@ slug: "retry-flaky-api-call"
 steps:
   - |-
     vrk coax --times 3 --backoff exp:1s --on 1 \
-      -- sh -c 'vrk prompt --system "Return JSON with a summary key" < doc.txt \
+      -- sh -c 'vrk prompt --system "Return JSON like {\"summary\":\"string\"}" < doc.txt \
         | vrk validate --schema "{\"summary\":\"string\"}" --strict'
 tags:
   - "coax"

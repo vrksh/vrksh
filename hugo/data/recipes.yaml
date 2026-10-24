@@ -123,7 +123,7 @@
   steps:
     - |-
       vrk coax --times 3 --backoff exp:1s --on 1 \
-        -- sh -c 'vrk prompt --system "Return JSON with a summary key" < doc.txt \
+        -- sh -c 'vrk prompt --system "Return JSON like {\"summary\":\"string\"}" < doc.txt \
           | vrk validate --schema "{\"summary\":\"string\"}" --strict'
   tags:
     - coax
@@ -336,7 +336,7 @@
   steps:
     - |-
       cat doc.txt \
-        | vrk prompt --system "Extract entities as JSON" \
+        | vrk prompt --system 'Extract entities as JSON: {"entities":"array"}' \
         | vrk validate --schema '{"entities":"array"}' --strict \
         | vrk kv set entities
   tags:
@@ -373,7 +373,7 @@
     ```bash
     vrk coax --times 3 --backoff exp:1s --on 1 -- \
       sh -c 'cat doc.txt \
-          | vrk prompt --system "Extract entities as JSON" \
+          | vrk prompt --system "Extract entities as JSON: {\"entities\":\"array\"}" \
           | vrk validate --schema entities.json --strict'
     ```
 
@@ -386,7 +386,7 @@
       cat user-input.txt \
         | vrk mask \
         | vrk tok --check 6000 \
-        | vrk prompt --system "Summarise" \
+        | vrk prompt --system 'Summarise as JSON: {"summary":"string"}' \
         | vrk validate --schema summary.json --strict
   tags:
     - mask
@@ -423,7 +423,7 @@
     cat user-input.txt \
       | vrk mask \
       | vrk tok --check 6000 \
-      | vrk prompt --system "Summarise" \
+      | vrk prompt --system 'Summarise as JSON: {"summary":"string"}' \
       | vrk mask \
       | vrk validate --schema summary.json --strict
     ```
