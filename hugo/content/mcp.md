@@ -1,10 +1,12 @@
 ---
-title: "MCP"
-description: "MCP server for vrksh - let your agent discover 26 tools through Model Context Protocol."
+title: "MCP discovery"
+description: "MCP discovery for vrksh - let your agent see all 26 tools and their flags through Model Context Protocol. The agent runs them in its shell."
 noindex: false
 ---
 
 ## What this gives your agent
+
+The vrk MCP server is for discovery. It lists the tools and their flags, and it does not run them.
 
 Your agent framework supports [Model Context Protocol](https://modelcontextprotocol.io/) and you want it to know about vrk tools. You add three lines of config and every tool - tok, prompt, grab, mask, validate, all 26 of them - appears in your agent's tool list with full input schemas. The agent sees what's available, knows what flags each tool accepts, and can decide when to use them.
 
@@ -43,6 +45,14 @@ The same config structure works anywhere MCP is supported. The server communicat
 ```bash
 echo "hello" | vrk tok --json
 ```
+
+For example, the agent reads the `tok` definition from `tools/list`, then runs this in its shell tool, not through MCP:
+
+```bash
+cat prompt.txt | vrk tok --check 4000 --json
+```
+
+If you want the agent to always do this, say it in the system prompt: "vrk tools are listed by the vrksh MCP server. Run them as shell commands, for example `echo text | vrk tok`."
 
 This keeps things auditable. There's no hidden execution layer between the agent and the tool. The agent runs a process, reads stdout, checks the exit code. Same as any other command.
 
