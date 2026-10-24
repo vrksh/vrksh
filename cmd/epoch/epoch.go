@@ -19,6 +19,7 @@ type epochJSON struct {
 	Input string `json:"input,omitempty"`
 	Unix  int64  `json:"unix"`
 	ISO   string `json:"iso"`
+	Unit  string `json:"unit,omitempty"`
 	Ref   string `json:"ref,omitempty"`
 	TZ    string `json:"tz,omitempty"`
 }
@@ -182,9 +183,9 @@ func Run() int {
 	}
 
 	// Parse input into a Unix timestamp.
-	ts, parseErr := parseInput(input, nowRef)
+	ts, isMillis, parseErr := parseInput(input, nowRef)
 	if parseErr != nil {
-		return usageErrorf("epoch: %v", parseErr)
+		return errorf("epoch: %v", parseErr)
 	}
 
 	// Resolve timezone (meaningful with --iso and --json).
@@ -199,6 +200,9 @@ func Run() int {
 			Input: input,
 			Unix:  ts,
 			ISO:   time.Unix(ts, 0).In(loc).Format(time.RFC3339),
+		}
+		if isMillis {
+			out.Unit = "ms"
 		}
 		if atStr != "" {
 			out.Ref = atStr
@@ -242,36 +246,47 @@ func isNegativeRelative(s string) bool {
 // parseInput converts a string representation into a Unix timestamp.
 // Supported forms (checked in order):
 //
-//  1. All digits with optional leading minus, no unit suffix → Unix integer passthrough
+//  1. All digits with optional leading minus, no unit suffix → Unix integer passthrough.
+//     An absolute value in [1e11, 1e14) is milliseconds (Date.now() style) and is
+//     divided by 1000; the second return value reports that.
 //  2. +/-<digits><unit> → relative time from nowRef
 //  3. <digits><unit> without sign → usage error (sign required)
 //  4. YYYY-MM-DD or RFC3339 datetime → ISO parse
 //  5. Everything else → unsupported format
-func parseInput(s string, nowRef int64) (int64, error) {
+func parseInput(s string, nowRef int64) (int64, bool, error) {
 	if s == "" {
-		return 0, fmt.Errorf("no input: provide as argument or via stdin")
+		return 0, false, fmt.Errorf("no input: provide as argument or via stdin")
 	}
 
 	// Case 1: bare integer (Unix passthrough). Accept optional leading '-'.
 	// Must have no letter suffix — disambiguates from relative forms like -3d.
 	if isBareInteger(s) {
-		return strconv.ParseInt(s, 10, 64)
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return 0, false, err
+		}
+		if abs := max(n, -n); abs >= 1e11 && abs < 1e14 {
+			return n / 1000, true, nil
+		}
+		return n, false, nil
 	}
 
 	// Case 2: relative time — must start with + or -.
 	if len(s) >= 2 && (s[0] == '+' || s[0] == '-') {
 		if hasUnitSuffix(s[1:]) {
-			return parseRelative(s, nowRef)
+			ts, err := parseRelative(s, nowRef)
+			return ts, false, err
 		}
 	}
 
 	// Case 3: looks like relative but missing sign prefix (e.g. "3d", "10h").
 	if hasUnitSuffix(s) {
-		return 0, fmt.Errorf("sign required: use +%s or -%s", s, s)
+		return 0, false, fmt.Errorf("sign required: use +%s or -%s", s, s)
 	}
 
 	// Cases 4+5: try ISO parsing; otherwise unsupported.
-	return parseISO(s)
+	ts, err := parseISO(s)
+	return ts, false, err
 }
 
 // isBareInteger reports whether s is a bare integer: optional leading '-'
@@ -372,6 +387,11 @@ func parseISO(s string) (int64, error) {
 	// Date-only: "2025-02-20" → midnight UTC.
 	if t, err := time.Parse("2006-01-02", s); err == nil {
 		return t.UTC().Unix(), nil
+	}
+
+	// Date-shaped but not a real calendar date (2026-02-29, month 13).
+	if len(s) >= 10 && s[4] == '-' && s[7] == '-' && isBareInteger(s[:4]+s[5:7]+s[8:10]) {
+		return 0, fmt.Errorf("invalid date %q", s)
 	}
 
 	return 0, fmt.Errorf("unsupported format %q: natural language not supported; accepted forms: unix integer, +3d/-3d, YYYY-MM-DD, YYYY-MM-DDTHH:MM:SSZ", s)

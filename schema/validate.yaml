@@ -23,7 +23,7 @@ flags:
   - flag: --schema
     short: "-s"
     type: string
-    description: JSON schema inline or path to .json file (required)
+    description: "Flat key-to-type map, inline or path to .json file (required). Types: string, number, boolean, array, object. JSON Schema is not supported"
   - flag: --strict
     short: ""
     type: bool
@@ -46,7 +46,7 @@ exit_codes:
   - code: 1
     meaning: Record failed in --strict mode, or scanner error
   - code: 2
-    meaning: --schema missing, schema JSON invalid, unknown flag
+    meaning: --schema missing, schema JSON invalid, schema is JSON Schema, unknown flag
 meta_title: "vrk validate - JSON Schema Validator for Pipelines"
 meta_lead: "vrk validate is a JSON schema validator for shell pipelines - exit 1 on mismatch stops the pipeline before bad data propagates."
 og_image:

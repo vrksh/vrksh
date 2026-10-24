@@ -52,14 +52,15 @@ vrk digest --file original.txt --file copy.txt --compare
 
 ```bash
 # Compute HMAC
-$ echo 'message' | vrk digest --hmac --key 'secret'
-sha256:...
+$ SIG=$(echo 'message' | vrk digest --hmac --key 'secret')
 
 # Verify HMAC (constant-time comparison)
-$ echo 'message' | vrk digest --hmac --key 'secret' --verify 'expected-hash'
+$ echo 'message' | vrk digest --hmac --key 'secret' --verify "$SIG"
 $ echo $?
 0
 ```
+
+`--verify` accepts the `sha256:<hex>` form that digest prints, or bare hex. If the prefix names a different algorithm than `--algo`, it exits 2.
 
 The `--verify` flag uses constant-time comparison to prevent timing attacks.
 
@@ -110,8 +111,8 @@ $ echo $?
 Verify mismatch:
 
 ```bash
-$ echo 'hello' | vrk digest --hmac --key 'secret' --verify 'wrong'
-error: digest: HMAC mismatch
+$ echo 'hello' | vrk digest --hmac --key 'secret' --verify 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+error: digest: hmac mismatch
 $ echo $?
 1
 ```

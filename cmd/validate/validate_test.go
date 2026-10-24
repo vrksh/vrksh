@@ -764,3 +764,31 @@ func TestQuietDoesNotAffectStdout(t *testing.T) {
 		t.Errorf("stdout = %q, want the valid record passed through", stdout)
 	}
 }
+
+func TestWarningHasLineNumber(t *testing.T) {
+	// Blank lines still count toward the input line number.
+	in := "{\"a\":\"x\"}\n\n{\"b\":1}\n"
+	_, stderr, code := runValidate(t, in, []string{"--schema", `{"a":"string"}`})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(stderr, "validate: line 3: a is missing") {
+		t.Errorf("stderr = %q, want line 3 warning", stderr)
+	}
+}
+
+func TestJSONSchemaDetected(t *testing.T) {
+	for _, sch := range []string{
+		`{"type":"object","properties":{"a":{"type":"string"}}}`,
+		`{"type":"object","required":["a"]}`,
+		`{"$schema":"http://json-schema.org/draft-07/schema#"}`,
+	} {
+		_, stderr, code := runValidate(t, "{}\n", []string{"--schema", sch})
+		if code != 2 {
+			t.Errorf("%s: exit code = %d, want 2", sch, code)
+		}
+		if !strings.Contains(stderr, "looks like JSON Schema") {
+			t.Errorf("%s: stderr = %q", sch, stderr)
+		}
+	}
+}

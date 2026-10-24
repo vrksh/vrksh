@@ -271,7 +271,7 @@ assert_stdout_contains     "mixed: alice on stdout"        "alice"         "$std
 assert_stdout_contains     "mixed: carol on stdout"        "carol"         "$stdout"
 assert_stdout_not_contains "mixed: bob not on stdout"      '"bob"'         "$stdout"
 assert_line_count          "mixed: two valid lines"        2               "$stdout"
-assert_stdout_contains     "mixed: warning on stderr"      "validation"    "$stderr"
+assert_stdout_contains     "mixed: warning on stderr"      "line 2:"    "$stderr"
 
 # ------------------------------------------------------------
 # 11. Pipeline composition: validate | tok
@@ -330,6 +330,15 @@ stdout=$(echo '{"x":"hi"}' | "$VRK" validate --schema '{"x":"string"}' --quiet 2
 exit_code=0; echo '{"x":"hi"}' | "$VRK" validate --schema '{"x":"string"}' --quiet > /dev/null 2>&1 || exit_code=$?
 assert_exit            "--quiet success: exit 0"           0       "$exit_code"
 assert_stdout_contains "--quiet success: stdout has line"  '"x"'   "$stdout"
+
+# Warning names the input line
+stderr=$(printf '{"x":"a"}\n{"x":1}\n' | "$VRK" validate --schema '{"x":"string"}' 2>&1 >/dev/null)
+case "$stderr" in *"line 2:"*) ok "warning has line 2:" ;; *) fail "warning has line 2:" "$stderr" ;; esac
+
+# JSON Schema input is rejected with exit 2
+exit_code=0; stderr=$(echo '{}' | "$VRK" validate --schema '{"type":"object","properties":{"a":{"type":"string"}}}' 2>&1 >/dev/null) || exit_code=$?
+assert_exit "JSON Schema: exit 2" 2 "$exit_code"
+case "$stderr" in *"JSON Schema"*) ok "JSON Schema: stderr names it" ;; *) fail "JSON Schema: stderr names it" "$stderr" ;; esac
 
 # ------------------------------------------------------------
 # Summary

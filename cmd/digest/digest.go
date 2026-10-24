@@ -36,7 +36,7 @@ func init() {
 			{Name: "compare", Usage: "compare hashes of all --file inputs; exits 0 either way"},
 			{Name: "hmac", Usage: "compute HMAC instead of plain hash"},
 			{Name: "key", Shorthand: "k", Usage: "HMAC secret key (required with --hmac)"},
-			{Name: "verify", Usage: "known HMAC hex; exits 0 if match, 1 if mismatch"},
+			{Name: "verify", Usage: "known HMAC (algo:hex or hex); exits 0 if match, 1 if mismatch"},
 			{Name: "json", Shorthand: "j", Usage: "emit JSON object"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
@@ -66,7 +66,7 @@ func Run() int {
 	fs.BoolVar(&compareFlag, "compare", false, "compare hashes of all --file inputs; exits 0 either way")
 	fs.BoolVar(&hmacFlag, "hmac", false, "compute HMAC instead of plain hash")
 	fs.StringVarP(&keyFlag, "key", "k", "", "HMAC secret key (required with --hmac)")
-	fs.StringVar(&verifyFlag, "verify", "", "known HMAC hex; exits 0 if match, 1 if mismatch")
+	fs.StringVar(&verifyFlag, "verify", "", "known HMAC (algo:hex or hex); exits 0 if match, 1 if mismatch")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit JSON object")
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
@@ -120,6 +120,18 @@ func Run() int {
 			})
 		}
 		return shared.UsageErrorf("digest: --verify requires --hmac")
+	}
+
+	// --verify accepts "<algo>:<hex>" (the default output form) or bare hex.
+	if i := strings.IndexByte(verifyFlag, ':'); i >= 0 {
+		if got := verifyFlag[:i]; got != algo {
+			msg := fmt.Sprintf("digest: --verify is %s but --algo is %s", got, algo)
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{"error": msg, "code": 2})
+			}
+			return shared.UsageErrorf("%s", msg)
+		}
+		verifyFlag = verifyFlag[i+1:]
 	}
 
 	// --compare requires at least two --file values.
@@ -362,7 +374,7 @@ func Flags() *pflag.FlagSet {
 	fs.Bool("compare", false, "compare hashes of all --file inputs; exits 0 either way")
 	fs.Bool("hmac", false, "compute HMAC instead of plain hash")
 	fs.StringP("key", "k", "", "HMAC secret key (required with --hmac)")
-	fs.String("verify", "", "known HMAC hex; exits 0 if match, 1 if mismatch")
+	fs.String("verify", "", "known HMAC (algo:hex or hex); exits 0 if match, 1 if mismatch")
 	fs.BoolP("json", "j", false, "emit JSON object")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs

@@ -393,8 +393,28 @@ func TestInvalidToken(t *testing.T) {
 	if stdout != "" {
 		t.Errorf("stdout must be empty on error, got %q", stdout)
 	}
-	if !strings.Contains(stderr, "invalid JWT") {
-		t.Errorf("stderr = %q, want it to contain %q", stderr, "invalid JWT")
+	if !strings.Contains(stderr, "jwt: invalid token") {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, "jwt: invalid token")
+	}
+}
+
+func TestInvalidTokenNoRawBytes(t *testing.T) {
+	// "not" decodes to bytes that are not JSON; the error must not echo them.
+	_, stderr, code := runJWT(t, []string{"not.a.jwt"}, "")
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.HasPrefix(stderr, "error: jwt: invalid token: ") {
+		t.Errorf("stderr = %q, want jwt: invalid token prefix", stderr)
+	}
+	for _, r := range stderr {
+		if r > 126 {
+			t.Errorf("stderr has non-ASCII byte %q: %q", r, stderr)
+			break
+		}
+	}
+	if strings.Contains(stderr, "invalid character") {
+		t.Errorf("stderr leaks decoder detail: %q", stderr)
 	}
 }
 
