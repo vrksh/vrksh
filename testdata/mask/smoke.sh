@@ -305,6 +305,31 @@ assert_stdout_contains "--quiet success: stdout has [REDACTED]"    "[REDACTED]" 
 assert_stderr_empty    "--quiet success: no stderr"                              "$stderr"
 
 # ------------------------------------------------------------
+# Corpus: every secret redacted, every decoy unchanged
+# ------------------------------------------------------------
+echo ""
+echo "--- corpus ---"
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+miss=0
+while IFS= read -r l; do
+  printf '%s\n' "$l" | "$VRK" mask | grep -qF '[REDACTED]' || { miss=$((miss + 1)); echo "        not redacted: $l"; }
+done < "$DIR/secrets.txt"
+assert_exit "corpus: all secrets redacted" 0 "$miss"
+
+decoys_out=$("$VRK" mask < "$DIR/decoys.txt")
+assert_stdout_equals "corpus: decoys unchanged" "$(cat "$DIR/decoys.txt")" "$decoys_out"
+
+stdout=$(echo 'key sk-proj-FAKE0000example0000notreal0000000, please' | "$VRK" mask)
+assert_stdout_equals "punctuation kept after redaction" "key [REDACTED], please" "$stdout"
+
+# Deploy log: URLs and image refs are context, the key is not.
+stdout=$(printf 'GET https://payments.internal/v1/charges failed\npulling registry.example.com/api-gateway:2.31.4\nretry with key=sk-proj-FAKE0000example0000notreal0000000\n' | "$VRK" mask)
+assert_stdout_contains     "deploy log: URL kept"       "https://payments.internal/v1/charges" "$stdout"
+assert_stdout_contains     "deploy log: image ref kept" "registry.example.com/api-gateway:2.31.4" "$stdout"
+assert_stdout_not_contains "deploy log: key gone"       "FAKE0000example0000notreal0000000" "$stdout"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

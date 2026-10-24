@@ -38,6 +38,19 @@ var builtins = []builtinPattern{
 	{"secret", regexp.MustCompile(`(?i)(secret\s*[=:]\s*)\S+`)},
 	{"api_key", regexp.MustCompile(`(?i)(api[_-]?key\s*[=:]\s*)\S+`)},
 	{"token", regexp.MustCompile(`(?i)(token\s*[=:]\s*)\S+`)},
+	// Known credential prefixes. The empty group keeps the ${1} replacement
+	// uniform. These run on the whole line, so a key hidden inside a URL, path,
+	// or image ref (which entropy scanning skips) is still caught.
+	{"aws_key", regexp.MustCompile(`()\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`)},
+	{"openai_anthropic", regexp.MustCompile(`()\bsk-[A-Za-z0-9_-]{20,}`)},
+	{"stripe", regexp.MustCompile(`()\b[rs]k_(?:live|test)_[A-Za-z0-9]{16,}`)},
+	{"github", regexp.MustCompile(`()\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{22,})`)},
+	{"slack", regexp.MustCompile(`()\bxox[abposr]-[A-Za-z0-9-]{10,}`)},
+	{"google", regexp.MustCompile(`()\bAIza[0-9A-Za-z_-]{35}`)},
+	{"huggingface", regexp.MustCompile(`()\bhf_[A-Za-z0-9]{30,}`)},
+	{"npm", regexp.MustCompile(`()\bnpm_[A-Za-z0-9]{36}`)},
+	{"sendgrid", regexp.MustCompile(`()\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}`)},
+	{"jwt", regexp.MustCompile(`()\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)},
 }
 
 // compiledCustom holds a user-supplied pattern compiled to a regexp.
@@ -207,22 +220,32 @@ func redactLine(line string, customs []compiledCustom, threshold float64) (strin
 		}
 	}
 
-	// Entropy scan: check each whitespace-delimited token that is ≥ 8 chars and
+	// Entropy scan: check each whitespace-delimited token that is >= 8 chars and
 	// does not already contain [REDACTED] (which would indicate it was already
 	// handled by a pattern, or is itself a placeholder from a prior substitution).
+	hit := func() {
+		if !seen["entropy"] {
+			fired = append(fired, "entropy")
+			seen["entropy"] = true
+		}
+	}
 	out = tokenRe.ReplaceAllStringFunc(out, func(tok string) string {
 		if strings.Contains(tok, "[REDACTED]") {
 			return tok
 		}
-		if len(tok) < 8 {
+		lead, core, trail := splitPunct(tok)
+		if len(core) < 8 {
 			return tok
 		}
-		if shannonEntropy(tok) >= threshold {
-			if !seen["entropy"] {
-				fired = append(fired, "entropy")
-				seen["entropy"] = true
+		if masked, ok := maskStructured(core, threshold); ok {
+			if masked != core {
+				hit()
 			}
-			return "[REDACTED]"
+			return lead + masked + trail
+		}
+		if shannonEntropy(core) >= threshold {
+			hit()
+			return lead + "[REDACTED]" + trail
 		}
 		return tok
 	})
@@ -310,4 +333,117 @@ func printUsage(fs *pflag.FlagSet) int {
 	fs.SetOutput(os.Stdout)
 	fs.PrintDefaults()
 	return 0
+}
+
+// splitPunct peels one leading opener and any trailing closers or sentence
+// punctuation off tok, so "(KEY)," redacts to "([REDACTED]),".
+func splitPunct(tok string) (lead, core, trail string) {
+	core = tok
+	if core != "" && strings.ContainsRune(`('"[{`, rune(core[0])) {
+		lead, core = core[:1], core[1:]
+	}
+	trimmed := strings.TrimRight(core, `,.;:)]}'"`)
+	return lead, trimmed, core[len(trimmed):]
+}
+
+var (
+	uuidRe     = regexp.MustCompile(`^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$`)
+	digestRe   = regexp.MustCompile(`^(?:sha1|sha256|sha512|md5):[0-9a-fA-F]+$`)
+	pathRe     = regexp.MustCompile(`^(?:/|\./|\.\./|~/)[A-Za-z0-9._/@-]*$`)
+	imageRe    = regexp.MustCompile(`^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?::[0-9]+)?/[A-Za-z0-9._/-]+(?::[A-Za-z0-9._-]+)?$`)
+	urlRe      = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*://`)
+	keyValueRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]*=(.+)$`)
+)
+
+// secretParams are URL query/fragment parameter names whose values are
+// entropy-checked. A name matches on its full lowercased form or on its last
+// _ - . separated part, so client_secret and X-Amz-Signature both count.
+var secretParams = map[string]bool{
+	"key": true, "api_key": true, "apikey": true, "token": true, "access_token": true,
+	"secret": true, "code": true, "sig": true, "signature": true, "password": true, "pass": true, "auth": true,
+}
+
+func isSecretParam(name string) bool {
+	n := strings.ToLower(name)
+	if secretParams[n] {
+		return true
+	}
+	if i := strings.LastIndexAny(n, "_-."); i >= 0 {
+		return secretParams[n[i+1:]]
+	}
+	return false
+}
+
+// maskStructured handles tokens that look like URLs, paths, UUIDs, digests, or
+// image refs. Those are context an LLM needs, so the whole token is never
+// entropy-checked. Instead each path segment (and each secret-named query
+// value) is checked on its own, which still catches a webhook secret in a
+// path while leaving /v1/charges alone. ok is false when tok is none of these.
+// A name=value token is judged by its value, so request_id=<uuid> is kept.
+func maskStructured(tok string, threshold float64) (string, bool) {
+	if m := keyValueRe.FindStringSubmatch(tok); m != nil {
+		v, ok := maskStructured(m[1], threshold)
+		return tok[:len(tok)-len(m[1])] + v, ok
+	}
+	switch {
+	case uuidRe.MatchString(tok), digestRe.MatchString(tok):
+		return tok, true
+	case pathRe.MatchString(tok), imageRe.MatchString(tok):
+		return maskSegments(tok, threshold), true
+	case urlRe.MatchString(tok):
+		return maskURL(tok, threshold)
+	}
+	return tok, false
+}
+
+func maskSegments(p string, threshold float64) string {
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		if len(s) >= 8 && shannonEntropy(s) >= threshold {
+			segs[i] = "[REDACTED]"
+		}
+	}
+	return strings.Join(segs, "/")
+}
+
+// maskURL splits scheme://host/path?query#fragment by hand (net/url would
+// re-encode the parts). Any userinfo (user@ or user:pass@) means the URL
+// carries a credential, so it falls back to whole-token entropy.
+func maskURL(u string, threshold float64) (string, bool) {
+	i := strings.Index(u, "://") + 3
+	end := len(u)
+	if j := strings.IndexAny(u[i:], "/?#"); j >= 0 {
+		end = i + j
+	}
+	if strings.Contains(u[i:end], "@") {
+		return u, false
+	}
+	rest := u[end:]
+	path, tail := rest, ""
+	if j := strings.IndexAny(rest, "?#"); j >= 0 {
+		path, tail = rest[:j], rest[j:]
+	}
+	var b strings.Builder
+	b.WriteString(u[:end])
+	b.WriteString(maskSegments(path, threshold))
+	// tail is a run of ?query and #fragment parts; both use k=v&k=v.
+	for tail != "" {
+		b.WriteByte(tail[0])
+		tail = tail[1:]
+		part := tail
+		if j := strings.IndexAny(tail, "?#"); j >= 0 {
+			part, tail = tail[:j], tail[j:]
+		} else {
+			tail = ""
+		}
+		params := strings.Split(part, "&")
+		for k, p := range params {
+			name, val, found := strings.Cut(p, "=")
+			if found && isSecretParam(name) && len(val) >= 8 && shannonEntropy(val) >= threshold {
+				params[k] = name + "=[REDACTED]"
+			}
+		}
+		b.WriteString(strings.Join(params, "&"))
+	}
+	return b.String(), true
 }
