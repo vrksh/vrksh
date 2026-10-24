@@ -45,7 +45,7 @@ Appends a metadata trailer showing what was redacted:
 
 ```bash
 $ printf 'Bearer ghp_FAKE0000example0000notreal0000000000\nNormal line\n' | vrk mask --json
-Bearer [REDACTED] [REDACTED]
+Bearer [REDACTED]
 Normal line
 {"_vrk":"mask","lines":2,"redacted":1,"patterns_matched":["bearer"]}
 ```
@@ -117,6 +117,7 @@ cat large-debug.log | vrk mask | vrk chunk --size 4000 | \
 
 Interactive terminal with no input:
 
+<!-- doccheck: skip (only fails on an interactive terminal, doccheck stdin is not a TTY) -->
 ```bash
 $ vrk mask
 usage error: mask: no input: pipe text to stdin
