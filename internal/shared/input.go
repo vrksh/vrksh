@@ -2,6 +2,7 @@ package shared
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -72,16 +73,34 @@ func ReadInputLines(args []string) ([]string, error) {
 	return lines, nil
 }
 
-// ScanLines returns a bufio.Scanner over r with a 1MB max line buffer. Use for
-// JSONL record-processing tools that read input line-by-line. Never use
-// io.ReadAll for record-processing tools - it will OOM on large inputs.
+// MaxLineBytes is the longest line ScanLines accepts (64 MiB).
+const MaxLineBytes = 64 << 20
+
+// maxLineBytes is a var so tests can shrink the limit.
+var maxLineBytes = MaxLineBytes
+
+var errLineTooLong = errors.New("line exceeds 64 MiB limit")
+
+// ScanLines returns a bufio.Scanner over r that accepts lines up to
+// MaxLineBytes. Use for record-processing tools that read line-by-line. Never
+// use io.ReadAll for those - it will OOM on large inputs.
 //
-// The default bufio.Scanner buffer is 64KB, which is too small for JSONL records
-// containing LLM responses or large base64 blobs. 1MB matches the buffer size
-// used by the MCP server and prompt field mode.
+// The initial buffer is 64 KiB and only grows when a line needs it. A longer
+// line makes Scan return false with an error reading "line exceeds 64 MiB limit".
 func ScanLines(r io.Reader) *bufio.Scanner {
 	s := bufio.NewScanner(r)
-	s.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	// +2 leaves room for a trailing \r\n on a line of exactly the limit.
+	s.Buffer(make([]byte, 0, 64*1024), maxLineBytes+2)
+	s.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+		adv, tok, err := bufio.ScanLines(data, atEOF)
+		if tok == nil && err == nil && len(data) > maxLineBytes+1 {
+			return 0, nil, errLineTooLong
+		}
+		if len(tok) > maxLineBytes {
+			return 0, nil, errLineTooLong
+		}
+		return adv, tok, err
+	})
 	return s
 }
 
