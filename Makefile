@@ -3,8 +3,11 @@ export CGO_ENABLED=0
 .PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate generate-og validate-schemas validate-manifest test-site doccheck recipecheck acceptance
 
 # Build the binary. CGO_ENABLED=0 is mandatory - static binary promise depends on it.
+# git describe gives 0.2.0 on a tag, 0.1.1-78-gabc1234 between tags.
+VERSION ?= $(or $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//'),dev)
+
 build:
-	go build -o vrk .
+	go build -ldflags "-X main.version=$(VERSION)" -o vrk .
 
 # Run all tests. Use before every commit.
 test:
