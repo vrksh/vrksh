@@ -3,6 +3,7 @@ module github.com/vrksh/vrksh
 go 1.25.0
 
 require (
+	github.com/dlclark/regexp2 v1.10.0
 	github.com/fogleman/gg v1.3.0
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/google/uuid v1.6.0
@@ -19,7 +20,6 @@ require (
 )
 
 require (
-	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/itchyny/timefmt-go v0.1.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
