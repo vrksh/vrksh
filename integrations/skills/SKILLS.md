@@ -643,7 +643,7 @@ the command on every attempt.
 
 ```bash
 # Retry up to 3 times (default), exit with last command's exit code
-vrk coax -- exit 1
+vrk coax -- sh -c 'exit 1'
 
 # Retry exactly 2 times (3 total attempts)
 vrk coax --times 2 -- my-flaky-command
@@ -695,8 +695,8 @@ echo "last exit: $?"
 ### Gotchas
 
 - **`--` is required** to separate coax flags from the retried command: `vrk coax --times 2 -- cmd args`. Without a command, coax exits 2 with "missing command".
-- **Commands run via `sh -c`.** The args after `--` are joined with spaces and passed to `sh -c "..."`. Shell builtins (`exit`, `test`, `[`) work, and you can use pipes and redirects inline. Pass complex commands as a single quoted argument to avoid double-wrapping: `vrk coax -- "cmd1 && cmd2"`.
-- **Exit code passthrough.** On exhaustion, coax exits with the last command's actual exit code — not a normalised 1. `vrk coax --times 2 -- exit 42` exits 42. Callers that test `$? -ne 0` still work; callers checking a specific code should account for this.
+- **Commands run directly, not through a shell.** The args after `--` are the program and its arguments, exactly as given. Pipes, redirects and builtins (`exit`, `cd`) need a shell: `vrk coax -- sh -c 'curl -sf url | jq .data'`. A single quoted string like `vrk coax -- 'cmd1 && cmd2'` fails with "command not found". Only `--until` is a shell string.
+- **Exit code passthrough.** On exhaustion, coax exits with the last command's actual exit code — not a normalised 1. `vrk coax --times 2 -- sh -c 'exit 42'` exits 42. Callers that test `$? -ne 0` still work; callers checking a specific code should account for this.
 - **`--on` with no match exits immediately.** If `--on 42` is set and the command exits 1, coax stops after the first attempt. The filter is strict — it does not fall back to "retry on any non-zero".
 - **`--until` takes precedence over `--on`.** If both are set, only the condition is checked to decide whether to retry.
 - **`--until` condition output is discarded.** The stdout and stderr of the `--until` command are suppressed — it is a side-effect check, not data.
