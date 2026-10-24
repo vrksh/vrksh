@@ -823,9 +823,15 @@ grab_err_stdout=$(set +e; $VRK grab not-a-url 2>/dev/null; true)
 # ---------------------------------------------------------------------------
 echo "--- Section 18: links pipelines ---"
 
+# example.com no longer has links, so feed links a fixed page in grab's
+# markdown output shape instead of fetching over the network.
+grab_page() {
+  printf '# Example Domain\n\nSee [the docs](https://www.iana.org/domains/example) and [RFC 2606](https://www.rfc-editor.org/rfc/rfc2606).\n'
+}
+
 # ── grab | links: produces at least one link record ───────────────────────
-links_out=$($VRK grab https://example.com 2>/dev/null | $VRK links 2>/dev/null)
-links_count=$(echo "$links_out" | grep -c '^{' 2>/dev/null || echo 0)
+links_out=$(grab_page | $VRK links 2>/dev/null)
+links_count=$(echo "$links_out" | grep -c '^{' 2>/dev/null || true)
 [ "$links_count" -ge 1 ] \
   && { echo "PASS: grab | links: produced $links_count link(s)"; PASS=$((PASS+1)); } \
   || { echo "FAIL: grab | links: expected >= 1 link, got $links_count"; FAIL=$((FAIL+1)); }
@@ -849,10 +855,10 @@ print(bad)
 
 # ── grab | links --bare and --json from same fetch (cache avoids two fetches) ─
 grab_cache=$(mktemp)
-$VRK grab https://example.com 2>/dev/null > "$grab_cache"
+grab_page > "$grab_cache"
 
 bare_out=$($VRK links --bare < "$grab_cache" 2>/dev/null)
-bare_count=$(echo "$bare_out" | grep -c 'http' 2>/dev/null || echo 0)
+bare_count=$(echo "$bare_out" | grep -c 'http' 2>/dev/null || true)
 [ "$bare_count" -ge 1 ] \
   && { echo "PASS: grab | links --bare: produced $bare_count URL(s)"; PASS=$((PASS+1)); } \
   || { echo "FAIL: grab | links --bare: expected >= 1 URL"; FAIL=$((FAIL+1)); }
