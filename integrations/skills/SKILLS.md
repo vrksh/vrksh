@@ -1123,8 +1123,7 @@ Input: positional argument or stdin.
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--json` | `-j` | JSON envelope: `{"text":"…","input_bytes":N,"output_bytes":M}` |
-
-No `--quiet`. `plain` produces no informational stderr in normal operation.
+| `--quiet` | `-q` | Suppress stderr output |
 
 ### --json output shape
 
@@ -1221,6 +1220,7 @@ Input: positional argument or stdin. Empty input exits 0 with no output.
 |------|-------|-------------|
 | `--bare` | `-b` | Output URLs only, one per line |
 | `--json` | `-j` | Append `{"_vrk":"links","count":N}` after all records |
+| `--quiet` | `-q` | Suppress stderr output |
 
 ### --json output shapes
 
@@ -1598,6 +1598,7 @@ limits when calling LLMs or external services in a loop. Input: stdin only.
 | `--burst N` | — | Emit first N lines without delay, then rate-limit the rest |
 | `--tokens-field <field>` | — | Rate by token count of a JSONL field value (dot-path) |
 | `--json` | `-j` | Append `{"_vrk":"throttle","rate":"...","lines":N,"elapsed_ms":N}` after all lines |
+| `--quiet` | `-q` | Suppress stderr output |
 
 ### Exit codes
 
@@ -1644,7 +1645,7 @@ cat prompts.jsonl | vrk throttle --rate 10/m | vrk prompt --system "process" --m
 
 Converts a JSON array to JSONL (one record per line) or collects JSONL lines into a JSON array.
 The bridge between JSON-land tools and line-oriented pipeline tools.
-Input: stdin only.
+Input: positional argument or stdin.
 
 ### Flags
 
@@ -1845,10 +1846,11 @@ echo "$ENCODED" | vrk base decode --from base64url
 ### Gotchas
 
 - **`base` strips one trailing newline from stdin before encoding.** `echo 'hello' | vrk base encode --to hex` encodes `hello` (5 bytes), not `hello\n` (6 bytes). Use `printf 'hello\n'` if you need to encode the newline itself. This differs intentionally from `vrk digest`, which does not strip — `base` is an encoding tool where callers expect string semantics.
-- **Multi-line wrapped base64 is not supported.** Input like `base64 -w76` output (line-wrapped) will fail decoding. Strip internal newlines first: `tr -d '\n' | vrk base decode --from base64`.
-- **base64url uses no padding and URL-safe alphabet.** The output uses `-` and `_` instead of `+` and `/`, with no trailing `=`. This is the correct format for JWT headers and URL query parameters.
-- **hex output is lowercase.** `echo 'hello' | vrk base encode --to hex` produces `68656c6c6f`, not `68656C6C6F`. Decoders are case-sensitive — use the output of `vrk base encode --to hex` as the input to `vrk base decode --from hex`.
+- **Line-wrapped base64 is fine.** Output from `base64 -w76` decodes as is; newlines inside the input are ignored.
+- **base64url uses no padding and URL-safe alphabet.** The output uses `-` and `_` instead of `+` and `/`, with no trailing `=`. This is the correct format for JWT headers and URL query parameters. Padding is strict both ways: `--from base64` needs the `=`, `--from base64url` rejects it.
+- **hex output is lowercase.** `echo 'hello' | vrk base encode --to hex` produces `68656c6c6f`, not `68656C6C6F`. `--from hex` accepts upper or lower case.
 - **base32 output is uppercase.** Decoding is case-sensitive; lowercase base32 input exits 1.
+- **Decoded output has no trailing newline.** `echo aGVsbG8= | vrk base decode --from base64` prints `hello` with nothing after it.
 - **`--quiet` does not suppress the no-subcommand error.** That error fires before flag parsing; `--quiet` takes effect only inside a subcommand.
 
 ---
@@ -1901,7 +1903,7 @@ echo 'hello_world' | vrk recase --to camel --json
 # {"input":"hello_world","output":"helloWorld","from":"snake","to":"camel"}
 
 # Rename variable names in a list
-cat vars.txt | vrk recase --to camelCase
+cat vars.txt | vrk recase --to camel
 ```
 
 ### Gotchas
@@ -1909,7 +1911,7 @@ cat vars.txt | vrk recase --to camelCase
 - **`lower` and `upper` are prose-level transforms, not identifier formats.** Output is space-separated: `hello_world → lower` produces `"hello world"`, not `"hello_world"`. Use `snake` or `kebab` for identifier output.
 - **Single words with no separators and no case changes are treated as one word.** `helloworld → camel` stays `helloworld` — there are no word boundaries to detect. Use a separator (`hello_world`) to get `helloWorld`.
 - **Digits are not word boundaries.** `oauth2` is one token; `base64url` is one token. `oauth2 → pascal` = `Oauth2`.
-- **Two consecutive acronyms with no separator cannot be split.** `getHTTPSURL → snake` produces `get_httpsurl`, not `get_https_url`. The algorithm needs a lowercase letter to know where one acronym ends and the next begins. Workaround: use an explicit separator in the input: `getHTTPS_URL` or `get-https-url`.
+- **Two consecutive acronyms with no separator cannot be split.** `getHTTPSURL → snake` produces `get_httpsurl`, not `get_https_url`. The algorithm needs a lowercase letter to know where one acronym ends and the next begins. Workaround: put `-` or `_` between every word, e.g. `get-https-url`. A mixed form like `getHTTPS_URL` still fuses into `gethttps_url`.
 - **Empty lines are preserved.** A blank line in produces a blank line out. This maintains line counts in batch pipelines.
 - **Auto-detection priority:** separators (`_`, `-`, ` `) take precedence over case. `hello_world` is always detected as `snake`, even if it could theoretically be read another way.
 
@@ -2183,7 +2185,7 @@ echo "$ENCODED_VALUE" | vrk pct --decode | vrk validate --schema '{"type":"strin
 - **Double-encode is correct behaviour.** `echo 'hello%20world' | vrk pct --encode` produces `hello%2520world` — the `%` is encoded as `%25`. This is RFC 3986 conformant. If you want to avoid double-encoding, decode first.
 - **`+` is a literal character in non-form decode.** `echo 'hello+world' | vrk pct --decode` produces `hello+world` unchanged. To treat `+` as a space, use `--form`.
 - **`%2B` decodes to `+` in both modes.** `echo 'hello%2Bworld' | vrk pct --decode` → `hello+world`. The percent-encoded form is always authoritative.
-- **In `--form` mode, `~` is encoded as `%7E`.** This is browser-compatible behaviour (`url.QueryEscape`). Strictly, `~` is an RFC 3986 unreserved character and does not need encoding, but browsers encode it in form submissions. Fighting this creates more confusion than it solves.
+- **`~` is never encoded.** It is an RFC 3986 unreserved character, so `a~b` stays `a~b` with or without `--form`.
 - **`--encode` and `--decode` are mutually exclusive.** Passing both exits 2.
 
 ---
@@ -2196,7 +2198,7 @@ Input: positional argument or stdin (single line or multiline batch).
 ### Record shape
 
 ```json
-{"scheme":"https","host":"api.example.com","port":0,"path":"/v1/users","query":{"page":"2","limit":"10"},"fragment":"","user":""}
+{"scheme":"https","host":"api.example.com","port":0,"path":"/v1/users","query":{"limit":"10","page":"2"},"fragment":"","user":""}
 ```
 
 All fields always present, including zero values. Port is 0 when not explicit in the URL string.
@@ -2271,15 +2273,16 @@ cat page.html | vrk links --bare | vrk urlinfo --field host
 - **`--field port` returns empty string when port is not explicit in the URL** — `https://example.com` has no port in the string even though HTTPS implies 443.
 - **`urlinfo` accepts any string `url.Parse` accepts** — Go's parser is lenient; a string with no scheme parses without error but produces an empty scheme field. Exit 1 only when both scheme and host are empty.
 - **`--field query.<key>` returns empty string if the key is absent** — not an error.
+- **Query keys are sorted and the first value wins.** `?a=1&a=2` gives `"query":{"a":"1"}`.
 - **`--field` suppresses the `--json` metadata trailer** — plain-text field output and a JSON trailer are incoherent; only field values are printed.
-- **Empty input exits 0 with no output.** `printf '' | vrk pct --encode` is valid; it produces nothing and exits 0.
+- **Empty input exits 0 with no output.** `printf '' | vrk urlinfo` is valid; it produces nothing and exits 0.
 
 ---
 
 ## sip — Stream Sampler
 
 Samples lines from stdin using one of four strategies. Memory-efficient for arbitrarily large streams — reservoir sampling uses O(N) memory where N is the sample size, not the stream size.
-Input: stdin only (no positional argument — sip is a pure stream filter).
+Input: stdin only (sip is a pure stream filter). A positional argument is ignored, not an error.
 
 ### Flags
 
@@ -2339,7 +2342,7 @@ seq 1000 | vrk sip --count 100 --json | tail -1
 
 - **`--sample` is probabilistic** — `--sample 10` on 1000 lines produces approximately 100, not exactly 100. Use `--count` for exact counts.
 - **`--seed 0` is valid** — seed value 0 is not a "not set" sentinel. Use it freely.
-- **Reservoir output preserves input order** — `--n 100` on a 1000-line stream emits 100 lines in the same relative order they appeared in the input, not in random order.
+- **Reservoir output preserves input order** — `--count 100` on a 1000-line stream emits 100 lines in the same relative order they appeared in the input, not in random order.
 - **Empty lines are skipped and not counted** — a line that is `""` is invisible to all strategies and does not appear in `total_seen`.
 - **`--first` and `--every` still read the full stream** — `total_seen` reflects all non-empty lines, even for `--first N` where only the first N are emitted.
 - **No positional argument** — `sip` is a pure filter; input must come from a pipe.
@@ -2407,7 +2410,7 @@ echo '{"status":"fail"}' | vrk assert '.status == "ok"' --message 'Bad API respo
 
 # JSON output mode
 echo '{"status":"ok"}' | vrk assert '.status == "ok"' --json
-# → {"passed":true,"condition":".status == \"ok\"","input":{"status":"ok"}}
+# → {"condition":".status == \"ok\"","input":{"status":"ok"},"passed":true}
 ```
 
 ### Compose patterns
