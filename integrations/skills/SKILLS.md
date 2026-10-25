@@ -2455,7 +2455,7 @@ echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set last_result
 
 ## pdf - PDF Text Extractor
 
-Extracts the text layer of a PDF. Plain text by default, pages separated by form feeds (`\f`).
+Extracts the text layer of a PDF as Markdown by default: bigger lines become `#` headings, bullet glyphs become `- ` items, paragraphs are split by blank lines. `--text` gives plain text instead. Pages are separated by form feeds (`\f`).
 With `--json`, one record per page: `{"page":N,"text":"..."}`, then `{"_vrk":"pdf","count":N}`.
 Input: a file path as the positional argument, or PDF bytes on stdin. Empty stdin exits 0 with no output.
 
@@ -2463,6 +2463,7 @@ Input: a file path as the positional argument, or PDF bytes on stdin. Empty stdi
 
 | Flag | Short | Description |
 |------|-------|-------------|
+| `--text` | `-t` | Plain text instead of Markdown, `\f` straight after each page |
 | `--pages` | `-p` | Pages: `N`, `N-M`, `N-` (to the end), or a comma list like `1,3,5-7`. 1-indexed |
 | `--json` | `-j` | One `{"page":N,"text":"..."}` per page, then `{"_vrk":"pdf","count":N}` |
 | `--quiet` | `-q` | Suppress stderr output |
@@ -2486,8 +2487,11 @@ Input: a file path as the positional argument, or PDF bytes on stdin. Empty stdi
 ### Examples
 
 ```bash
-# Extract all text from a file
+# Extract all text from a file, as Markdown
 vrk pdf report.pdf
+
+# Plain text, no headings or list markers
+vrk pdf --text report.pdf
 
 # Same thing from stdin
 cat report.pdf | vrk pdf
@@ -2504,7 +2508,7 @@ vrk pdf --pages 1,3,5-7 report.pdf
 vrk pdf --json report.pdf
 
 # Split plain output into pages
-vrk pdf report.pdf | awk 'BEGIN{RS="\f"} {print NR": "length($0)" chars"}'
+vrk pdf --text report.pdf | awk 'BEGIN{RS="\f"} {print NR": "length($0)" chars"}'
 ```
 
 ### Compose patterns
@@ -2533,12 +2537,15 @@ vrk pdf scan.pdf | vrk prompt --system 'Summarise.' || echo "no text layer, need
 - **The argument is a path, not content** - unlike most vrk tools, `vrk pdf 'text'` opens a file called `text`. Pipe bytes on stdin or pass a path.
 - **Text layer only, no OCR** - scanned PDFs (images of pages) exit 1 with `pdf: no extractable text found; document may be scanned (OCR required)`. If only the pages you picked with `--pages` are blank, the message is `pdf: no extractable text on the selected pages`.
 - **Spacing is rebuilt from glyph positions** - word gaps written as kerning (LaTeX, arXiv) become spaces, and baseline jumps become newlines. Text still comes out in content-stream order, so multi-column layouts may interleave. Math can lose its spacing.
-- **Text in form XObjects is skipped** - some generators wrap page content in a `Do` form. That text does not come out.
+- **Headings are guessed from font size** - a run of lines noticeably bigger than the body text, followed by smaller text, becomes a heading. The largest size is `#`, the next `##`, the rest `###`. Big equations can turn into headings; use `--text` if that matters.
+- **Separators differ by mode** - Markdown puts a blank line before each `\f` (`page\n\n\f\n`); `--text` puts `\f` right after the page. `--json` records hold Markdown unless you add `--text`.
+- **A broken page does not stop the rest** - the page warns on stderr (`pdf: page N: ...`) and keeps whatever text was read before the error; with `--json` its record has an `error` field. Only when no page has text does it exit 1.
+- **Text outside the page box is dropped** - content past the CropBox (or MediaBox) does not come out. Form XObjects are followed, up to 8 levels deep.
 - **PDF 2.0 is rejected** - the underlying reader handles PDF 1.0 to 1.7. A `%PDF-2.0` header exits 1 with `pdf: PDF 2.0 is not supported (PDF 1.0 to 1.7 only)`.
 - **Encrypted PDFs exit 1** - there is no password flag. A PDF encrypted with an empty user password (owner-only restrictions) still opens.
-- **Ligatures may come out as U+FFFD** - fonts without a ToUnicode map for glyphs like "fi" or "ft" produce `�` where the ligature was.
+- **Ligatures are expanded** - `ﬁ` comes out as `fi`. Fonts with no ToUnicode map for a glyph can still produce `�`.
 - **The `--json` trailer is a record too** - use `jq 'select(.page)'` to skip `{"_vrk":"pdf","count":N}`.
-- **An empty page is still a page** - plain output keeps its `\f`, so the form-feed count is always pages minus one.
+- **An empty page is still a page** - output keeps its `\f`, so the form-feed count is always pages minus one.
 - **`--pages` past the end exits 1** - `pdf: page 9 does not exist (PDF has 3 pages)`. A malformed range like `0`, `5-2` or `abc` exits 2.
 - **Whole file held in memory** - the reader needs random access, so a 500 MB PDF uses about 500 MB.
 
@@ -2632,13 +2639,15 @@ vrk sql --no-header 'SELECT body FROM tickets' tickets.csv | vrk tok
 
 ### Gotchas
 
-- **Table names come from file names** - characters outside `[A-Za-z0-9_]` become `_`, so `sales-2024.csv` is `sales_2024`. A name starting with a digit (`2024-sales.csv`, or `/dev/fd/63` from `<(...)`) needs quotes in SQL; use `name=path` instead. Two tables with the same name (case-insensitive) exit 2. A wrong table name lists the loaded tables.
-- **Header names are cleaned the same way** - `first name` is `first_name`, an empty header is `col_N` (1-indexed), and repeats get `_1`, `_2`. Quote reserved words: `SELECT "order" FROM t`.
+- **Table names come from file names** - anything other than letters, digits and `_` becomes `_` (accented letters stay), so `sales-2024.csv` is `sales_2024`. A name starting with a digit (`2024-sales.csv`, or `/dev/fd/63` from `<(...)`) needs quotes in SQL; use `name=path` instead. Two tables with the same name (case-insensitive) exit 2. A wrong table name lists the loaded tables.
+- **Header names are cleaned the same way** - `first name` is `first_name`, an empty header is `col_N` (1-indexed), and repeats get `_1`, `_2`. Quote reserved words: `SELECT "order" FROM t`. Quoting the original header (`"First Name"`) exits 1 and names the cleaned one; SQLite would otherwise read it as a string.
 - **`stdin` is found by word match** - any `stdin` in the query, even inside a string literal, makes `vrk sql` read stdin when it is piped. Pass `-` to be explicit. Empty stdin drops the table: if the query needs it, the result is no output and exit 0, even for `count(*)`. A file called `stdin.csv` clashes with it.
 - **`007` stays text** - leading zeros keep a column TEXT, so ZIP codes and IDs aren't mangled. Cast if you want numbers: `CAST(zip AS INTEGER)`.
 - **No such table without files is exit 2** - `vrk sql 'SELECT * FROM t'` means you forgot the file. With files given it is exit 1 with SQLite's message.
 - **ATTACH and VACUUM INTO are blocked** - they exit 1 with `too many attached databases - max 0`, so a query can't read or write other files.
 - **Multiple statements run, last result is printed** - `CREATE TABLE x AS SELECT ...; SELECT * FROM x` works. Statements like `DELETE` print nothing.
+- **Input must be UTF-8** - a latin1 file exits 1 with the line number; convert it with `iconv -f latin1 -t utf-8` first. Old Mac `\r`-only line endings work.
+- **Numbers may be padded** - ` 42` and `42 ` load as INTEGER 42. Floats print without exponents unless they are tiny or huge (`1e-09`, `1e+300`).
 - **Short rows are padded with NULL** - a row with more non-empty fields than the header exits 1 and names the line. Trailing empty fields (a trailing comma) are dropped. Stray quotes inside fields are kept as-is.
 - **N/A becomes NULL in number columns** - `SELECT *` prints it as an empty cell. In TEXT columns it stays `N/A`.
 - **Mixed decimal places lose trailing zeros** - a column with `1.50` and `2.125` is plain REAL, so `1.50` prints as `1.5`.

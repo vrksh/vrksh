@@ -304,10 +304,11 @@ Exit 2: Neither --encode nor --decode specified, both specified, interactive TTY
 echo 'hello world&foo=bar' | vrk pct --encode
 ```
 
-## pdf - PDF text extractor - plain text or JSONL per page, --pages
+## pdf - PDF text extractor - Markdown, --text, JSONL per page
 
 | Flag      | Short | Description                                                |
 |-----------|-------|------------------------------------------------------------|
+| `--text`  | -t    | Plain text instead of Markdown                             |
 | `--pages` | -p    | Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed) |
 | `--json`  | -j    | One record per page, then a metadata trailer               |
 | `--quiet` | -q    | Suppress stderr output                                     |

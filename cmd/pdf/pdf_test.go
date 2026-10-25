@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	lpdf "github.com/ledongthuc/pdf"
 )
@@ -69,13 +70,6 @@ func runPdf(t *testing.T, args []string, stdin []byte) (stdout, stderr string, c
 // array of the page tree when non-empty; trailer is extra text for the
 // trailer dictionary.
 func assemblePDF(kids, trailer string, contents []string) []byte {
-	var b bytes.Buffer
-	var offs []int
-	obj := func(body string) {
-		offs = append(offs, b.Len())
-		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", len(offs), body)
-	}
-
 	if kids == "" {
 		refs := make([]string, len(contents))
 		for i := range contents {
@@ -83,14 +77,33 @@ func assemblePDF(kids, trailer string, contents []string) []byte {
 		}
 		kids = strings.Join(refs, " ")
 	}
-
-	b.WriteString("%PDF-1.4\n")
-	obj("<< /Type /Catalog /Pages 2 0 R >>")
-	obj(fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids, len(contents)))
-	obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids, len(contents)),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+	}
 	for i, content := range contents {
-		obj(fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents %d 0 R >>", 5+2*i))
-		obj(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content))
+		objs = append(objs,
+			fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents %d 0 R >>", 5+2*i),
+			stream("", content))
+	}
+	return writePDF(objs, trailer)
+}
+
+// stream is a stream object with dict entries extra and the given data.
+func stream(extra, data string) string {
+	return fmt.Sprintf("<< %s/Length %d >>\nstream\n%s\nendstream", extra, len(data), data)
+}
+
+// writePDF numbers objs from 1 and writes them with an xref table. Object 1
+// must be the catalog.
+func writePDF(objs []string, trailer string) []byte {
+	var b bytes.Buffer
+	var offs []int
+	b.WriteString("%PDF-1.4\n")
+	for _, body := range objs {
+		offs = append(offs, b.Len())
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", len(offs), body)
 	}
 
 	xref := b.Len()
@@ -224,11 +237,16 @@ func TestStdinMultiPage(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, stderr)
 	}
-	if stdout != "p1\n\fp2\n\fp3\n" {
+	// Markdown pages keep blank lines around the form feed.
+	if stdout != "p1\n\n\f\np2\n\n\f\np3\n" {
 		t.Errorf("stdout = %q", stdout)
 	}
 	if stderr != "" {
 		t.Errorf("stderr = %q", stderr)
+	}
+	stdout, _, _ = runPdf(t, []string{"--text"}, buildPDF("p1", "p2", "p3"))
+	if stdout != "p1\n\fp2\n\fp3\n" {
+		t.Errorf("--text stdout = %q", stdout)
 	}
 }
 
@@ -252,6 +270,99 @@ func TestKerningBecomesSpaces(t *testing.T) {
 	}
 }
 
+func TestMarkdown(t *testing.T) {
+	page := "BT /F1 24 Tf 72 720 Td (Big Title) Tj ET " +
+		"BT /F1 12 Tf 72 680 Td (Body line one) Tj 0 -14 Td (# not a heading) Tj " +
+		"0 -14 Td (\\225 item) Tj 0 -14 Td (---) Tj ET"
+	data := assemblePDF("", "", []string{page})
+	stdout, stderr, code := runPdf(t, nil, data)
+	want := "# Big Title\n\nBody line one\n\\# not a heading\n- item\n\\---\n"
+	if code != 0 || stdout != want {
+		t.Errorf("exit %d stdout %q stderr %q, want %q", code, stdout, stderr, want)
+	}
+	stdout, _, _ = runPdf(t, []string{"--text"}, data)
+	want = "Big Title\nBody line one\n# not a heading\n\u2022 item\n---\n"
+	if stdout != want {
+		t.Errorf("--text stdout %q, want %q", stdout, want)
+	}
+}
+
+func TestFormXObject(t *testing.T) {
+	data := writePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /XObject << /X1 6 0 R >> >> /Contents 5 0 R >>",
+		stream("", "BT /F1 12 Tf 72 720 Td (Body) Tj ET q 1 0 0 1 72 720 cm /X1 Do Q"),
+		stream("/Type /XObject /Subtype /Form /BBox [0 0 200 50] /Matrix [1 0 0 1 0 -14] ", "BT /F1 12 Tf 0 0 Td (Inside form) Tj ET"),
+	}, "")
+	stdout, stderr, code := runPdf(t, []string{"--text"}, data)
+	if code != 0 || stdout != "Body\nInside form\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
+// A form that draws itself stops at the depth cap instead of recursing forever.
+func TestFormXObjectCycle(t *testing.T) {
+	data := writePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> /XObject << /X1 5 0 R >> >> /Contents 6 0 R >>",
+		stream("/Type /XObject /Subtype /Form /BBox [0 0 200 50] ", "/X1 Do"),
+		stream("", "BT /F1 12 Tf 72 720 Td (Body) Tj ET /X1 Do"),
+	}, "")
+	if stdout, stderr, code := runPdf(t, []string{"--text"}, data); code != 0 || stdout != "Body\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
+func TestClipsToPageBox(t *testing.T) {
+	page := "BT /F1 12 Tf 72 720 Td (Inside) Tj ET BT /F1 12 Tf 700 400 Td (Outside) Tj ET"
+	stdout, stderr, code := runPdf(t, []string{"--text"}, assemblePDF("", "", []string{page}))
+	if code != 0 || stdout != "Inside\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
+func TestBrokenPageKeepsText(t *testing.T) {
+	data := assemblePDF("", "", []string{"BT /F1 12 Tf 72 720 Td (Good) Tj ET end (Lost) Tj", "BT /F1 12 Tf 72 720 Td (p2) Tj ET"})
+	stdout, stderr, code := runPdf(t, []string{"--text"}, data)
+	if code != 0 || stdout != "Good\n\fp2\n" || !strings.Contains(stderr, "pdf: page 1: ") {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runPdf(t, []string{"--json"}, data)
+	if code != 0 || stderr != "" || !strings.Contains(stdout, `"text":"Good","error":"pdf: page 1: `) {
+		t.Errorf("--json: exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
+func TestStandardFontWidths(t *testing.T) {
+	// No /Widths on the font, so the gaps only make sense with Helvetica's
+	// real widths: M is 833/1000 em, i is 222.
+	cases := map[string]string{
+		"BT /F1 10 Tf 72 720 Td (MMMM) Tj ET BT /F1 10 Tf 105.32 720 Td (x) Tj ET": "MMMMx",
+		"BT /F1 10 Tf 72 720 Td (iiii) Tj ET BT /F1 10 Tf 80.88 720 Td (x) Tj ET":  "iiiix",
+		"BT /F1 10 Tf 72 720 Td (iiii) Tj ET BT /F1 10 Tf 83.88 720 Td (x) Tj ET":  "iiii x",
+	}
+	for page, want := range cases {
+		stdout, _, _ := runPdf(t, []string{"--text"}, assemblePDF("", "", []string{page}))
+		if stdout != want+"\n" {
+			t.Errorf("%s: got %q, want %q", page, stdout, want)
+		}
+	}
+}
+
+func TestShortError(t *testing.T) {
+	if got := short("first\nsecond"); got != "first..." {
+		t.Errorf("short = %q", got)
+	}
+	long := strings.Repeat("é", 100)
+	if got := short(long); len(got) > 123 || !strings.HasSuffix(got, "...") || !utf8.ValidString(got) {
+		t.Errorf("short(long) = %q", got)
+	}
+}
+
 func TestEmptyPages(t *testing.T) {
 	cases := []struct {
 		pages []string
@@ -261,7 +372,7 @@ func TestEmptyPages(t *testing.T) {
 		{[]string{"p1", ""}, "p1\n\f\n"},
 	}
 	for _, tc := range cases {
-		stdout, stderr, code := runPdf(t, nil, buildPDF(tc.pages...))
+		stdout, stderr, code := runPdf(t, []string{"-t"}, buildPDF(tc.pages...))
 		if code != 0 || stdout != tc.want {
 			t.Errorf("pages %q: exit %d stdout %q stderr %q, want %q", tc.pages, code, stdout, stderr, tc.want)
 		}
@@ -313,7 +424,7 @@ func TestPagesSelection(t *testing.T) {
 		"1-3, 2, 5": "p1\n\fp2\n\fp3\n\fp5\n",
 	}
 	for arg, want := range cases {
-		stdout, stderr, code := runPdf(t, []string{"--pages", arg}, data)
+		stdout, stderr, code := runPdf(t, []string{"--text", "--pages", arg}, data)
 		if code != 0 || stdout != want {
 			t.Errorf("--pages %q: exit %d stdout %q stderr %q, want %q", arg, code, stdout, stderr, want)
 		}
@@ -522,7 +633,7 @@ func TestPropertyJSONRoundTrip(t *testing.T) {
 			}
 			pages[i] = string(b)
 		}
-		stdout, stderr, code := runPdf(t, []string{"--json"}, buildPDF(pages...))
+		stdout, stderr, code := runPdf(t, []string{"--json", "--text"}, buildPDF(pages...))
 		if code != 0 {
 			t.Fatalf("pages %q: exit %d stderr %q", pages, code, stderr)
 		}
@@ -556,7 +667,12 @@ func FuzzPdf(f *testing.F) {
 				return
 			}
 			pages, _ := selectPages([]pageRange{{start: 1, end: min(n, 20)}}, n)
-			_, _ = extract(r, pages)
+			lines, _, _ := extract(r, pages)
+			h := findHeadings(lines)
+			for _, ls := range lines {
+				_ = markdown(ls, h)
+				_ = plainText(ls)
+			}
 		}()
 		select {
 		case <-done:

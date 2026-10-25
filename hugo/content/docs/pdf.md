@@ -1,6 +1,6 @@
 ---
 title: "vrk pdf"
-description: "Extract the text layer from a PDF. Plain text with form feeds between pages, or one JSONL record per page. No OCR, no Python."
+description: "Extract the text layer from a PDF. Markdown or plain text with form feeds between pages, or one JSONL record per page. No OCR, no Python."
 meta_lead: "vrk pdf reads a PDF from a file path or stdin and writes its text layer to stdout, pages separated by form feeds or as one JSONL record per page."
 og_title: "vrk pdf - extract text from PDFs for AI pipelines"
 tool: pdf
@@ -19,7 +19,7 @@ Getting text out of a PDF usually means installing poppler for `pdftotext` or a 
 
 ## The solution
 
-`vrk pdf` extracts the text layer of a PDF. Plain text by default, with a form feed (`\f`) between pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. `--pages` selects pages like `3`, `2-5`, `4-` or `1,3,5-7`. Scanned PDFs with no text layer exit 1 so a pipeline stops before sending empty text to a model.
+`vrk pdf` extracts the text layer of a PDF. Markdown by default (headings from font size, bullet lists, paragraphs), `--text` for plain text, with a form feed (`\f`) between pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. `--pages` selects pages like `3`, `2-5`, `4-` or `1,3,5-7`. Scanned PDFs with no text layer exit 1 so a pipeline stops before sending empty text to a model.
 
 ## Before and after
 
@@ -55,6 +55,7 @@ vrk pdf --pages 1-3 report.pdf | vrk tok
 
 | Flag      | Short | Type   | Description                                                |
 |-----------|-------|--------|------------------------------------------------------------|
+| `--text`  | -t    | bool   | Plain text instead of Markdown                             |
 | `--pages` | -p    | string | Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed) |
 | `--json`  | -j    | bool   | One record per page, then a metadata trailer               |
 | `--quiet` | -q    | bool   | Suppress stderr output                                     |
@@ -64,17 +65,34 @@ vrk pdf --pages 1-3 report.pdf | vrk tok
 
 ## How it works
 
-### Plain text (default)
+### Markdown (default)
 
 ```bash
 $ vrk pdf --pages 1 report.pdf
 Quarterly report, page one.
 ```
 
-Without `--pages` you get every page, with a form feed (`\f`) between pages. A PDF with three pages has two form feeds, even if a page is empty.
+Output is Markdown. Lines set noticeably bigger than the body text, and followed by smaller text, become headings: the largest size is `#`, the next `##`, the rest `###`. Bullet glyphs like `•` become `- ` list items, and a bigger vertical gap starts a new paragraph. Ligatures like `ﬁ` come out as plain `fi`.
+
+Without `--pages` you get every page, with a form feed (`\f`) on its own line between pages. A PDF with three pages has two form feeds, even if a page is empty.
 
 ```bash
 $ vrk pdf report.pdf | tr '\f' '-'
+Quarterly report, page one.
+
+-
+Revenue grew in every region.
+
+-
+Outlook for next year.
+```
+
+### Plain text (--text)
+
+`--text` drops the Markdown: no `#`, no list markers, and the form feed comes straight after each page.
+
+```bash
+$ vrk pdf --text report.pdf | tr '\f' '-'
 Quarterly report, page one.
 -Revenue grew in every region.
 -Outlook for next year.
@@ -90,7 +108,7 @@ $ vrk pdf --json report.pdf
 {"_vrk":"pdf","count":3}
 ```
 
-Page numbers are the real ones, so `--json --pages 2-3` gives records for pages 2 and 3. The last record is the trailer; use `jq 'select(.page)'` to skip it.
+Each `text` is Markdown unless you add `--text`. Page numbers are the real ones, so `--json --pages 2-3` gives records for pages 2 and 3. The last record is the trailer; use `jq 'select(.page)'` to skip it.
 
 ### Page ranges (--pages)
 
@@ -99,13 +117,13 @@ Page numbers are the real ones, so `--json --pages 2-3` gives records for pages 
 A comma list mixes them: `--pages 1,3,5-7`. Pages come out in the order you list them, and a page listed twice comes out once.
 
 ```bash
-$ vrk pdf --pages 2- report.pdf | tr '\f' '-'
+$ vrk pdf --text --pages 2- report.pdf | tr '\f' '-'
 Revenue grew in every region.
 -Outlook for next year.
 ```
 
 ```bash
-$ vrk pdf --pages 3,1 report.pdf | tr '\f' '-'
+$ vrk pdf --text --pages 3,1 report.pdf | tr '\f' '-'
 Outlook for next year.
 -Quarterly report, page one.
 ```
@@ -116,7 +134,7 @@ Outlook for next year.
 
 ```bash
 $ vrk pdf report.pdf | vrk tok
-21
+23
 ```
 
 ### Per-page text for RAG
@@ -144,6 +162,8 @@ error: pdf: no extractable text found; document may be scanned (OCR required)
 $ echo $?
 1
 ```
+
+A page the reader chokes on doesn't sink the file. It warns on stderr and keeps whatever text it read before the error; the other pages come out as usual. With `--json` that page's record gets an `"error"` field. Only when no page has any text does it exit 1.
 
 A page past the end:
 

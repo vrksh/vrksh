@@ -163,7 +163,7 @@ func TestInferType(t *testing.T) {
 		{[]string{}, "TEXT", -1},
 		{[]string{"99999999999999999999"}, "TEXT", -1},
 		{[]string{"1.5", "99999999999999999999"}, "TEXT", -1},
-		{[]string{" 30"}, "TEXT", -1},
+		{[]string{" 30", "7 "}, "INTEGER", -1},
 		{[]string{"1.", ".5"}, "TEXT", -1},
 		{[]string{"5", "N/A", "2", "null", "-", "NA", "none"}, "INTEGER", -1},
 		{[]string{"n/a", "-"}, "TEXT", -1},
@@ -647,7 +647,7 @@ func TestPropertyRoundTrip(t *testing.T) {
 		}
 		return string(r)
 	}
-	ident := regexp.MustCompile(`^[A-Za-z0-9_]+$`)
+	ident := regexp.MustCompile(`^[\p{L}\p{N}_]+$`)
 
 	for iter := 0; iter < 50; iter++ {
 		cols := 1 + rng.Intn(5)
@@ -857,5 +857,72 @@ func TestDelimiters(t *testing.T) {
 	out, errOut, code = runSql(t, []string{"--delimiter", ";", "SELECT b FROM stdin", "-"}, "a;b\n1;2,5\n")
 	if code != 0 || out != "b\n\"2,5\"\n" {
 		t.Errorf("; : exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestFormatFloat(t *testing.T) {
+	cases := []struct {
+		x    float64
+		want string
+	}{
+		{1234567.5, "1234567.5"},
+		{83393201.94, "83393201.94"},
+		{0, "0"},
+		{0.000001, "0.000001"},
+		{1e-9, "1e-09"},
+		{1e300, "1e+300"},
+	}
+	for _, c := range cases {
+		if got := formatFloat(c.x, -1); got != c.want {
+			t.Errorf("formatFloat(%v) = %q, want %q", c.x, got, c.want)
+		}
+	}
+}
+
+func TestTTYStdinWithFiles(t *testing.T) {
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	t.Cleanup(func() { isTerminal = orig })
+
+	out, errOut, code := runSql(t, []string{"SELECT * FROM stdin JOIN users USING (id)", usersFile(t)}, "")
+	if code != 2 || out != "" || !strings.Contains(errOut, "nothing is piped") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestUnicodeHeaders(t *testing.T) {
+	f := writeCSV(t, t.TempDir(), "p.csv", "Prénom,First Name\nAnaïs,ana\n")
+	out, errOut, code := runSql(t, []string{"SELECT Prénom, First_Name FROM p", f}, "")
+	if code != 0 || out != "Prénom,First_Name\nAnaïs,ana\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, errOut, code = runSql(t, []string{`SELECT "First Name" FROM p`, f}, "")
+	if code != 1 || out != "" || !strings.Contains(errOut, "use First_Name") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, _, code = runSql(t, []string{`SELECT First_Name AS "First Name" FROM p`, f}, "")
+	if code != 0 || out != "First Name\nana\n" {
+		t.Errorf("alias: exit %d stdout %q", code, out)
+	}
+}
+
+func TestCROnlyLineEndings(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT sum(a) FROM stdin"}, "a,b\r1,x\r2,y\r")
+	if code != 0 || out != "sum(a)\n3\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestInvalidUTF8(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT * FROM stdin"}, "name\nana\nRen\xe9\n")
+	if code != 1 || out != "" || !strings.Contains(errOut, "line 3 is not valid UTF-8") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestPaddedNumbers(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT a + 1 AS b FROM stdin"}, "a\n 41\n41 \n")
+	if code != 0 || out != "b\n42\n42\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
 	}
 }

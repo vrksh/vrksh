@@ -44,12 +44,14 @@ var (
 	stdinRe = regexp.MustCompile(`(?i)\bstdin\b`)
 	intRe   = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
 	realRe  = regexp.MustCompile(`^-?(0|[1-9][0-9]*)\.[0-9]+$`)
-	nameRe  = regexp.MustCompile(`[^A-Za-z0-9_]`)
+	nameRe  = regexp.MustCompile(`[^\p{L}\p{N}_]`)
 	// looseNumRe matches digit strings intRe and realRe turn down on purpose:
 	// leading zeros and integers past int64. Those are codes, not numbers.
 	looseNumRe = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
 	identRe    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	noTableRe  = regexp.MustCompile(`no such table: (\S+)`)
+	dqRe       = regexp.MustCompile(`"((?:[^"]|"")*)"`)
+	asRe       = regexp.MustCompile(`(?i)\bas\s*$`)
 	scaleRe    = regexp.MustCompile(`^REAL\(([0-9]+)\)$`)
 )
 
@@ -185,7 +187,7 @@ func Run() int {
 
 	// Empty stdin drops its table. If the query then needs it, there is
 	// nothing to report: exit 0 with no output.
-	emptyStdin := ""
+	emptyStdin, ttyStdin := "", false
 	if stdinAt >= 0 {
 		var data []byte
 		if isTerminal(int(os.Stdin.Fd())) {
@@ -195,15 +197,19 @@ func Run() int {
 			case len(tables) == 1:
 				return fail(2, "sql: query references stdin but nothing is piped")
 			}
-			// "stdin" was only a word in the query; the files are the input.
+			// "stdin" may only be a word in the query, so run it on the files
+			// and complain only if it really needed the stdin table.
+			ttyStdin = true
 		} else {
 			var err error
 			if data, err = readAll(os.Stdin); err != nil {
 				return fail(1, "sql: reading stdin: %v", err)
 			}
 		}
-		if len(data) == 0 {
+		if len(data) == 0 && !ttyStdin {
 			emptyStdin = tables[stdinAt].name
+		}
+		if len(data) == 0 {
 			tables = append(tables[:stdinAt], tables[stdinAt+1:]...)
 		} else {
 			tables[stdinAt].data = data
@@ -243,9 +249,19 @@ func Run() int {
 		return fail(1, "sql: opening database: %v", err)
 	}
 
+	renamed := map[string]string{} // original header -> column name, where they differ
 	for _, t := range tables {
-		if err := load(ctx, conn, t, !jsonFlag); err != nil {
+		if err := load(ctx, conn, t, !jsonFlag, renamed); err != nil {
 			return fail(1, "%v", err)
+		}
+	}
+	// SQLite reads a double-quoted name that isn't a column as a string, so
+	// "First Name" would quietly select the text First Name on every row.
+	// An AS "First Name" alias is fine.
+	for _, m := range dqRe.FindAllStringSubmatchIndex(query, -1) {
+		name := strings.ReplaceAll(query[m[2]:m[3]], `""`, `"`)
+		if col, ok := renamed[name]; ok && !asRe.MatchString(query[:m[0]]) {
+			return fail(1, "sql: no column %s: headers are sanitized, use %s", query[m[0]:m[1]], col)
 		}
 	}
 
@@ -253,6 +269,8 @@ func Run() int {
 	if err != nil {
 		if m := noTableRe.FindStringSubmatch(err.Error()); m != nil {
 			switch {
+			case ttyStdin && strings.EqualFold(m[1], "stdin"):
+				return fail(2, "sql: query references stdin but nothing is piped")
 			case emptyStdin != "" && strings.EqualFold(m[1], emptyStdin):
 				return 0
 			case len(tables) == 0 && emptyStdin == "":
@@ -286,11 +304,27 @@ func tableName(path string) string {
 }
 
 // load creates table t from its CSV data in one transaction. warn reports
-// mostly-numeric columns that had to be TEXT.
-func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool) error {
+// mostly-numeric columns that had to be TEXT. Headers that sanitizing changed
+// are added to renamed.
+func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map[string]string) error {
 	data := bytes.TrimPrefix(t.data, []byte("\xef\xbb\xbf"))
 	if bytes.HasPrefix(data, []byte{0x1f, 0x8b}) {
 		return fmt.Errorf("sql: %s is gzip-compressed; pipe it in: gunzip -c %s | vrk sql 'SELECT ... FROM stdin' -", t.source, t.source)
+	}
+	if !utf8.Valid(data) {
+		i := 0
+		for i < len(data) {
+			r, n := utf8.DecodeRune(data[i:])
+			if r == utf8.RuneError && n <= 1 {
+				break
+			}
+			i += n
+		}
+		return fmt.Errorf("sql: %s: line %d is not valid UTF-8; convert it first, e.g. iconv -f latin1 -t utf-8", t.source, bytes.Count(data[:i], []byte("\n"))+1)
+	}
+	// Old Mac line endings: encoding/csv only splits on \n.
+	if bytes.IndexByte(data, '\n') < 0 {
+		data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
 	}
 	r := csv.NewReader(bytes.NewReader(data))
 	r.Comma = t.comma
@@ -308,6 +342,11 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool) error {
 	}
 
 	cols := sanitizeNames(header)
+	for i, h := range header {
+		if h != cols[i] {
+			renamed[h] = cols[i]
+		}
+	}
 	var rows [][]string
 	for {
 		rec, err := r.Read()
@@ -366,6 +405,9 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool) error {
 		for c, v := range row {
 			// Empty cells are NULL, and so are N/A and friends in numeric
 			// columns. Column affinity converts the rest.
+			if types[c] != "TEXT" {
+				v = strings.TrimSpace(v)
+			}
 			if v == "" || types[c] != "TEXT" && nullMarkers[strings.ToLower(v)] {
 				args[c] = nil
 			} else {
@@ -477,10 +519,14 @@ func writeCSVRow(w *csv.Writer, buf *bytes.Buffer, rec []string) {
 }
 
 // formatFloat prints x with scale decimals, or as short as it round-trips
-// when scale is -1.
+// when scale is -1. Like JSON, exponents are only for very big or very small
+// numbers.
 func formatFloat(x float64, scale int) string {
 	if scale >= 0 {
 		return strconv.FormatFloat(x, 'f', scale, 64)
+	}
+	if a := math.Abs(x); a == 0 || a >= 1e-6 && a < 1e21 {
+		return strconv.FormatFloat(x, 'f', -1, 64)
 	}
 	return strconv.FormatFloat(x, 'g', -1, 64)
 }
@@ -533,7 +579,7 @@ func quote(name string) string {
 }
 
 // sanitizeNames turns a CSV header into usable column names: characters
-// outside [A-Za-z0-9_] become _, empty names become col_N (1-indexed), and
+// other than letters, digits and _ become _, empty names become col_N (1-indexed), and
 // case-insensitive duplicates get _1, _2 suffixes.
 func sanitizeNames(header []string) []string {
 	names := make([]string, len(header))
@@ -573,6 +619,8 @@ func inferType(vals []string) (typ string, junk int) {
 	nums, others, junk := 0, 0, -1
 	isInt, scale := true, -2 // scale -2: nothing seen yet, -1: mixed
 	for i, v := range vals {
+		// Padded exports (" 42") are still numbers.
+		v = strings.TrimSpace(v)
 		if v == "" || nullMarkers[strings.ToLower(v)] {
 			continue
 		}

@@ -91,7 +91,7 @@
     },
     {
       "name": "pdf",
-      "description": "PDF text extractor - plain text or JSONL per page, --pages"
+      "description": "PDF text extractor - Markdown, --text, JSONL per page"
     },
     {
       "name": "sql",

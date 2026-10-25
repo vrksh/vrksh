@@ -1,10 +1,11 @@
 // Package pdf implements vrk pdf - a PDF text extractor.
-// Reads a PDF from a file path or stdin and writes the text layer to stdout:
-// pages joined by form feeds, or one JSONL record per page with --json.
+// Reads a PDF from a file path or stdin and writes the text layer to stdout as
+// Markdown (or plain text with --text): pages separated by form feeds, or one
+// JSONL record per page with --json.
 //
-// Text layer only. No OCR, so scanned PDFs exit 1. No layout reconstruction:
-// text comes out in content-stream order, with spaces and line breaks rebuilt
-// from glyph positions. The underlying library (github.com/ledongthuc/pdf)
+// Text layer only. No OCR, so scanned PDFs exit 1. Text comes out in
+// content-stream order, with spaces and line breaks rebuilt from glyph
+// positions and headings guessed from font size. The underlying library (github.com/ledongthuc/pdf)
 // reads PDF 1.0-1.7; 2.0 files exit 1.
 package pdf
 
@@ -18,6 +19,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	lpdf "github.com/ledongthuc/pdf"
 	"github.com/spf13/pflag"
@@ -38,8 +40,9 @@ const maxTreeDepth = 64
 type pageRange struct{ start, end int }
 
 type pageRecord struct {
-	Page int    `json:"page"`
-	Text string `json:"text"`
+	Page  int    `json:"page"`
+	Text  string `json:"text"`
+	Error string `json:"error,omitempty"`
 }
 
 type metaRecord struct {
@@ -50,9 +53,10 @@ type metaRecord struct {
 func init() {
 	shared.Register(shared.ToolMeta{
 		Name:  "pdf",
-		Short: "PDF text extractor - plain text or JSONL per page, --pages",
+		Short: "PDF text extractor - Markdown, --text, JSONL per page",
 		Flags: []shared.FlagMeta{
 			{Name: "pages", Shorthand: "p", Usage: "pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)"},
+			{Name: "text", Shorthand: "t", Usage: "plain text instead of Markdown"},
 			{Name: "json", Shorthand: "j", Usage: `one {"page":N,"text":"..."} per page, then {"_vrk":"pdf","count":N}`},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
@@ -65,8 +69,9 @@ func Run() int {
 	fs.SetOutput(io.Discard)
 
 	var pagesFlag string
-	var jsonFlag, quietFlag bool
+	var textFlag, jsonFlag, quietFlag bool
 	fs.StringVarP(&pagesFlag, "pages", "p", "", "pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)")
+	fs.BoolVarP(&textFlag, "text", "t", false, "plain text instead of Markdown")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `one {"page":N,"text":"..."} per page, then {"_vrk":"pdf","count":N}`)
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
@@ -145,19 +150,32 @@ func Run() int {
 		return fail(1, "pdf: page %d does not exist (PDF has %d pages)", bad, n)
 	}
 
-	texts, err := extract(r, pages)
+	lines, pageErrs, err := extract(r, pages)
 	if err != nil {
 		return fail(1, "pdf: %v", err)
 	}
 
+	texts := make([]string, len(lines))
+	var h headings
+	if !textFlag {
+		h = findHeadings(lines)
+	}
 	hasText := false
-	for _, t := range texts {
-		if strings.TrimSpace(t) != "" {
-			hasText = true
-			break
+	for i, ls := range lines {
+		if textFlag {
+			texts[i] = plainText(ls)
+		} else {
+			texts[i] = markdown(ls, h)
 		}
+		hasText = hasText || strings.TrimSpace(texts[i]) != ""
 	}
 	if !hasText {
+		// A page that failed to parse says more than "no text".
+		for i, e := range pageErrs {
+			if e != nil {
+				return fail(1, "pdf: page %d: %s", pages[i], short(e.Error()))
+			}
+		}
 		if len(pages) < n {
 			return fail(1, "pdf: no extractable text on the selected pages")
 		}
@@ -169,7 +187,11 @@ func Run() int {
 		enc := json.NewEncoder(w)
 		enc.SetEscapeHTML(false)
 		for i, t := range texts {
-			if err := enc.Encode(pageRecord{Page: pages[i], Text: t}); err != nil {
+			rec := pageRecord{Page: pages[i], Text: t}
+			if pageErrs[i] != nil {
+				rec.Error = "pdf: page " + strconv.Itoa(pages[i]) + ": " + short(pageErrs[i].Error())
+			}
+			if err := enc.Encode(rec); err != nil {
 				return fail(1, "pdf: writing output: %v", err)
 			}
 		}
@@ -177,12 +199,23 @@ func Run() int {
 			return fail(1, "pdf: writing output: %v", err)
 		}
 	} else {
-		for i, t := range texts {
-			if t != "" {
-				texts[i] = t + "\n"
+		for i, e := range pageErrs {
+			if e != nil {
+				shared.Warn("pdf: page %d: %s", pages[i], short(e.Error()))
 			}
 		}
-		out := strings.Join(texts, "\f")
+		// Markdown pages keep blank lines around the form feed so a heading
+		// at the top of a page still parses.
+		sep := "\n\n\f\n"
+		if textFlag {
+			sep = "\f"
+			for i, t := range texts {
+				if t != "" {
+					texts[i] = t + "\n"
+				}
+			}
+		}
+		out := strings.Join(texts, sep)
 		if !strings.HasSuffix(out, "\n") {
 			out += "\n"
 		}
@@ -278,22 +311,42 @@ func open(data []byte) (r *lpdf.Reader, n int, err error) {
 	return r, r.NumPage(), nil
 }
 
-// extract returns the text of each page, with leading and trailing newlines
-// trimmed.
-func extract(r *lpdf.Reader, pages []int) (texts []string, err error) {
+// extract lays out each page into lines. A page whose content stream breaks
+// partway keeps the text read before the break, and its error comes back in
+// pageErrs; err is for a broken page tree.
+func extract(r *lpdf.Reader, pages []int) (lines [][]line, pageErrs []error, err error) {
 	defer func() {
 		if p := recover(); p != nil {
-			texts, err = nil, fmt.Errorf("corrupt PDF: %v", p)
+			lines, pageErrs, err = nil, nil, fmt.Errorf("corrupt PDF: %s", short(fmt.Sprint(p)))
 		}
 	}()
 	for _, i := range pages {
 		page, ok := pageAt(r, i)
 		if !ok {
-			return nil, fmt.Errorf("corrupt PDF: page %d missing from page tree", i)
+			return nil, nil, fmt.Errorf("corrupt PDF: page %d missing from page tree", i)
 		}
-		texts = append(texts, strings.Trim(layout(glyphs(page)), "\r\n"))
+		gs, perr := pageGlyphs(page)
+		lines = append(lines, layout(gs))
+		pageErrs = append(pageErrs, perr)
 	}
-	return texts, nil
+	return lines, pageErrs, nil
+}
+
+// short keeps library error text to its first line and about 120 bytes; some
+// panics carry a dump of the object that broke.
+func short(s string) string {
+	s, _, cut := strings.Cut(s, "\n")
+	if len(s) > 120 {
+		i := 120
+		for i > 0 && !utf8.RuneStart(s[i]) {
+			i--
+		}
+		s, cut = s[:i], true
+	}
+	if cut {
+		s += "..."
+	}
+	return s
 }
 
 // pageAt finds 1-indexed page n. Same walk as lpdf.Reader.Page, but with a
@@ -337,7 +390,7 @@ func errMessage(err error) string {
 	case strings.HasPrefix(msg, "not a PDF file: "):
 		return "pdf: not a valid PDF: " + strings.TrimPrefix(msg, "not a PDF file: ")
 	default:
-		return "pdf: corrupt PDF: " + msg
+		return "pdf: corrupt PDF: " + short(msg)
 	}
 }
 
@@ -347,6 +400,7 @@ func Flags() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("pdf", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringP("pages", "p", "", "pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)")
+	fs.BoolP("text", "t", false, "plain text instead of Markdown")
 	fs.BoolP("json", "j", false, `one {"page":N,"text":"..."} per page, then {"_vrk":"pdf","count":N}`)
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs
@@ -357,7 +411,8 @@ func printUsage(fs *pflag.FlagSet) int {
 		"usage: vrk pdf [flags] [file.pdf]",
 		"       cat file.pdf | vrk pdf",
 		"",
-		"PDF text extractor. Writes the text layer, pages separated by form feeds (\\f).",
+		"PDF text extractor. Writes the text layer as Markdown (headings guessed from",
+		"font size), or plain text with --text. Pages are separated by form feeds (\\f).",
 		"The argument is a file path, not PDF content. No OCR: scanned PDFs exit 1.",
 		"",
 		"flags:",

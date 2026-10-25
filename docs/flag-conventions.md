@@ -44,6 +44,7 @@ vrk grab https://example.com --json      # {"url": "...", "title": "...", "conte
 ```bash
 vrk grab https://example.com             # markdown (default)
 vrk grab https://example.com --text      # plain prose, no ## headers or **bold**
+vrk pdf report.pdf --text                 # same for pdf: Markdown is the default
 
 cat response.md | vrk plain               # redundant here but valid
 ```

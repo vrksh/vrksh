@@ -1,16 +1,33 @@
 ## How it works
 
-### Plain text (default)
+### Markdown (default)
 
 ```bash
 $ vrk pdf --pages 1 report.pdf
 Quarterly report, page one.
 ```
 
-Without `--pages` you get every page, with a form feed (`\f`) between pages. A PDF with three pages has two form feeds, even if a page is empty.
+Output is Markdown. Lines set noticeably bigger than the body text, and followed by smaller text, become headings: the largest size is `#`, the next `##`, the rest `###`. Bullet glyphs like `•` become `- ` list items, and a bigger vertical gap starts a new paragraph. Ligatures like `ﬁ` come out as plain `fi`.
+
+Without `--pages` you get every page, with a form feed (`\f`) on its own line between pages. A PDF with three pages has two form feeds, even if a page is empty.
 
 ```bash
 $ vrk pdf report.pdf | tr '\f' '-'
+Quarterly report, page one.
+
+-
+Revenue grew in every region.
+
+-
+Outlook for next year.
+```
+
+### Plain text (--text)
+
+`--text` drops the Markdown: no `#`, no list markers, and the form feed comes straight after each page.
+
+```bash
+$ vrk pdf --text report.pdf | tr '\f' '-'
 Quarterly report, page one.
 -Revenue grew in every region.
 -Outlook for next year.
@@ -26,7 +43,7 @@ $ vrk pdf --json report.pdf
 {"_vrk":"pdf","count":3}
 ```
 
-Page numbers are the real ones, so `--json --pages 2-3` gives records for pages 2 and 3. The last record is the trailer; use `jq 'select(.page)'` to skip it.
+Each `text` is Markdown unless you add `--text`. Page numbers are the real ones, so `--json --pages 2-3` gives records for pages 2 and 3. The last record is the trailer; use `jq 'select(.page)'` to skip it.
 
 ### Page ranges (--pages)
 
@@ -35,13 +52,13 @@ Page numbers are the real ones, so `--json --pages 2-3` gives records for pages 
 A comma list mixes them: `--pages 1,3,5-7`. Pages come out in the order you list them, and a page listed twice comes out once.
 
 ```bash
-$ vrk pdf --pages 2- report.pdf | tr '\f' '-'
+$ vrk pdf --text --pages 2- report.pdf | tr '\f' '-'
 Revenue grew in every region.
 -Outlook for next year.
 ```
 
 ```bash
-$ vrk pdf --pages 3,1 report.pdf | tr '\f' '-'
+$ vrk pdf --text --pages 3,1 report.pdf | tr '\f' '-'
 Outlook for next year.
 -Quarterly report, page one.
 ```
@@ -52,7 +69,7 @@ Outlook for next year.
 
 ```bash
 $ vrk pdf report.pdf | vrk tok
-21
+23
 ```
 
 ### Per-page text for RAG
@@ -80,6 +97,8 @@ error: pdf: no extractable text found; document may be scanned (OCR required)
 $ echo $?
 1
 ```
+
+A page the reader chokes on doesn't sink the file. It warns on stderr and keeps whatever text it read before the error; the other pages come out as usual. With `--json` that page's record gets an `"error"` field. Only when no page has any text does it exit 1.
 
 A page past the end:
 

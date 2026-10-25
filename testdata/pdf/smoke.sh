@@ -85,9 +85,17 @@ assert_eq "--json: trailer" '{"_vrk":"pdf","count":3}' "$(tail -1 "$TMP/out")"
 run /dev/null --json --pages 2-3 "$FIX/text.pdf"
 assert_eq "--json --pages 2-3: real page numbers" "2 3" "$(jq -r 'select(.page) | .page' "$TMP/out" | tr '\n' ' ' | sed 's/ $//')"
 
-run /dev/null --pages 3,1 "$FIX/text.pdf"
+run /dev/null --text --pages 3,1 "$FIX/text.pdf"
 assert_exit "--pages 3,1" 0
 assert_eq "--pages 3,1: given order" "Outlook for next year.|Quarterly report, page one." "$(tr '\f\n' '|' < "$TMP/out" | sed 's/||/|/; s/|$//')"
+
+run /dev/null "$FIX/text.pdf"
+assert_eq "markdown: blank line before each form feed" "2" "$(grep -c '^\f$' "$TMP/out" | tr -d ' ')"
+
+run /dev/null -t "$FIX/text.pdf"
+assert_exit "-t" 0
+assert_eq "-t: form feed straight after the page text" "Quarterly report, page one." "$(head -1 "$TMP/out")"
+assert_eq "-t: no blank lines" "0" "$(grep -c '^$' "$TMP/out" | tr -d ' ')"
 
 run /dev/null "$FIX/kerned.pdf"
 assert_exit "kerned (TJ spacing) PDF" 0
