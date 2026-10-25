@@ -64,10 +64,11 @@ func runPdf(t *testing.T, args []string, stdin []byte) (stdout, stderr string, c
 	return outBuf.String(), errBuf.String(), code
 }
 
-// assemblePDF writes a PDF 1.4 file with one Helvetica text line per page and
-// a correct xref table. kids overrides the /Kids array of the page tree when
-// non-empty; trailer is extra text for the trailer dictionary.
-func assemblePDF(kids, trailer string, pages []string) []byte {
+// assemblePDF writes a PDF 1.4 file with one content stream per page, a
+// Helvetica font as /F1, and a correct xref table. kids overrides the /Kids
+// array of the page tree when non-empty; trailer is extra text for the
+// trailer dictionary.
+func assemblePDF(kids, trailer string, contents []string) []byte {
 	var b bytes.Buffer
 	var offs []int
 	obj := func(body string) {
@@ -76,8 +77,8 @@ func assemblePDF(kids, trailer string, pages []string) []byte {
 	}
 
 	if kids == "" {
-		refs := make([]string, len(pages))
-		for i := range pages {
+		refs := make([]string, len(contents))
+		for i := range contents {
 			refs[i] = fmt.Sprintf("%d 0 R", 4+2*i)
 		}
 		kids = strings.Join(refs, " ")
@@ -85,15 +86,10 @@ func assemblePDF(kids, trailer string, pages []string) []byte {
 
 	b.WriteString("%PDF-1.4\n")
 	obj("<< /Type /Catalog /Pages 2 0 R >>")
-	obj(fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids, len(pages)))
+	obj(fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids, len(contents)))
 	obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
-	esc := strings.NewReplacer(`\`, `\\`, `(`, `\(`, `)`, `\)`)
-	for i, p := range pages {
+	for i, content := range contents {
 		obj(fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents %d 0 R >>", 5+2*i))
-		var content string
-		if p != "" {
-			content = fmt.Sprintf("BT /F1 12 Tf 72 720 Td (%s) Tj ET", esc.Replace(p))
-		}
 		obj(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content))
 	}
 
@@ -106,9 +102,29 @@ func assemblePDF(kids, trailer string, pages []string) []byte {
 	return b.Bytes()
 }
 
+// textPages turns each page's text into a one-line content stream.
+func textPages(pages []string) []string {
+	esc := strings.NewReplacer(`\`, `\\`, `(`, `\(`, `)`, `\)`)
+	contents := make([]string, len(pages))
+	for i, p := range pages {
+		if p != "" {
+			contents[i] = fmt.Sprintf("BT /F1 12 Tf 72 720 Td (%s) Tj ET", esc.Replace(p))
+		}
+	}
+	return contents
+}
+
+// kernedPage spaces words with TJ kerning instead of space characters, the
+// way LaTeX does, and moves lines with Td. Text rise makes a superscript.
+const kernedPage = "BT /F1 12 Tf 72 720 Td [(Attention)-333(Is)-333(All)] TJ " +
+	"0 -14 Td [(Y)40(ou)] TJ 5 Ts (2) Tj 0 Ts " +
+	"0 -40 Td (Next para) Tj ET"
+
+const kernedText = "Attention Is All\nYou2\n\nNext para"
+
 // buildPDF returns a valid PDF with one page per argument.
 func buildPDF(pages ...string) []byte {
-	return assemblePDF("", "", pages)
+	return assemblePDF("", "", textPages(pages))
 }
 
 // buildEncryptedPDF returns a PDF with a Standard security handler whose U
@@ -117,19 +133,19 @@ func buildEncryptedPDF(pages ...string) []byte {
 	enc := "/Encrypt << /Filter /Standard /V 1 /R 2 /O <" + strings.Repeat("ab", 32) +
 		"> /U <" + strings.Repeat("cd", 32) + "> /P -4 >> /ID [<" + strings.Repeat("01", 16) +
 		"> <" + strings.Repeat("01", 16) + ">] "
-	return assemblePDF("", enc, pages)
+	return assemblePDF("", enc, textPages(pages))
 }
 
 // buildLoopPDF returns a PDF whose page tree lists itself as its own kid.
 // The library's Reader.Page walks this forever.
 func buildLoopPDF() []byte {
-	return assemblePDF("2 0 R", "", []string{"p1"})
+	return assemblePDF("2 0 R", "", textPages([]string{"p1"}))
 }
 
 // buildMissingKidPDF returns a PDF whose page tree points at an object that
 // doesn't exist.
 func buildMissingKidPDF() []byte {
-	return assemblePDF("99 0 R", "", []string{"p1", "p2"})
+	return assemblePDF("99 0 R", "", textPages([]string{"p1", "p2"}))
 }
 
 func writeTemp(t *testing.T, name string, data []byte) string {
@@ -229,6 +245,13 @@ func TestFileArgMatchesStdin(t *testing.T) {
 	}
 }
 
+func TestKerningBecomesSpaces(t *testing.T) {
+	stdout, stderr, code := runPdf(t, nil, assemblePDF("", "", []string{kernedPage}))
+	if code != 0 || stdout != kernedText+"\n" {
+		t.Errorf("exit %d stdout %q stderr %q, want %q", code, stdout, stderr, kernedText+"\n")
+	}
+}
+
 func TestEmptyPages(t *testing.T) {
 	cases := []struct {
 		pages []string
@@ -281,10 +304,13 @@ func TestJSONPagesKeepRealNumbers(t *testing.T) {
 func TestPagesSelection(t *testing.T) {
 	data := buildPDF("p1", "p2", "p3", "p4", "p5")
 	cases := map[string]string{
-		"3":   "p3\n",
-		"2-5": "p2\n\fp3\n\fp4\n\fp5\n",
-		"3-":  "p3\n\fp4\n\fp5\n",
-		" 3 ": "p3\n",
+		"3":         "p3\n",
+		"2-5":       "p2\n\fp3\n\fp4\n\fp5\n",
+		"3-":        "p3\n\fp4\n\fp5\n",
+		" 3 ":       "p3\n",
+		"1,3":       "p1\n\fp3\n",
+		"4-,1":      "p4\n\fp5\n\fp1\n",
+		"1-3, 2, 5": "p1\n\fp2\n\fp3\n\fp5\n",
 	}
 	for arg, want := range cases {
 		stdout, stderr, code := runPdf(t, []string{"--pages", arg}, data)
@@ -302,7 +328,7 @@ func TestPagesSelection(t *testing.T) {
 
 func TestPagesInvalid(t *testing.T) {
 	data := buildPDF("p1", "p2", "p3")
-	for _, arg := range []string{"0", "5-2", "abc", "-3", "1-2-3", "+3", " ", "0-2", "2-0"} {
+	for _, arg := range []string{"0", "5-2", "abc", "-3", "1-2-3", "+3", " ", "0-2", "2-0", "1,", ",1", "1,,2", "1;2"} {
 		stdout, stderr, code := runPdf(t, []string{"--pages=" + arg}, data)
 		if code != 2 {
 			t.Errorf("--pages %q: exit %d, want 2", arg, code)
@@ -361,7 +387,7 @@ func TestTTY(t *testing.T) {
 
 func TestPageOutOfRange(t *testing.T) {
 	data := buildPDF("p1", "p2", "p3")
-	for _, arg := range []string{"9", "2-9", "9-"} {
+	for _, arg := range []string{"9", "2-9", "9-", "1,9"} {
 		stdout, stderr, code := runPdf(t, []string{"--pages", arg}, data)
 		if code != 1 || stdout != "" || !strings.Contains(stderr, "pdf: page 9 does not exist (PDF has 3 pages)") {
 			t.Errorf("--pages %s: exit %d stdout %q stderr %q", arg, code, stdout, stderr)
@@ -376,8 +402,9 @@ func TestNoText(t *testing.T) {
 	if code != 1 || stdout != "" || !strings.Contains(stderr, ocrMsg) {
 		t.Errorf("blank: exit %d stdout %q stderr %q", code, stdout, stderr)
 	}
+	// A blank page in a PDF that has text elsewhere is not a scan.
 	stdout, stderr, code = runPdf(t, []string{"--pages", "2"}, buildPDF("p1", ""))
-	if code != 1 || stdout != "" || !strings.Contains(stderr, ocrMsg) {
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "pdf: no extractable text on the selected pages") {
 		t.Errorf("blank page 2: exit %d stdout %q stderr %q", code, stdout, stderr)
 	}
 	stdout, stderr, code = runPdf(t, []string{"--json"}, buildPDF(""))
@@ -402,8 +429,15 @@ func TestPDF20Rejected(t *testing.T) {
 	data := buildPDF("p1")
 	data = append([]byte("%PDF-2.0"), data[len("%PDF-1.4"):]...)
 	_, stderr, code := runPdf(t, nil, data)
-	if code != 1 || !strings.Contains(stderr, "pdf: not a valid PDF: ") {
+	if code != 1 || !strings.Contains(stderr, "pdf: PDF 2.0 is not supported") {
 		t.Errorf("exit %d stderr %q", code, stderr)
+	}
+}
+
+func TestJSONKeepsHTMLCharacters(t *testing.T) {
+	stdout, _, code := runPdf(t, []string{"--json"}, buildPDF("a < b && c > d"))
+	if code != 0 || !strings.Contains(stdout, `"text":"a < b && c > d"`) {
+		t.Errorf("exit %d stdout %q", code, stdout)
 	}
 }
 
@@ -517,11 +551,12 @@ func FuzzPdf(f *testing.F) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			r, _, err := open(data)
+			r, n, err := open(data)
 			if err != nil {
 				return
 			}
-			_, _ = extract(r, pageRange{start: 1})
+			pages, _ := selectPages([]pageRange{{start: 1, end: min(n, 20)}}, n)
+			_, _ = extract(r, pages)
 		}()
 		select {
 		case <-done:
@@ -547,6 +582,7 @@ func TestWriteFixtures(t *testing.T) {
 		"text.pdf":      buildPDF("Quarterly report, page one.", "Revenue grew in every region.", "Outlook for next year."),
 		"blank.pdf":     buildPDF("", ""),
 		"encrypted.pdf": buildEncryptedPDF("secret"),
+		"kerned.pdf":    assemblePDF("", "", []string{kernedPage}),
 	}
 	for name, data := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {

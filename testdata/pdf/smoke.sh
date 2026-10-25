@@ -85,6 +85,14 @@ assert_eq "--json: trailer" '{"_vrk":"pdf","count":3}' "$(tail -1 "$TMP/out")"
 run /dev/null --json --pages 2-3 "$FIX/text.pdf"
 assert_eq "--json --pages 2-3: real page numbers" "2 3" "$(jq -r 'select(.page) | .page' "$TMP/out" | tr '\n' ' ' | sed 's/ $//')"
 
+run /dev/null --pages 3,1 "$FIX/text.pdf"
+assert_exit "--pages 3,1" 0
+assert_eq "--pages 3,1: given order" "Outlook for next year.|Quarterly report, page one." "$(tr '\f\n' '|' < "$TMP/out" | sed 's/||/|/; s/|$//')"
+
+run /dev/null "$FIX/kerned.pdf"
+assert_exit "kerned (TJ spacing) PDF" 0
+assert_contains "kerned: spaces rebuilt from TJ offsets" "Attention Is All" "$stdout"
+
 run /dev/null "$FIX/quartz.pdf"
 assert_exit "quartz (cupsfilter) PDF" 0
 assert_contains "quartz: source text" "The quick brown fox jumps over the lazy dog." "$stdout"

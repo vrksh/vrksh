@@ -104,6 +104,44 @@ assert_eq "pipeline: join | jq" "cy=100 ana=30 " "$top"
 piped="$(cat "$O" | "$VRK" sql 'SELECT u.name FROM stdin s JOIN users u ON u.id = s.user_id WHERE s.total > 50' "$U")"
 assert_eq "pipeline: stdin joined with a file" "$(printf 'name\ncy')" "$piped"
 
+# --- dirty data, decimals, table names, delimiters ---
+
+I="$FIX/inventory.csv"
+run /dev/null 'SELECT sku FROM inventory WHERE qty > 3 ORDER BY sku' "$I"
+assert_exit "N/A in a numeric column" 0
+assert_eq "N/A loads as NULL, qty compares as a number" "$(printf 'sku\na\nc')" "$stdout"
+
+run /dev/null 'SELECT price FROM inventory WHERE price > 4 ORDER BY price' "$I"
+assert_eq "decimals keep their digits" "$(printf 'price\n5.00\n19.90')" "$stdout"
+
+run /dev/null 'SELECT count(*) AS n FROM inv' "inv=$I"
+assert_eq "name=path names the table" "$(printf 'n\n4')" "$stdout"
+
+run "$U" 'SELECT count(*) AS n FROM stdin' -
+assert_eq "- is stdin" "$(printf 'n\n3')" "$stdout"
+
+run /dev/null "SELECT count(*) AS n FROM users WHERE name <> 'stdin'" "$U"
+assert_exit "stdin as a word, empty stdin" 0
+assert_eq "stdin as a word: query still runs" "$(printf 'n\n3')" "$stdout"
+
+printf 'a\tb\n1\tx,y\n' > "$TMP/t.tsv"
+run /dev/null 'SELECT b FROM t' "$TMP/t.tsv"
+assert_eq ".tsv is tab-separated" "$(printf 'b\n"x,y"')" "$stdout"
+
+printf 'a;b\n1;2\n' > "$TMP/semi.csv"
+run "$TMP/semi.csv" -d ';' 'SELECT b FROM stdin' -
+assert_eq "-d ';'" "$(printf 'b\n2')" "$stdout"
+
+printf 'a,b\n1\n2,"x"y"\n' > "$TMP/loose.csv"
+run /dev/null 'SELECT count(*) AS n FROM loose WHERE b IS NULL' "$TMP/loose.csv"
+assert_exit "short rows and stray quotes" 0
+assert_eq "short row padded with NULL" "$(printf 'n\n1')" "$stdout"
+
+gzip -c "$U" > "$TMP/u.csv.gz"
+run /dev/null 'SELECT 1' "$TMP/u.csv.gz"
+assert_exit "gzip file" 1
+assert_contains "gzip file: message" "is gzip-compressed" "$stderr"
+
 # --- runtime errors (exit 1) ---
 
 run /dev/null 'SELEC 1'
@@ -121,7 +159,7 @@ assert_contains "missing file: message" "sql: file not found:" "$stderr"
 
 run /dev/null 'SELECT * FROM ragged' "$FIX/ragged.csv"
 assert_exit "ragged CSV" 1
-assert_contains "ragged CSV: message" "sql: CSV parse error in" "$stderr"
+assert_contains "ragged CSV: message" "line 3: 3 fields, header has 2" "$stderr"
 
 run /dev/null 'SELECT * FROM empty' "$FIX/empty.csv"
 assert_exit "empty file" 1

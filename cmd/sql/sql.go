@@ -3,9 +3,12 @@
 // the file. Piped CSV is the table "stdin". Results come out as CSV, or as
 // JSONL with --json.
 //
-// Column types are inferred: INTEGER or REAL when every non-empty value fits,
-// TEXT otherwise, so "007" stays "007". ATTACH is blocked (limit set to 0),
-// which also blocks VACUUM INTO, so a query can't touch the filesystem.
+// Column types are inferred: INTEGER or REAL when every non-empty value is a
+// number (NULL markers like N/A load as NULL), TEXT otherwise, so "007" stays
+// "007". A REAL column whose values all have the same number of decimals is
+// declared REAL(n), and its values print with n decimals, so 19.90 stays
+// 19.90. ATTACH is blocked (limit set to 0), which also blocks VACUUM INTO, so
+// a query can't touch the filesystem.
 package sql
 
 import (
@@ -23,6 +26,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
@@ -41,11 +45,22 @@ var (
 	intRe   = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
 	realRe  = regexp.MustCompile(`^-?(0|[1-9][0-9]*)\.[0-9]+$`)
 	nameRe  = regexp.MustCompile(`[^A-Za-z0-9_]`)
+	// looseNumRe matches digit strings intRe and realRe turn down on purpose:
+	// leading zeros and integers past int64. Those are codes, not numbers.
+	looseNumRe = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
+	identRe    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	noTableRe  = regexp.MustCompile(`no such table: (\S+)`)
+	scaleRe    = regexp.MustCompile(`^REAL\(([0-9]+)\)$`)
 )
+
+// nullMarkers load as NULL in a numeric column. In a TEXT column they stay text.
+var nullMarkers = map[string]bool{"na": true, "n/a": true, "null": true, "none": true, "nan": true, "-": true}
 
 // table is one CSV source waiting to be loaded.
 type table struct {
 	name, source string // source is the file path, or "stdin"
+	stdin        bool
+	comma        rune
 	data         []byte
 }
 
@@ -56,6 +71,7 @@ func init() {
 		Flags: []shared.FlagMeta{
 			{Name: "query", Usage: "SQL query; every positional argument is then a CSV file"},
 			{Name: "no-header", Usage: "omit the header row from CSV output"},
+			{Name: "delimiter", Shorthand: "d", Usage: `input field separator, one character or \t (default "," or tab for .tsv)`},
 			{Name: "json", Shorthand: "j", Usage: `one JSON object per row, then {"_vrk":"sql","count":N}`},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
@@ -67,10 +83,11 @@ func Run() int {
 	fs := pflag.NewFlagSet("sql", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	var queryFlag string
+	var queryFlag, delimFlag string
 	var noHeader, jsonFlag, quietFlag bool
 	fs.StringVar(&queryFlag, "query", "", "SQL query; every positional argument is then a CSV file")
 	fs.BoolVar(&noHeader, "no-header", false, "omit the header row from CSV output")
+	fs.StringVarP(&delimFlag, "delimiter", "d", "", `input field separator, one character or \t (default "," or tab for .tsv)`)
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `one JSON object per row, then {"_vrk":"sql","count":N}`)
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
@@ -101,47 +118,102 @@ func Run() int {
 	if strings.TrimSpace(query) == "" {
 		return fail(2, `sql: no query: usage: vrk sql 'SELECT ...' file.csv`)
 	}
-	usesStdin := stdinRe.MatchString(query)
+	var comma rune
+	if delimFlag != "" {
+		var ok bool
+		if comma, ok = parseDelimiter(delimFlag); !ok {
+			return fail(2, "sql: --delimiter must be one character other than a quote or newline, got %q", delimFlag)
+		}
+	}
+	delimFor := func(path string) rune {
+		if comma != 0 {
+			return comma
+		}
+		if strings.EqualFold(filepath.Ext(path), ".tsv") {
+			return '\t'
+		}
+		return ','
+	}
 
 	// Table names first, so a clash fails before anything is read.
 	tables := make([]table, 0, len(files)+1)
 	taken := map[string]bool{}
-	addTable := func(name, source string) bool {
-		if taken[strings.ToLower(name)] {
+	stdinAt := -1
+	addTable := func(t table) bool {
+		if taken[strings.ToLower(t.name)] {
 			return false
 		}
-		taken[strings.ToLower(name)] = true
-		tables = append(tables, table{name: name, source: source})
+		taken[strings.ToLower(t.name)] = true
+		if t.stdin {
+			stdinAt = len(tables)
+		}
+		tables = append(tables, t)
 		return true
 	}
 	for _, f := range files {
-		if name := tableName(f); !addTable(name, f) {
-			return fail(2, "sql: duplicate table name: %s", name)
+		name, path := "", f
+		// name=path, unless the whole argument is a real file.
+		if i := strings.IndexByte(f, '='); i > 0 && !strings.ContainsAny(f[:i], `/\.`) {
+			if _, err := os.Stat(f); err != nil {
+				name, path = f[:i], f[i+1:]
+				if !identRe.MatchString(name) {
+					return fail(2, "sql: invalid table name: %s (letters, digits and _, not starting with a digit)", name)
+				}
+			}
+		}
+		t := table{name: name, source: path, comma: delimFor(path)}
+		if path == "-" {
+			if stdinAt >= 0 {
+				return fail(2, "sql: stdin can only be one table")
+			}
+			t.stdin, t.source = true, "stdin"
+			if t.name == "" {
+				t.name = "stdin"
+			}
+		} else if t.name == "" {
+			t.name = tableName(path)
+		}
+		if !addTable(t) {
+			return fail(2, "sql: duplicate table name: %s", t.name)
 		}
 	}
-	if usesStdin && !addTable("stdin", "stdin") {
+	// Without -, stdin is the table "stdin" when the query mentions it.
+	implicit := stdinAt < 0 && stdinRe.MatchString(query)
+	if implicit && !addTable(table{name: "stdin", source: "stdin", stdin: true, comma: delimFor("")}) {
 		return fail(2, "sql: duplicate table name: stdin")
 	}
 
-	// Stdin is only read when the query names it.
-	if usesStdin {
+	// Empty stdin drops its table. If the query then needs it, there is
+	// nothing to report: exit 0 with no output.
+	emptyStdin := ""
+	if stdinAt >= 0 {
+		var data []byte
 		if isTerminal(int(os.Stdin.Fd())) {
-			return fail(2, "sql: query references stdin but nothing is piped")
-		}
-		data, err := readAll(os.Stdin)
-		if err != nil {
-			return fail(1, "sql: reading stdin: %v", err)
+			switch {
+			case !implicit:
+				return fail(2, "sql: - reads stdin but nothing is piped")
+			case len(tables) == 1:
+				return fail(2, "sql: query references stdin but nothing is piped")
+			}
+			// "stdin" was only a word in the query; the files are the input.
+		} else {
+			var err error
+			if data, err = readAll(os.Stdin); err != nil {
+				return fail(1, "sql: reading stdin: %v", err)
+			}
 		}
 		if len(data) == 0 {
-			return 0
+			emptyStdin = tables[stdinAt].name
+			tables = append(tables[:stdinAt], tables[stdinAt+1:]...)
+		} else {
+			tables[stdinAt].data = data
 		}
-		tables[len(tables)-1].data = data
 	}
 
 	// ponytail: whole files are read into memory before loading; stream rows
 	// from csv.Reader if CSVs bigger than RAM show up.
 	for i := range tables {
-		if tables[i].source == "stdin" {
+		if tables[i].stdin {
 			continue
 		}
 		data, err := os.ReadFile(tables[i].source)
@@ -172,15 +244,28 @@ func Run() int {
 	}
 
 	for _, t := range tables {
-		if err := load(ctx, conn, t); err != nil {
+		if err := load(ctx, conn, t, !jsonFlag); err != nil {
 			return fail(1, "%v", err)
 		}
 	}
 
 	out, err := runQuery(ctx, conn, query, jsonFlag, noHeader)
 	if err != nil {
-		if len(files) == 0 && !usesStdin && strings.Contains(err.Error(), "no such table") {
-			return fail(2, "sql: no input files; provide CSV file paths as arguments")
+		if m := noTableRe.FindStringSubmatch(err.Error()); m != nil {
+			switch {
+			case emptyStdin != "" && strings.EqualFold(m[1], emptyStdin):
+				return 0
+			case len(tables) == 0 && emptyStdin == "":
+				return fail(2, "sql: no input files; provide CSV file paths as arguments")
+			}
+			names := make([]string, len(tables))
+			for i, t := range tables {
+				names[i] = t.name
+			}
+			if len(names) == 0 {
+				names = []string{"none loaded"}
+			}
+			return fail(1, "sql: no such table: %s (tables: %s)", m[1], strings.Join(names, ", "))
 		}
 		return fail(1, "sql: %v", err)
 	}
@@ -200,19 +285,53 @@ func tableName(path string) string {
 	return nameRe.ReplaceAllString(name, "_")
 }
 
-// load creates table t from its CSV data in one transaction.
-func load(ctx context.Context, conn *dbsql.Conn, t table) error {
+// load creates table t from its CSV data in one transaction. warn reports
+// mostly-numeric columns that had to be TEXT.
+func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool) error {
 	data := bytes.TrimPrefix(t.data, []byte("\xef\xbb\xbf"))
-	recs, err := csv.NewReader(bytes.NewReader(data)).ReadAll()
-	if err != nil {
-		return fmt.Errorf("sql: CSV parse error in %s: %v", t.source, err)
+	if bytes.HasPrefix(data, []byte{0x1f, 0x8b}) {
+		return fmt.Errorf("sql: %s is gzip-compressed; pipe it in: gunzip -c %s | vrk sql 'SELECT ... FROM stdin' -", t.source, t.source)
 	}
-	if len(recs) == 0 {
-		return fmt.Errorf("sql: CSV parse error in %s: empty file, no header row", t.source)
+	r := csv.NewReader(bytes.NewReader(data))
+	r.Comma = t.comma
+	r.LazyQuotes = true
+	r.FieldsPerRecord = -1
+	parseErr := func(format string, args ...any) error {
+		return fmt.Errorf("sql: CSV parse error in %s: %s", t.source, fmt.Sprintf(format, args...))
+	}
+	header, err := r.Read()
+	if errors.Is(err, io.EOF) {
+		return parseErr("empty file, no header row")
+	}
+	if err != nil {
+		return parseErr("%v", err)
 	}
 
-	cols := sanitizeNames(recs[0])
-	rows := recs[1:]
+	cols := sanitizeNames(header)
+	var rows [][]string
+	for {
+		rec, err := r.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return parseErr("%v", err)
+		}
+		// Short rows are padded with NULLs; a long row is only an error when
+		// the extra fields hold something (a trailing comma is fine).
+		for len(rec) > len(cols) && rec[len(rec)-1] == "" {
+			rec = rec[:len(rec)-1]
+		}
+		if len(rec) > len(cols) {
+			line, _ := r.FieldPos(0)
+			return parseErr("line %d: %d fields, header has %d", line, len(rec), len(cols))
+		}
+		for len(rec) < len(cols) {
+			rec = append(rec, "")
+		}
+		rows = append(rows, rec)
+	}
+
 	types := make([]string, len(cols))
 	defs := make([]string, len(cols))
 	for c := range cols {
@@ -220,7 +339,11 @@ func load(ctx context.Context, conn *dbsql.Conn, t table) error {
 		for r := range rows {
 			vals[r] = rows[r][c]
 		}
-		types[c] = inferType(vals)
+		var junk int
+		types[c], junk = inferType(vals)
+		if warn && junk >= 0 {
+			shared.Warn("sql: %s: column %s is TEXT: row %d has %q; use CAST(%s AS REAL) to compare it as a number", t.source, cols[c], junk+1, vals[junk], cols[c])
+		}
 		defs[c] = quote(cols[c]) + " " + types[c]
 	}
 
@@ -241,8 +364,9 @@ func load(ctx context.Context, conn *dbsql.Conn, t table) error {
 	args := make([]any, len(cols))
 	for _, row := range rows {
 		for c, v := range row {
-			// Empty numeric cells are NULL; column affinity converts the rest.
-			if v == "" && types[c] != "TEXT" {
+			// Empty cells are NULL, and so are N/A and friends in numeric
+			// columns. Column affinity converts the rest.
+			if v == "" || types[c] != "TEXT" && nullMarkers[strings.ToLower(v)] {
 				args[c] = nil
 			} else {
 				args[c] = v
@@ -271,6 +395,18 @@ func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHe
 	if err != nil {
 		return nil, err
 	}
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, err
+	}
+	// A column read straight from a REAL(n) table column prints n decimals.
+	scales := make([]int, len(cols))
+	for i, ct := range colTypes {
+		scales[i] = -1
+		if m := scaleRe.FindStringSubmatch(ct.DatabaseTypeName()); m != nil {
+			scales[i], _ = strconv.Atoi(m[1])
+		}
+	}
 	// Statements like DELETE have no result columns: nothing to print.
 	if len(cols) == 0 {
 		return nil, rows.Err()
@@ -278,13 +414,15 @@ func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHe
 
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
+	// Repeated names get _1, _2 in both formats, so they agree.
+	names := dedupe(cols)
 	keys := make([]string, len(cols))
 	if jsonOut {
-		for i, k := range dedupe(cols) {
+		for i, k := range names {
 			keys[i] = jsonString(k)
 		}
 	} else if !noHeader {
-		writeCSVRow(w, &buf, cols)
+		writeCSVRow(w, &buf, names)
 	}
 
 	vals := make([]any, len(cols))
@@ -307,13 +445,13 @@ func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHe
 				}
 				buf.WriteString(keys[i])
 				buf.WriteByte(':')
-				buf.WriteString(jsonValue(v))
+				buf.WriteString(jsonValue(v, scales[i]))
 			}
 			buf.WriteString("}\n")
 			continue
 		}
 		for i, v := range vals {
-			cells[i] = csvValue(v)
+			cells[i] = csvValue(v, scales[i])
 		}
 		writeCSVRow(w, &buf, cells)
 	}
@@ -338,14 +476,23 @@ func writeCSVRow(w *csv.Writer, buf *bytes.Buffer, rec []string) {
 	w.Flush()
 }
 
-func csvValue(v any) string {
+// formatFloat prints x with scale decimals, or as short as it round-trips
+// when scale is -1.
+func formatFloat(x float64, scale int) string {
+	if scale >= 0 {
+		return strconv.FormatFloat(x, 'f', scale, 64)
+	}
+	return strconv.FormatFloat(x, 'g', -1, 64)
+}
+
+func csvValue(v any, scale int) string {
 	switch x := v.(type) {
 	case nil:
 		return ""
 	case int64:
 		return strconv.FormatInt(x, 10)
 	case float64:
-		return strconv.FormatFloat(x, 'g', -1, 64)
+		return formatFloat(x, scale)
 	case string:
 		return x
 	case []byte:
@@ -355,7 +502,7 @@ func csvValue(v any) string {
 	}
 }
 
-func jsonValue(v any) string {
+func jsonValue(v any, scale int) string {
 	switch x := v.(type) {
 	case nil:
 		return "null"
@@ -365,9 +512,9 @@ func jsonValue(v any) string {
 		if math.IsInf(x, 0) || math.IsNaN(x) {
 			return "null"
 		}
-		return strconv.FormatFloat(x, 'g', -1, 64)
+		return formatFloat(x, scale)
 	default:
-		return jsonString(csvValue(x))
+		return jsonString(csvValue(x, -1))
 	}
 }
 
@@ -416,36 +563,69 @@ func dedupe(names []string) []string {
 }
 
 // inferType picks a SQLite column type from a column's values. Empty values
-// are ignored; an all-empty column is TEXT. Leading zeros, exponents and
-// integers past int64 stay TEXT so nothing is silently changed.
-func inferType(vals []string) string {
-	isInt, isReal, seen := true, true, false
-	for _, v := range vals {
-		if v == "" {
+// and NULL markers are ignored; a column with no numbers is TEXT. Leading
+// zeros, exponents and integers past int64 make it TEXT so nothing is
+// silently changed. Decimals that all have n places give REAL(n).
+//
+// junk is the index of the first value that pushed a mostly-numeric column to
+// TEXT, worth a warning, or -1.
+func inferType(vals []string) (typ string, junk int) {
+	nums, others, junk := 0, 0, -1
+	isInt, scale := true, -2 // scale -2: nothing seen yet, -1: mixed
+	for i, v := range vals {
+		if v == "" || nullMarkers[strings.ToLower(v)] {
 			continue
 		}
-		seen = true
-		if intRe.MatchString(v) {
-			if _, err := strconv.ParseInt(v, 10, 64); err == nil {
-				continue
+		places := 0
+		switch {
+		case intRe.MatchString(v) && fitsInt64(v):
+		case realRe.MatchString(v):
+			isInt = false
+			places = len(v) - strings.IndexByte(v, '.') - 1
+		default:
+			others++
+			if junk < 0 && !looseNumRe.MatchString(v) {
+				junk = i
 			}
+			continue
 		}
-		isInt = false
-		if !realRe.MatchString(v) {
-			isReal = false
-			break
+		nums++
+		if scale == -2 {
+			scale = places
+		} else if scale != places {
+			scale = -1
 		}
 	}
 	switch {
-	case !seen:
-		return "TEXT"
+	case others > 0 || nums == 0:
+		if nums <= others {
+			junk = -1
+		}
+		return "TEXT", junk
 	case isInt:
-		return "INTEGER"
-	case isReal:
-		return "REAL"
+		return "INTEGER", -1
+	case scale > 0:
+		return "REAL(" + strconv.Itoa(scale) + ")", -1
 	default:
-		return "TEXT"
+		return "REAL", -1
 	}
+}
+
+func fitsInt64(v string) bool {
+	_, err := strconv.ParseInt(v, 10, 64)
+	return err == nil
+}
+
+// parseDelimiter accepts one character, or \t or "tab" for a tab.
+func parseDelimiter(s string) (rune, bool) {
+	if s == `\t` || strings.EqualFold(s, "tab") {
+		return '\t', true
+	}
+	r := []rune(s)
+	if len(r) != 1 || r[0] == '"' || r[0] == '\n' || r[0] == '\r' || r[0] == utf8.RuneError {
+		return 0, false
+	}
+	return r[0], true
 }
 
 // Flags returns flag metadata for schema generation.
@@ -455,6 +635,7 @@ func Flags() *pflag.FlagSet {
 	fs.SetOutput(io.Discard)
 	fs.String("query", "", "SQL query; every positional argument is then a CSV file")
 	fs.Bool("no-header", false, "omit the header row from CSV output")
+	fs.StringP("delimiter", "d", "", `input field separator, one character or \t (default "," or tab for .tsv)`)
 	fs.BoolP("json", "j", false, `one JSON object per row, then {"_vrk":"sql","count":N}`)
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs
@@ -462,14 +643,17 @@ func Flags() *pflag.FlagSet {
 
 func printUsage(fs *pflag.FlagSet) int {
 	lines := []string{
-		"usage: vrk sql [flags] 'SELECT ...' [file.csv ...]",
+		"usage: vrk sql [flags] 'SELECT ...' [file.csv | name=file.csv | - ...]",
 		"       vrk sql --query 'SELECT ...' file.csv ...",
 		"       cat file.csv | vrk sql 'SELECT * FROM stdin'",
 		"",
 		"SQL over CSV files, in an in-memory SQLite database. Each file is a table",
-		"named after its basename (users.csv -> users); piped CSV is the table stdin.",
+		"named after its basename (users.csv -> users), or name=file.csv names it.",
+		"- is stdin, as the table stdin (or name=-). Without -, piped CSV is read",
+		"when the query mentions stdin. .tsv files are tab-separated.",
 		"The first row is the header. Column types are inferred: INTEGER or REAL when",
-		"every non-empty value is a number, TEXT otherwise (so 007 stays 007).",
+		"every non-empty value is a number (N/A, null, - load as NULL), TEXT otherwise",
+		"(so 007 stays 007). Empty cells are NULL.",
 		"Output is CSV with a header row, or JSONL with --json.",
 		"",
 		"flags:",

@@ -2463,7 +2463,7 @@ Input: a file path as the positional argument, or PDF bytes on stdin. Empty stdi
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--pages` | `-p` | Page range: `N`, `N-M`, or `N-` (to the end). 1-indexed |
+| `--pages` | `-p` | Pages: `N`, `N-M`, `N-` (to the end), or a comma list like `1,3,5-7`. 1-indexed |
 | `--json` | `-j` | One `{"page":N,"text":"..."}` per page, then `{"_vrk":"pdf","count":N}` |
 | `--quiet` | `-q` | Suppress stderr output |
 
@@ -2497,6 +2497,9 @@ vrk pdf --pages 3 report.pdf
 vrk pdf --pages 2-5 report.pdf
 vrk pdf -p 4- report.pdf
 
+# A list: pages come out in the order given, repeats dropped
+vrk pdf --pages 1,3,5-7 report.pdf
+
 # One JSONL record per page
 vrk pdf --json report.pdf
 
@@ -2528,9 +2531,10 @@ vrk pdf scan.pdf | vrk prompt --system 'Summarise.' || echo "no text layer, need
 ### Gotchas
 
 - **The argument is a path, not content** - unlike most vrk tools, `vrk pdf 'text'` opens a file called `text`. Pipe bytes on stdin or pass a path.
-- **Text layer only, no OCR** - scanned PDFs (images of pages) exit 1 with `pdf: no extractable text found; document may be scanned (OCR required)`.
-- **No layout reconstruction** - text comes out in content-stream order. Multi-column layouts and tables may interleave.
-- **PDF 2.0 is rejected** - the underlying reader handles PDF 1.0 to 1.7. A `%PDF-2.0` header exits 1 with `pdf: not a valid PDF: ...`.
+- **Text layer only, no OCR** - scanned PDFs (images of pages) exit 1 with `pdf: no extractable text found; document may be scanned (OCR required)`. If only the pages you picked with `--pages` are blank, the message is `pdf: no extractable text on the selected pages`.
+- **Spacing is rebuilt from glyph positions** - word gaps written as kerning (LaTeX, arXiv) become spaces, and baseline jumps become newlines. Text still comes out in content-stream order, so multi-column layouts may interleave. Math can lose its spacing.
+- **Text in form XObjects is skipped** - some generators wrap page content in a `Do` form. That text does not come out.
+- **PDF 2.0 is rejected** - the underlying reader handles PDF 1.0 to 1.7. A `%PDF-2.0` header exits 1 with `pdf: PDF 2.0 is not supported (PDF 1.0 to 1.7 only)`.
 - **Encrypted PDFs exit 1** - there is no password flag. A PDF encrypted with an empty user password (owner-only restrictions) still opens.
 - **Ligatures may come out as U+FFFD** - fonts without a ToUnicode map for glyphs like "fi" or "ft" produce `�` where the ligature was.
 - **The `--json` trailer is a record too** - use `jq 'select(.page)'` to skip `{"_vrk":"pdf","count":N}`.
@@ -2542,9 +2546,9 @@ vrk pdf scan.pdf | vrk prompt --system 'Summarise.' || echo "no text layer, need
 
 ## sql - SQL over CSV
 
-Runs a SQL query over CSV files in an in-memory SQLite database. Each file is a table named after its basename (`users.csv` -> `users`). Piped CSV is the table `stdin`.
+Runs a SQL query over CSV files in an in-memory SQLite database. Each file is a table named after its basename (`users.csv` -> `users`), or `name=file.csv` names it. Piped CSV is the table `stdin`; `-` reads it explicitly and `name=-` names it.
 Output is CSV with a header row by default. With `--json`, one object per row, then `{"_vrk":"sql","count":N}`.
-Input: the query is the first positional argument (or `--query`), the rest are CSV file paths. Stdin is read only when the query mentions `stdin`.
+Input: the query is the first positional argument (or `--query`), the rest are CSV file paths, `name=path` pairs or `-`. Without `-`, stdin is read only when the query mentions `stdin`.
 
 ### Flags
 
@@ -2552,6 +2556,7 @@ Input: the query is the first positional argument (or `--query`), the rest are C
 |------|-------|-------------|
 | `--query` | | SQL query. Every positional argument is then a CSV file |
 | `--no-header` | | Leave the header row out of CSV output |
+| `--delimiter` | `-d` | Input field separator: one character, or `\t` / `tab`. Default `,`, or tab for `.tsv` files |
 | `--json` | `-j` | One JSON object per row (keys in column order), then `{"_vrk":"sql","count":N}` |
 | `--quiet` | `-q` | Suppress stderr output |
 
@@ -2560,10 +2565,11 @@ Input: the query is the first positional argument (or `--query`), the rest are C
 | Column values (empty cells ignored) | Type |
 |------|------|
 | All integers that fit in int64, no leading zeros | `INTEGER` |
-| Integers and decimals like `1.5` or `-0.25` | `REAL` |
+| Decimals that all have N places, like `19.90` and `5.00` | `REAL(N)` - prints with N decimals |
+| Other mixes of integers and decimals, like `1.5` and `2` | `REAL` |
 | Anything else, including `007`, `1e3`, `" 30"` or an all-empty column | `TEXT` |
 
-Empty cells in INTEGER and REAL columns are NULL. In TEXT columns they are empty strings.
+Empty cells are NULL in every column. In INTEGER and REAL columns, `N/A`, `NA`, `null`, `none`, `nan` and `-` (any case) are NULL too, and don't make the column TEXT. Other text in a mostly-numeric column makes it TEXT and prints a warning naming the column and row (not under `--json`).
 
 ### --json output shapes
 
@@ -2571,7 +2577,7 @@ Empty cells in INTEGER and REAL columns are NULL. In TEXT columns they are empty
 |-------|-------|
 | `--json` | `{"col":value,...}` per row + `{"_vrk":"sql","count":N}` |
 | Zero matching rows | trailer only, `count:0` |
-| Duplicate result column names | later ones get `_1`, `_2` (`id`, `id_1`) |
+| Duplicate result column names | later ones get `_1`, `_2` (`id`, `id_1`), same as the CSV header |
 | Any error + `--json` | `{"error":"msg","code":N}` on stdout; stderr empty |
 
 ### Exit codes
@@ -2579,8 +2585,8 @@ Empty cells in INTEGER and REAL columns are NULL. In TEXT columns they are empty
 | Code | Meaning |
 |------|---------|
 | 0 | Success, including empty stdin when the query reads `stdin` |
-| 1 | SQL error (syntax, no such table or column, runtime), file not found, CSV parse error, empty file |
-| 2 | Usage error - no query, a table but no files given, duplicate table name, `stdin` in the query with nothing piped, unknown flag |
+| 1 | SQL error (syntax, no such table or column, runtime), file not found, CSV parse error, empty file, gzip file |
+| 2 | Usage error - no query, a table but no files given, duplicate or invalid table name, `-` or `stdin` with nothing piped, bad `--delimiter`, unknown flag |
 
 ### Examples
 
@@ -2593,6 +2599,14 @@ vrk sql 'SELECT u.name, sum(o.total) AS spent FROM users u JOIN orders o ON o.us
 
 # Query piped CSV as the table stdin
 cat users.csv | vrk sql 'SELECT city, count(*) AS n FROM stdin GROUP BY city'
+
+# Name a table, or read stdin explicitly with -
+vrk sql 'SELECT * FROM sales WHERE total > 100' sales=2024-sales.csv
+cat orders.csv | vrk sql 'SELECT u.name FROM o JOIN users u ON u.id = o.user_id' o=- users.csv
+
+# TSV files work as-is; other separators need -d
+vrk sql 'SELECT * FROM data' data.tsv
+vrk sql -d ';' 'SELECT * FROM export' export.csv
 
 # JSONL out
 vrk sql --json 'SELECT * FROM users' users.csv
@@ -2618,15 +2632,18 @@ vrk sql --no-header 'SELECT body FROM tickets' tickets.csv | vrk tok
 
 ### Gotchas
 
-- **Table names come from file names** - characters outside `[A-Za-z0-9_]` become `_`, so `sales-2024.csv` is `sales_2024`. Two files with the same name (case-insensitive) exit 2.
+- **Table names come from file names** - characters outside `[A-Za-z0-9_]` become `_`, so `sales-2024.csv` is `sales_2024`. A name starting with a digit (`2024-sales.csv`, or `/dev/fd/63` from `<(...)`) needs quotes in SQL; use `name=path` instead. Two tables with the same name (case-insensitive) exit 2. A wrong table name lists the loaded tables.
 - **Header names are cleaned the same way** - `first name` is `first_name`, an empty header is `col_N` (1-indexed), and repeats get `_1`, `_2`. Quote reserved words: `SELECT "order" FROM t`.
-- **`stdin` is found by word match** - any `stdin` in the query, even inside a string literal, makes `vrk sql` read stdin. A file called `stdin.csv` clashes with it.
+- **`stdin` is found by word match** - any `stdin` in the query, even inside a string literal, makes `vrk sql` read stdin when it is piped. Pass `-` to be explicit. Empty stdin drops the table: if the query needs it, the result is no output and exit 0, even for `count(*)`. A file called `stdin.csv` clashes with it.
 - **`007` stays text** - leading zeros keep a column TEXT, so ZIP codes and IDs aren't mangled. Cast if you want numbers: `CAST(zip AS INTEGER)`.
 - **No such table without files is exit 2** - `vrk sql 'SELECT * FROM t'` means you forgot the file. With files given it is exit 1 with SQLite's message.
 - **ATTACH and VACUUM INTO are blocked** - they exit 1 with `too many attached databases - max 0`, so a query can't read or write other files.
 - **Multiple statements run, last result is printed** - `CREATE TABLE x AS SELECT ...; SELECT * FROM x` works. Statements like `DELETE` print nothing.
-- **Ragged rows fail** - every row must have as many fields as the header. The error names the line.
-- **Whole files are held in memory** - fine for files up to a few hundred MB.
+- **Short rows are padded with NULL** - a row with more non-empty fields than the header exits 1 and names the line. Trailing empty fields (a trailing comma) are dropped. Stray quotes inside fields are kept as-is.
+- **N/A becomes NULL in number columns** - `SELECT *` prints it as an empty cell. In TEXT columns it stays `N/A`.
+- **Mixed decimal places lose trailing zeros** - a column with `1.50` and `2.125` is plain REAL, so `1.50` prints as `1.5`.
+- **Gzip files exit 1** - decompress first: `gunzip -c f.csv.gz | vrk sql 'SELECT ... FROM stdin' -`.
+- **Memory is about 15-20x the file size** - every row is parsed and loaded into SQLite in memory. A 14 MB CSV with 500k rows peaks around 240 MB.
 
 ---
 

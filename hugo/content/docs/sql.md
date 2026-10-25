@@ -19,7 +19,7 @@ Joining two CSVs or filtering one by a numeric column means a Python script, a p
 
 ## The solution
 
-`vrk sql` runs a SQL query over CSV files. Each file becomes a table named after its basename (`users.csv` is `users`), and piped CSV is the table `stdin`. Column types are inferred: INTEGER or REAL when every non-empty value is a number, TEXT otherwise, so `007` stays `007`. Output is CSV with a header row, or one JSON object per row with `--json`. ATTACH is blocked, so a query can't read or write other files.
+`vrk sql` runs a SQL query over CSV files. Each file becomes a table named after its basename (`users.csv` is `users`), or `name=file.csv` names it, and piped CSV is the table `stdin` (or `-`). Column types are inferred: INTEGER or REAL when every non-empty value is a number (`N/A` and friends load as NULL), TEXT otherwise, so `007` stays `007` and `19.90` stays `19.90`. TSV and other delimiters work with `.tsv` or `--delimiter`. Output is CSV with a header row, or one JSON object per row with `--json`. ATTACH is blocked, so a query can't read or write other files.
 
 ## Before and after
 
@@ -46,20 +46,21 @@ vrk sql --json 'SELECT * FROM users WHERE age > 25' users.csv | jq -c 'select(.i
 
 ## Exit codes
 
-| Code | Meaning                                                                                                      |
-|------|--------------------------------------------------------------------------------------------------------------|
-| 0    | Success, including empty stdin when the query reads stdin                                                    |
-| 1    | SQL error, file not found, CSV parse error, or empty file                                                    |
-| 2    | No query, a table but no files, duplicate table name, stdin in the query with nothing piped, or unknown flag |
+| Code | Meaning                                                                                                                     |
+|------|-----------------------------------------------------------------------------------------------------------------------------|
+| 0    | Success, including empty stdin when the query reads stdin                                                                   |
+| 1    | SQL error, file not found, CSV parse error, empty file, or gzip file                                                        |
+| 2    | No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, or unknown flag |
 
 ## Flags
 
-| Flag          | Short | Type   | Description                                             |
-|---------------|-------|--------|---------------------------------------------------------|
-| `--query`     |       | string | SQL query; every positional argument is then a CSV file |
-| `--no-header` |       | bool   | Leave the header row out of CSV output                  |
-| `--json`      | -j    | bool   | One JSON object per row, then a metadata trailer        |
-| `--quiet`     | -q    | bool   | Suppress stderr output                                  |
+| Flag          | Short | Type   | Description                                                            |
+|---------------|-------|--------|------------------------------------------------------------------------|
+| `--query`     |       | string | SQL query; every positional argument is then a CSV file                |
+| `--no-header` |       | bool   | Leave the header row out of CSV output                                 |
+| `--delimiter` | -d    | string | Input field separator, one character or \t (default , or tab for .tsv) |
+| `--json`      | -j    | bool   | One JSON object per row, then a metadata trailer                       |
+| `--quiet`     | -q    | bool   | Suppress stderr output                                                 |
 
 
 <!-- notes - edit in notes/sql.notes.md -->
@@ -106,7 +107,33 @@ Delhi,1
 Pune,2
 ```
 
-Stdin is only read when the query mentions `stdin`, so a file query inside a script never waits on an empty pipe.
+Stdin is only read when the query mentions `stdin`, so a file query inside a script never waits on an empty pipe. To be explicit, pass `-` as a file. `name=-` gives piped CSV its own table name.
+
+```bash
+$ cat users.csv | vrk sql 'SELECT count(*) AS n FROM people' people=-
+n
+3
+```
+
+### Naming tables (name=file.csv)
+
+`name=path` picks the table name. Use it for files whose names make awkward tables, like `2024-sales.csv` or process substitution (`<(...)`).
+
+```bash
+$ vrk sql 'SELECT name FROM u WHERE id = 2' u=users.csv
+name
+bo
+```
+
+### TSV and other delimiters
+
+Files ending in `.tsv` are read as tab-separated. For anything else, `--delimiter` (`-d`) takes one character, or `\t` for a tab.
+
+```bash
+$ printf 'a;b\n1;2\n' | vrk sql -d ';' 'SELECT b FROM stdin'
+b
+2
+```
 
 ### JSONL out (--json)
 
@@ -121,7 +148,27 @@ Keys keep the column order. Numbers stay numbers and NULL is `null`. The last re
 
 ## Type inference
 
-A column is INTEGER when every non-empty value is a whole number that fits in 64 bits, REAL when the values are whole numbers and decimals like `25.5`, and TEXT otherwise. Leading zeros keep a column TEXT, so ZIP codes and IDs like `007` come out unchanged. Empty cells in numeric columns are NULL.
+A column is INTEGER when every non-empty value is a whole number that fits in 64 bits, REAL when the values are whole numbers and decimals like `25.5`, and TEXT otherwise. Leading zeros keep a column TEXT, so ZIP codes and IDs like `007` come out unchanged. Empty cells are NULL.
+
+`N/A`, `NA`, `null`, `none`, `nan` and `-` don't count against a number column. They load as NULL, so one missing value doesn't turn `qty > 3` into a string comparison:
+
+```bash
+$ printf 'sku,qty\na,5\nb,N/A\nc,12\n' | vrk sql 'SELECT sku FROM stdin WHERE qty > 3'
+sku
+a
+c
+```
+
+Any other text in a mostly-numeric column makes it TEXT, with a warning on stderr that names the column and the row.
+
+Decimals keep their digits when every value in the column has the same number of places, so `19.90` prints as `19.90`, not `19.9`. Computed values like `sum(price)` print as short as they can.
+
+```bash
+$ printf 'sku,price\na,19.90\nb,5.00\n' | vrk sql 'SELECT price FROM stdin ORDER BY price'
+price
+5.00
+19.90
+```
 
 ## Pipeline integration
 
@@ -155,7 +202,7 @@ With files given, a wrong table name is SQLite's own error and exits 1:
 
 ```bash
 $ vrk sql 'SELECT * FROM user' users.csv
-error: sql: SQL logic error: no such table: user (1)
+error: sql: no such table: user (tables: users)
 $ echo $?
 1
 ```

@@ -4,7 +4,7 @@ meta_description: "Extract the text layer from a PDF. Plain text with form feeds
 meta_lead: "vrk pdf reads a PDF from a file path or stdin and writes its text layer to stdout, pages separated by form feeds or as one JSONL record per page."
 og_title: "vrk pdf - extract text from PDFs for AI pipelines"
 description: |
-  `vrk pdf` extracts the text layer of a PDF. Plain text by default, with a form feed (`\f`) between pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. `--pages` selects a range like `3`, `2-5` or `4-`. Scanned PDFs with no text layer exit 1 so a pipeline stops before sending empty text to a model.
+  `vrk pdf` extracts the text layer of a PDF. Plain text by default, with a form feed (`\f`) between pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. `--pages` selects pages like `3`, `2-5`, `4-` or `1,3,5-7`. Scanned PDFs with no text layer exit 1 so a pipeline stops before sending empty text to a model.
 problem: >
   Getting text out of a PDF usually means installing poppler for `pdftotext`
   or a Python package with its own dependencies. Neither tells you which page
@@ -16,13 +16,13 @@ before: |
   # no page numbers, scanned PDFs print nothing and exit 0
 after: "vrk pdf --json report.pdf"
 group: v1
-category: utilities
+category: pipeline
 example: "vrk pdf --pages 1-3 report.pdf | vrk tok"
 flags:
   - flag: --pages
     short: "-p"
     type: string
-    description: "Page range: N, N-M, or N- (1-indexed)"
+    description: "Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)"
   - flag: --json
     short: "-j"
     type: bool

@@ -306,11 +306,11 @@ echo 'hello world&foo=bar' | vrk pct --encode
 
 ## pdf - PDF text extractor - plain text or JSONL per page, --pages
 
-| Flag      | Short | Description                                  |
-|-----------|-------|----------------------------------------------|
-| `--pages` | -p    | Page range: N, N-M, or N- (1-indexed)        |
-| `--json`  | -j    | One record per page, then a metadata trailer |
-| `--quiet` | -q    | Suppress stderr output                       |
+| Flag      | Short | Description                                                |
+|-----------|-------|------------------------------------------------------------|
+| `--pages` | -p    | Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed) |
+| `--json`  | -j    | One record per page, then a metadata trailer               |
+| `--quiet` | -q    | Suppress stderr output                                     |
 
 Exit 0: Success, including empty stdin
 Exit 1: File not found, not a PDF, encrypted, corrupt, page out of range, or no extractable text
@@ -415,16 +415,17 @@ echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
 
 ## sql - SQL over CSV files - SQLite in memory, CSV or JSONL out
 
-| Flag          | Short | Description                                             |
-|---------------|-------|---------------------------------------------------------|
-| `--query`     |       | SQL query; every positional argument is then a CSV file |
-| `--no-header` |       | Leave the header row out of CSV output                  |
-| `--json`      | -j    | One JSON object per row, then a metadata trailer        |
-| `--quiet`     | -q    | Suppress stderr output                                  |
+| Flag          | Short | Description                                                            |
+|---------------|-------|------------------------------------------------------------------------|
+| `--query`     |       | SQL query; every positional argument is then a CSV file                |
+| `--no-header` |       | Leave the header row out of CSV output                                 |
+| `--delimiter` | -d    | Input field separator, one character or \t (default , or tab for .tsv) |
+| `--json`      | -j    | One JSON object per row, then a metadata trailer                       |
+| `--quiet`     | -q    | Suppress stderr output                                                 |
 
 Exit 0: Success, including empty stdin when the query reads stdin
-Exit 1: SQL error, file not found, CSV parse error, or empty file
-Exit 2: No query, a table but no files, duplicate table name, stdin in the query with nothing piped, or unknown flag
+Exit 1: SQL error, file not found, CSV parse error, empty file, or gzip file
+Exit 2: No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, or unknown flag
 
 ```bash
 vrk sql --json 'SELECT * FROM users WHERE age > 25' users.csv | jq -c 'select(.id)'

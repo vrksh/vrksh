@@ -3,8 +3,9 @@
 // pages joined by form feeds, or one JSONL record per page with --json.
 //
 // Text layer only. No OCR, so scanned PDFs exit 1. No layout reconstruction:
-// text comes out in content-stream order. The underlying library
-// (github.com/ledongthuc/pdf) reads PDF 1.0-1.7 and rejects 2.0 headers.
+// text comes out in content-stream order, with spaces and line breaks rebuilt
+// from glyph positions. The underlying library (github.com/ledongthuc/pdf)
+// reads PDF 1.0-1.7; 2.0 files exit 1.
 package pdf
 
 import (
@@ -51,7 +52,7 @@ func init() {
 		Name:  "pdf",
 		Short: "PDF text extractor - plain text or JSONL per page, --pages",
 		Flags: []shared.FlagMeta{
-			{Name: "pages", Shorthand: "p", Usage: "page range: N, N-M, or N- (1-indexed)"},
+			{Name: "pages", Shorthand: "p", Usage: "pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)"},
 			{Name: "json", Shorthand: "j", Usage: `one {"page":N,"text":"..."} per page, then {"_vrk":"pdf","count":N}`},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
@@ -65,7 +66,7 @@ func Run() int {
 
 	var pagesFlag string
 	var jsonFlag, quietFlag bool
-	fs.StringVarP(&pagesFlag, "pages", "p", "", "page range: N, N-M, or N- (1-indexed)")
+	fs.StringVarP(&pagesFlag, "pages", "p", "", "pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `one {"page":N,"text":"..."} per page, then {"_vrk":"pdf","count":N}`)
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
@@ -90,10 +91,10 @@ func Run() int {
 		return shared.Errorf("%s", msg)
 	}
 
-	pr := pageRange{start: 1}
+	ranges := []pageRange{{start: 1}}
 	if fs.Changed("pages") {
 		var ok bool
-		if pr, ok = parsePages(pagesFlag); !ok {
+		if ranges, ok = parsePages(pagesFlag); !ok {
 			return fail(2, "pdf: invalid page range: %s", pagesFlag)
 		}
 	}
@@ -131,21 +132,20 @@ func Run() int {
 		}
 	}
 
+	if bytes.HasPrefix(data, []byte("%PDF-2.")) {
+		return fail(1, "pdf: PDF 2.0 is not supported (PDF 1.0 to 1.7 only)")
+	}
 	r, n, err := open(data)
 	if err != nil {
 		return fail(1, "%s", errMessage(err))
 	}
 
-	if pr.end == 0 {
-		pr.end = n
-	}
-	for _, p := range []int{pr.start, pr.end} {
-		if p > n {
-			return fail(1, "pdf: page %d does not exist (PDF has %d pages)", p, n)
-		}
+	pages, bad := selectPages(ranges, n)
+	if bad > 0 {
+		return fail(1, "pdf: page %d does not exist (PDF has %d pages)", bad, n)
 	}
 
-	texts, err := extract(r, pr)
+	texts, err := extract(r, pages)
 	if err != nil {
 		return fail(1, "pdf: %v", err)
 	}
@@ -158,14 +158,18 @@ func Run() int {
 		}
 	}
 	if !hasText {
+		if len(pages) < n {
+			return fail(1, "pdf: no extractable text on the selected pages")
+		}
 		return fail(1, "pdf: no extractable text found; document may be scanned (OCR required)")
 	}
 
 	w := bufio.NewWriter(os.Stdout)
 	if jsonFlag {
 		enc := json.NewEncoder(w)
+		enc.SetEscapeHTML(false)
 		for i, t := range texts {
-			if err := enc.Encode(pageRecord{Page: pr.start + i, Text: t}); err != nil {
+			if err := enc.Encode(pageRecord{Page: pages[i], Text: t}); err != nil {
 				return fail(1, "pdf: writing output: %v", err)
 			}
 		}
@@ -192,8 +196,21 @@ func Run() int {
 	return 0
 }
 
-// parsePages accepts "N", "N-M" and "N-" with N >= 1 and M >= N.
-func parsePages(s string) (pageRange, bool) {
+// parsePages accepts a comma-separated list of "N", "N-M" and "N-", with
+// N >= 1 and M >= N.
+func parsePages(s string) ([]pageRange, bool) {
+	var out []pageRange
+	for _, part := range strings.Split(s, ",") {
+		pr, ok := parseRange(part)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, pr)
+	}
+	return out, true
+}
+
+func parseRange(s string) (pageRange, bool) {
 	s = strings.TrimSpace(s)
 	startStr, endStr, hasDash := strings.Cut(s, "-")
 	start, ok := pageNum(startStr)
@@ -223,6 +240,29 @@ func pageNum(s string) (int, bool) {
 	return n, err == nil && n >= 1
 }
 
+// selectPages expands ranges against an n-page PDF into page numbers, in the
+// order given and without repeats. bad is the first page past the end, or 0.
+func selectPages(ranges []pageRange, n int) (pages []int, bad int) {
+	seen := map[int]bool{}
+	for _, pr := range ranges {
+		if pr.end == 0 {
+			pr.end = n
+		}
+		for _, p := range []int{pr.start, pr.end} {
+			if p > n {
+				return nil, p
+			}
+		}
+		for p := pr.start; p <= pr.end; p++ {
+			if !seen[p] {
+				seen[p] = true
+				pages = append(pages, p)
+			}
+		}
+	}
+	return pages, 0
+}
+
 // open parses a PDF held in memory and returns it with its page count.
 // The library panics on some malformed input; that comes back as an error.
 func open(data []byte) (r *lpdf.Reader, n int, err error) {
@@ -238,26 +278,20 @@ func open(data []byte) (r *lpdf.Reader, n int, err error) {
 	return r, r.NumPage(), nil
 }
 
-// extract returns the text of each page in pr, with leading and trailing
-// newlines trimmed. pr.end must already be resolved (non-zero).
-func extract(r *lpdf.Reader, pr pageRange) (texts []string, err error) {
+// extract returns the text of each page, with leading and trailing newlines
+// trimmed.
+func extract(r *lpdf.Reader, pages []int) (texts []string, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			texts, err = nil, fmt.Errorf("corrupt PDF: %v", p)
 		}
 	}()
-	for i := pr.start; i <= pr.end; i++ {
+	for _, i := range pages {
 		page, ok := pageAt(r, i)
 		if !ok {
 			return nil, fmt.Errorf("corrupt PDF: page %d missing from page tree", i)
 		}
-		// nil fonts: each page builds its own cache, since resource names
-		// like /F1 can point at different fonts on different pages.
-		t, err := page.GetPlainText(nil)
-		if err != nil {
-			return nil, fmt.Errorf("page %d: %v", i, err)
-		}
-		texts = append(texts, strings.Trim(t, "\r\n"))
+		texts = append(texts, strings.Trim(layout(glyphs(page)), "\r\n"))
 	}
 	return texts, nil
 }
@@ -312,7 +346,7 @@ func errMessage(err error) string {
 func Flags() *pflag.FlagSet {
 	fs := pflag.NewFlagSet("pdf", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.StringP("pages", "p", "", "page range: N, N-M, or N- (1-indexed)")
+	fs.StringP("pages", "p", "", "pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)")
 	fs.BoolP("json", "j", false, `one {"page":N,"text":"..."} per page, then {"_vrk":"pdf","count":N}`)
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs

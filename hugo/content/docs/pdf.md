@@ -19,7 +19,7 @@ Getting text out of a PDF usually means installing poppler for `pdftotext` or a 
 
 ## The solution
 
-`vrk pdf` extracts the text layer of a PDF. Plain text by default, with a form feed (`\f`) between pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. `--pages` selects a range like `3`, `2-5` or `4-`. Scanned PDFs with no text layer exit 1 so a pipeline stops before sending empty text to a model.
+`vrk pdf` extracts the text layer of a PDF. Plain text by default, with a form feed (`\f`) between pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. `--pages` selects pages like `3`, `2-5`, `4-` or `1,3,5-7`. Scanned PDFs with no text layer exit 1 so a pipeline stops before sending empty text to a model.
 
 ## Before and after
 
@@ -53,11 +53,11 @@ vrk pdf --pages 1-3 report.pdf | vrk tok
 
 ## Flags
 
-| Flag      | Short | Type   | Description                                  |
-|-----------|-------|--------|----------------------------------------------|
-| `--pages` | -p    | string | Page range: N, N-M, or N- (1-indexed)        |
-| `--json`  | -j    | bool   | One record per page, then a metadata trailer |
-| `--quiet` | -q    | bool   | Suppress stderr output                       |
+| Flag      | Short | Type   | Description                                                |
+|-----------|-------|--------|------------------------------------------------------------|
+| `--pages` | -p    | string | Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed) |
+| `--json`  | -j    | bool   | One record per page, then a metadata trailer               |
+| `--quiet` | -q    | bool   | Suppress stderr output                                     |
 
 
 <!-- notes - edit in notes/pdf.notes.md -->
@@ -96,10 +96,18 @@ Page numbers are the real ones, so `--json --pages 2-3` gives records for pages 
 
 `--pages 3` is one page, `--pages 2-5` is a range, and `--pages 4-` runs to the last page. Pages are 1-indexed.
 
+A comma list mixes them: `--pages 1,3,5-7`. Pages come out in the order you list them, and a page listed twice comes out once.
+
 ```bash
 $ vrk pdf --pages 2- report.pdf | tr '\f' '-'
 Revenue grew in every region.
 -Outlook for next year.
+```
+
+```bash
+$ vrk pdf --pages 3,1 report.pdf | tr '\f' '-'
+Outlook for next year.
+-Quarterly report, page one.
 ```
 
 ## Pipeline integration

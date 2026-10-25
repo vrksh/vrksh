@@ -32,10 +32,18 @@ Page numbers are the real ones, so `--json --pages 2-3` gives records for pages 
 
 `--pages 3` is one page, `--pages 2-5` is a range, and `--pages 4-` runs to the last page. Pages are 1-indexed.
 
+A comma list mixes them: `--pages 1,3,5-7`. Pages come out in the order you list them, and a page listed twice comes out once.
+
 ```bash
 $ vrk pdf --pages 2- report.pdf | tr '\f' '-'
 Revenue grew in every region.
 -Outlook for next year.
+```
+
+```bash
+$ vrk pdf --pages 3,1 report.pdf | tr '\f' '-'
+Outlook for next year.
+-Quarterly report, page one.
 ```
 
 ## Pipeline integration

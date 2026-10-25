@@ -147,25 +147,32 @@ func TestInferType(t *testing.T) {
 	cases := []struct {
 		vals []string
 		want string
+		junk int
 	}{
-		{[]string{"1", "2", "-3"}, "INTEGER"},
-		{[]string{"0", "-0"}, "INTEGER"},
-		{[]string{"1.5", "2"}, "REAL"},
-		{[]string{"-0.25"}, "REAL"},
-		{[]string{"007", "8"}, "TEXT"},
-		{[]string{"007.5"}, "TEXT"},
-		{[]string{"1e3"}, "TEXT"},
-		{[]string{"1", "", "3"}, "INTEGER"},
-		{[]string{"", ""}, "TEXT"},
-		{[]string{}, "TEXT"},
-		{[]string{"99999999999999999999"}, "TEXT"},
-		{[]string{"1.5", "99999999999999999999"}, "TEXT"},
-		{[]string{" 30"}, "TEXT"},
-		{[]string{"1.", ".5"}, "TEXT"},
+		{[]string{"1", "2", "-3"}, "INTEGER", -1},
+		{[]string{"0", "-0"}, "INTEGER", -1},
+		{[]string{"1.5", "2"}, "REAL", -1},
+		{[]string{"1.5", "2.25"}, "REAL", -1},
+		{[]string{"-0.25"}, "REAL(2)", -1},
+		{[]string{"19.90", "5.00", ""}, "REAL(2)", -1},
+		{[]string{"007", "8"}, "TEXT", -1},
+		{[]string{"007.5"}, "TEXT", -1},
+		{[]string{"1e3"}, "TEXT", -1},
+		{[]string{"1", "", "3"}, "INTEGER", -1},
+		{[]string{"", ""}, "TEXT", -1},
+		{[]string{}, "TEXT", -1},
+		{[]string{"99999999999999999999"}, "TEXT", -1},
+		{[]string{"1.5", "99999999999999999999"}, "TEXT", -1},
+		{[]string{" 30"}, "TEXT", -1},
+		{[]string{"1.", ".5"}, "TEXT", -1},
+		{[]string{"5", "N/A", "2", "null", "-", "NA", "none"}, "INTEGER", -1},
+		{[]string{"n/a", "-"}, "TEXT", -1},
+		{[]string{"5", "abc", "7"}, "TEXT", 1},
+		{[]string{"abc", "def", "5"}, "TEXT", -1},
 	}
 	for _, c := range cases {
-		if got := inferType(c.vals); got != c.want {
-			t.Errorf("inferType(%q) = %s, want %s", c.vals, got, c.want)
+		if got, junk := inferType(c.vals); got != c.want || junk != c.junk {
+			t.Errorf("inferType(%q) = %s, %d, want %s, %d", c.vals, got, junk, c.want, c.junk)
 		}
 	}
 }
@@ -329,9 +336,9 @@ func TestJSONDuplicateColumns(t *testing.T) {
 	if code != 0 || !strings.HasPrefix(out, "{\"id\":2,\"id_1\":2,\"ID_2\":\"bo\"}\n") {
 		t.Errorf("exit %d stdout %q", code, out)
 	}
-	// The CSV header keeps the names unchanged.
+	// The CSV header uses the same names, so both outputs agree.
 	out, _, _ = runSql(t, []string{"SELECT id, id FROM users WHERE id = 2", f}, "")
-	if out != "id,id\n2,2\n" {
+	if out != "id,id_1\n2,2\n" {
 		t.Errorf("csv stdout %q", out)
 	}
 }
@@ -542,6 +549,7 @@ func errorCases(t *testing.T) []struct {
 	a := writeCSV(t, dir, "a/data.csv", "x\n1\n")
 	b := writeCSV(t, dir, "b/data.csv", "x\n1\n")
 	missing := filepath.Join(dir, "nope.csv")
+	gz := writeCSV(t, dir, "p.csv.gz", "\x1f\x8b\x08\x00junk")
 	return []struct {
 		name   string
 		args   []string
@@ -551,10 +559,13 @@ func errorCases(t *testing.T) []struct {
 	}{
 		{"syntax error", []string{"SELEC 1"}, "", 1, `near "SELEC": syntax error`},
 		{"missing file", []string{"SELECT 1", missing}, "", 1, "sql: file not found: " + missing},
-		{"ragged csv", []string{"SELECT * FROM ragged", ragged}, "", 1, "sql: CSV parse error in " + ragged + ": record on line 3"},
-		{"ragged stdin", []string{"SELECT * FROM stdin"}, "a,b\n1\n", 1, "sql: CSV parse error in stdin: record on line 2"},
+		{"long row", []string{"SELECT * FROM ragged", ragged}, "", 1, "sql: CSV parse error in " + ragged + ": line 3: 3 fields, header has 2"},
+		{"long row on stdin", []string{"SELECT * FROM stdin"}, "a,b\n1,2,3\n", 1, "sql: CSV parse error in stdin: line 2: 3 fields, header has 2"},
+		{"gzip file", []string{"SELECT * FROM p", gz}, "", 1, "sql: " + gz + " is gzip-compressed"},
+		{"bad table name", []string{"SELECT 1", "2x=" + users}, "", 2, "sql: invalid table name: 2x"},
+		{"bad delimiter", []string{"--delimiter", "ab", "SELECT 1"}, "", 2, "sql: --delimiter must be one character"},
 		{"empty file", []string{"SELECT * FROM empty", empty}, "", 1, "sql: CSV parse error in " + empty + ": empty file, no header row"},
-		{"no such table with files", []string{"SELECT * FROM t", users}, "", 1, "no such table: t"},
+		{"no such table with files", []string{"SELECT * FROM t", users}, "", 1, "no such table: t (tables: users)"},
 		{"overflow mid-query", []string{"SELECT CASE WHEN id = 2 THEN abs(-9223372036854775808) ELSE id END FROM users", users}, "", 1, "integer overflow"},
 		{"no such table, no files", []string{"SELECT * FROM t"}, "", 2, "sql: no input files"},
 		{"duplicate table", []string{"SELECT 1", a, b}, "", 2, "sql: duplicate table name: data"},
@@ -707,4 +718,144 @@ func parseCSV(t *testing.T, s string) [][]string {
 		t.Fatalf("output is not CSV: %v\n%s", err, s)
 	}
 	return recs
+}
+
+// TestNullMarkersInNumericColumn: N/A and friends load as NULL, so the column
+// stays numeric and qty > 3 compares numbers, not strings.
+func TestNullMarkersInNumericColumn(t *testing.T) {
+	f := writeCSV(t, t.TempDir(), "inv.csv", "sku,qty\na,5\nb,N/A\nc,12\nd,2\ne,\n")
+	out, errOut, code := runSql(t, []string{"SELECT sku FROM inv WHERE qty > 3 ORDER BY sku", f}, "")
+	if code != 0 || out != "sku\na\nc\n" || errOut != "" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, _, _ = runSql(t, []string{"SELECT count(*) AS n FROM inv WHERE qty IS NULL", f}, "")
+	if out != "n\n2\n" {
+		t.Errorf("null count stdout %q", out)
+	}
+}
+
+func TestJunkInNumericColumnWarns(t *testing.T) {
+	f := writeCSV(t, t.TempDir(), "inv.csv", "sku,qty\na,5\nb,lots\nc,12\n")
+	out, errOut, code := runSql(t, []string{"SELECT sku, typeof(qty) AS t FROM inv WHERE sku = 'a'", f}, "")
+	if code != 0 || out != "sku,t\na,text\n" {
+		t.Errorf("exit %d stdout %q", code, out)
+	}
+	if !strings.Contains(errOut, `column qty is TEXT: row 2 has "lots"`) {
+		t.Errorf("stderr = %q, want a warning naming the column and value", errOut)
+	}
+	// --json keeps stderr empty.
+	_, errOut, _ = runSql(t, []string{"--json", "SELECT 1", f}, "")
+	if errOut != "" {
+		t.Errorf("--json stderr = %q, want empty", errOut)
+	}
+}
+
+func TestDecimalsKeepTheirDigits(t *testing.T) {
+	f := writeCSV(t, t.TempDir(), "p.csv", "sku,price\na,19.90\nb,5.00\nc,0.10\n")
+	out, errOut, code := runSql(t, []string{"SELECT sku, price FROM p WHERE price > 1 ORDER BY price", f}, "")
+	if code != 0 || out != "sku,price\nb,5.00\na,19.90\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, _, _ = runSql(t, []string{"--json", "SELECT price, sum(price) AS total FROM p WHERE sku = 'a'", f}, "")
+	if !strings.HasPrefix(out, `{"price":19.90,"total":19.9}`) {
+		t.Errorf("--json stdout %q", out)
+	}
+	out, _, _ = runSql(t, []string{"SELECT price / 2 AS half FROM p WHERE sku = 'b'", f}, "")
+	if out != "half\n2.5\n" {
+		t.Errorf("arithmetic stdout %q", out)
+	}
+}
+
+func TestEmptyTextCellIsNull(t *testing.T) {
+	f := writeCSV(t, t.TempDir(), "u.csv", "id,name\n1,\n2,bo\n")
+	out, _, code := runSql(t, []string{"SELECT id FROM u WHERE name IS NULL", f}, "")
+	if code != 0 || out != "id\n1\n" {
+		t.Errorf("exit %d stdout %q", code, out)
+	}
+}
+
+// TestStdinWordInLiteral: "stdin" in a string literal must not stop the query
+// when stdin is empty or a terminal.
+func TestStdinWordInLiteral(t *testing.T) {
+	f := usersFile(t)
+	q := "SELECT name FROM users WHERE name <> 'stdin' AND id = 1"
+	out, errOut, code := runSql(t, []string{q, f}, "")
+	if code != 0 || out != "name\nana\n" {
+		t.Errorf("empty stdin: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+
+	orig := isTerminal
+	isTerminal = func(int) bool { return true }
+	t.Cleanup(func() { isTerminal = orig })
+	out, errOut, code = runSql(t, []string{q, f}, "")
+	if code != 0 || out != "name\nana\n" {
+		t.Errorf("tty: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestEmptyStdinWithFiles(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT * FROM stdin JOIN users USING (id)", usersFile(t)}, "")
+	if code != 0 || out != "" || errOut != "" {
+		t.Errorf("exit %d stdout %q stderr %q, want exit 0 and no output", code, out, errOut)
+	}
+}
+
+func TestDashIsStdin(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT name FROM stdin WHERE id = 2", "-"}, usersCSV)
+	if code != 0 || out != "name\nbo\n" {
+		t.Errorf("-: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, errOut, code = runSql(t, []string{"SELECT name FROM people WHERE id = 2", "people=-"}, usersCSV)
+	if code != 0 || out != "name\nbo\n" {
+		t.Errorf("people=-: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestNamedTable(t *testing.T) {
+	dir := t.TempDir()
+	f := writeCSV(t, dir, "2024-sales.csv", "x\n1\n")
+	out, errOut, code := runSql(t, []string{"SELECT x FROM sales", "sales=" + f}, "")
+	if code != 0 || out != "x\n1\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	// A real file whose name has = in it is still a file.
+	g := writeCSV(t, dir, "a=b.csv", "y\n2\n")
+	out, errOut, code = runSql(t, []string{"SELECT y FROM a_b", g}, "")
+	if code != 0 || out != "y\n2\n" {
+		t.Errorf("a=b.csv: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestLazyQuotes(t *testing.T) {
+	f := writeCSV(t, t.TempDir(), "q.csv", "id,note\n1,5\" screen\n2,ok\n")
+	out, errOut, code := runSql(t, []string{"SELECT note FROM q WHERE id = 1", f}, "")
+	if code != 0 || out != "note\n\"5\"\" screen\"\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestShortRowsPadded(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT a, b IS NULL AS gone FROM stdin", "-"}, "a,b\n1\n2,3\n")
+	if code != 0 || out != "a,gone\n1,1\n2,0\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestDelimiters(t *testing.T) {
+	dir := t.TempDir()
+	tsv := writeCSV(t, dir, "t.tsv", "a\tb\n1\tx,y\n")
+	out, errOut, code := runSql(t, []string{"SELECT b FROM t", tsv}, "")
+	if code != 0 || out != "b\n\"x,y\"\n" {
+		t.Errorf(".tsv: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	for _, d := range []string{`\t`, "\t", "tab"} {
+		out, errOut, code = runSql(t, []string{"-d", d, "SELECT b FROM stdin", "-"}, "a\tb\n1\t2\n")
+		if code != 0 || out != "b\n2\n" {
+			t.Errorf("-d %q: exit %d stdout %q stderr %q", d, code, out, errOut)
+		}
+	}
+	out, errOut, code = runSql(t, []string{"--delimiter", ";", "SELECT b FROM stdin", "-"}, "a;b\n1;2,5\n")
+	if code != 0 || out != "b\n\"2,5\"\n" {
+		t.Errorf("; : exit %d stdout %q stderr %q", code, out, errOut)
+	}
 }
