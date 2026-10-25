@@ -569,3 +569,90 @@ func TestHMACVerifyAlgoMismatch(t *testing.T) {
 		t.Errorf("stderr = %q", stderr)
 	}
 }
+
+// An empty expected MAC (a dropped signature header) must never pass.
+func TestHMACVerifyEmptyFailsClosed(t *testing.T) {
+	for _, v := range []string{"", "sha256:"} {
+		stdout, _, code := runDigest(t, []string{"--hmac", "--key", "k", "--verify", v}, "payload\n")
+		if code != 1 {
+			t.Errorf("--verify %q: exit %d, want 1", v, code)
+		}
+		if stdout != "" {
+			t.Errorf("--verify %q: stdout = %q, want empty", v, stdout)
+		}
+		stdout, stderr, code := runDigest(t, []string{"--hmac", "--key", "k", "--verify", v, "--json"}, "payload\n")
+		if code != 1 || stderr != "" || !strings.Contains(stdout, `"code":1`) {
+			t.Errorf("--verify %q --json: exit %d stdout %q stderr %q", v, code, stdout, stderr)
+		}
+	}
+}
+
+// An empty --verify without --hmac is still a usage error, not a silent hash.
+func TestVerifyEmptyWithoutHMAC(t *testing.T) {
+	_, _, code := runDigest(t, []string{"--verify", ""}, "hello\n")
+	if code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+}
+
+// --verify used to be dropped silently with --file; it is now a usage error.
+func TestVerifyWithFileRejected(t *testing.T) {
+	path := writeTempFile(t, "payload\n")
+	stdout, _, code := runDigest(t, []string{"--hmac", "--key", "k", "--verify", "sha256:deadbeef", "--file", path}, "")
+	if code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+}
+
+func TestHMACKeyEnvAndFile(t *testing.T) {
+	want, _, code := runDigest(t, []string{"--hmac", "-k", "s3cret"}, "payload\n")
+	if code != 0 {
+		t.Fatalf("-k: exit %d", code)
+	}
+
+	t.Setenv("DIGEST_TEST_SECRET", "s3cret")
+	got, _, code := runDigest(t, []string{"--hmac", "--key-env", "DIGEST_TEST_SECRET"}, "payload\n")
+	if code != 0 || got != want {
+		t.Errorf("--key-env: exit %d, got %q want %q", code, got, want)
+	}
+
+	// One trailing newline in the key file is dropped, like `echo s3cret > f`.
+	path := writeTempFile(t, "s3cret\n")
+	got, _, code = runDigest(t, []string{"--hmac", "--key-file", path}, "payload\n")
+	if code != 0 || got != want {
+		t.Errorf("--key-file: exit %d, got %q want %q", code, got, want)
+	}
+}
+
+func TestHMACKeySourceErrors(t *testing.T) {
+	path := writeTempFile(t, "s3cret")
+	t.Setenv("DIGEST_TEST_SECRET", "s3cret")
+	t.Setenv("DIGEST_TEST_EMPTY", "")
+	cases := []struct {
+		name string
+		args []string
+		code int
+	}{
+		{"key and key-env", []string{"--hmac", "-k", "a", "--key-env", "DIGEST_TEST_SECRET"}, 2},
+		{"key and key-file", []string{"--hmac", "-k", "a", "--key-file", path}, 2},
+		{"key-env and key-file", []string{"--hmac", "--key-env", "DIGEST_TEST_SECRET", "--key-file", path}, 2},
+		{"key-env unset", []string{"--hmac", "--key-env", "DIGEST_TEST_NOPE_UNSET"}, 2},
+		{"key-env empty", []string{"--hmac", "--key-env", "DIGEST_TEST_EMPTY"}, 2},
+		{"key-file missing", []string{"--hmac", "--key-file", path + ".missing"}, 1},
+	}
+	for _, tc := range cases {
+		stdout, stderr, code := runDigest(t, tc.args, "payload\n")
+		if code != tc.code {
+			t.Errorf("%s: exit %d, want %d (stderr %q)", tc.name, code, tc.code, stderr)
+		}
+		if stdout != "" {
+			t.Errorf("%s: stdout = %q, want empty", tc.name, stdout)
+		}
+		if strings.Contains(stderr, "s3cret") {
+			t.Errorf("%s: stderr leaks the key: %q", tc.name, stderr)
+		}
+	}
+}

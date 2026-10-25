@@ -1,7 +1,7 @@
 ---
 title: "vrk chunk"
-description: "Split text into token-aware chunks that fit LLM context windows. JSONL output, never splits a character."
-meta_lead: "vrk chunk splits text into token-counted pieces that fit within an LLM context window."
+description: "vrk chunk splits text into chunks that fit a token budget and writes each one as a JSONL record. It never splits inside a character."
+meta_lead: "vrk chunk splits text into token-counted pieces that fit in an LLM context window."
 og_title: "vrk chunk - token-aware text splitter for LLM context windows"
 tool: chunk
 group: v1
@@ -11,7 +11,7 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-vrk chunk splits text into token-counted pieces that fit within an LLM context window.
+vrk chunk splits text into token-counted pieces that fit in an LLM context window.
 
 ## The problem
 
@@ -19,7 +19,7 @@ A 38,000-token document needs to go through a model with an 8,192-token window. 
 
 ## The solution
 
-`vrk chunk` splits text into token-counted pieces that fit within an LLM context window. Each chunk is emitted as a JSONL record with its index, text, and exact token count. Configurable overlap preserves context at boundaries so entities that span a split point appear in both adjacent chunks.
+`vrk chunk` splits text into token-counted pieces that fit within an LLM context window. Each chunk is emitted as a JSONL record with its index, text, and exact token count. Use `--overlap` to repeat tokens at each boundary, so an entity that spans a split point appears in both adjacent chunks.
 
 ## Before and after
 
@@ -67,6 +67,8 @@ cat contract.pdf.txt | vrk chunk --size 4000 --overlap 200
 
 ## How the output works
 
+`vrk chunk` splits text into pieces that each fit a token limit, and prints one JSONL record (one JSON object per line) for each piece.
+
 Every record contains three fields:
 
 - `index` - zero-based chunk number, sequential
@@ -93,7 +95,7 @@ cat document.txt | vrk chunk --size 7000
 
 ### --overlap
 
-Repeats tokens from the end of each chunk at the start of the next one. This is how you prevent entities from being lost at boundaries.
+Repeats tokens from the end of each chunk at the start of the next one. This stops entities from being lost at chunk boundaries.
 
 Without overlap, a sentence that spans a chunk boundary gets split:
 
@@ -133,7 +135,7 @@ To stay on a boundary, a chunk ends a token or two early. In the rare case where
 
 ## Processing chunks through an LLM
 
-Use `vrk prompt --field text` to process each chunk. One API call per record, no loop needed:
+Use `vrk prompt --field text` to process each chunk. It makes one API call per record, so you need no loop:
 
 ```bash
 cat long-document.md | vrk chunk --size 4000 --overlap 200 | \

@@ -1,9 +1,9 @@
 ---
 title: "JWT-based key lookup"
 meta_title: "JWT-based key lookup - vrk pipeline recipe"
-description: "Ties storage to identity without custom parsing - the JWT carries the key, so the lookup stays stateless and auditable. Extract a claim from a JWT ..."
-why: "Ties storage to identity without custom parsing - the JWT carries the key, so the lookup stays stateless and auditable."
-body: "Extract a claim from a JWT and use it as a kv key."
+description: "The JWT carries the key, so the lookup needs no custom parsing and no extra state. Read the sub claim from a JWT and use it as a key to look up data ..."
+why: "The JWT carries the key, so the lookup needs no custom parsing and no extra state."
+body: "Read the sub claim from a JWT and use it as a key to look up data in kv."
 slug: "jwt-based-key-lookup"
 steps:
   - "SUB=$(vrk jwt --claim sub \"$TOKEN\")"
@@ -21,7 +21,7 @@ Your API receives a JWT. You need to look up user data based on the token's subj
 
 `vrk jwt --claim sub` decodes the JWT (without verification - this is for reading claims, not authentication) and prints the value of the `sub` claim. That value becomes the key for a `vrk kv get` lookup.
 
-No JSON parsing. No base64 decoding. No splitting on dots. One command extracts exactly the field you need.
+One command extracts the field you need. You do not parse JSON, decode base64, or split on dots.
 
 ## Variations
 

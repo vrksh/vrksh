@@ -179,6 +179,10 @@ assert_exit "invalid URL exits 1" 1 "$inv_exit"
 inv_stderr=$($VRK urlinfo 'not a url' 2>&1 >/dev/null || true)
 assert_contains "invalid URL: stderr message" "invalid URL" "$inv_stderr"
 
+# invalid URL with credentials: error hides them
+inv_stderr=$($VRK urlinfo 'http://u:s3cretPW@ho st/%zz' 2>&1 >/dev/null || true)
+assert_not_contains "invalid URL: password not echoed" "s3cretPW" "$inv_stderr"
+
 # ---------------------------------------------------------------------------
 # Scheme-relative URL — host non-empty → exit 0
 # ---------------------------------------------------------------------------

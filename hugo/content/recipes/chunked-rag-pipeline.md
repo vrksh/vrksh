@@ -1,9 +1,9 @@
 ---
 title: "Chunked RAG pipeline"
 meta_title: "Chunked RAG pipeline - vrk pipeline recipe"
-description: "Keeps every chunk within the embedding model's token limit - no silent truncation during indexing. Split a document into chunks and store each for ..."
-why: "Keeps every chunk within the embedding model's token limit - no silent truncation during indexing."
-body: "Split a document into chunks and store each for retrieval."
+description: "Each chunk stays within the token limit of the embedding model, so indexing does not truncate text silently. Split a document into token-sized chunks ..."
+why: "Each chunk stays within the token limit of the embedding model, so indexing does not truncate text silently."
+body: "Split a document into token-sized chunks and store each chunk in kv under a document ID."
 slug: "chunked-rag-pipeline"
 steps:
   - "DOC_ID=$(vrk uuid)"

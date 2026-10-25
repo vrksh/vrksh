@@ -1,5 +1,7 @@
 ## Input formats
 
+`vrk epoch` converts between Unix timestamps and ISO 8601 dates, and calculates relative times such as `+3d`.
+
 vrk epoch accepts four input forms:
 
 | Input | Example | Meaning |
@@ -9,7 +11,7 @@ vrk epoch accepts four input forms:
 | ISO datetime | `2025-02-20T10:00:00Z` | RFC 3339 |
 | Relative offset | `+3d`, `-1h` | From now (or from --at) |
 
-Integers with an absolute value from 100000000000 up to (not including) 100000000000000 are read as milliseconds (JavaScript `Date.now()`), so `vrk epoch --iso 1792042275000` prints `2026-10-15T05:31:15Z`. Ten-digit values stay seconds. With `--json`, millisecond input adds `"unit":"ms"`.
+epoch reads an integer as milliseconds (JavaScript `Date.now()`) if its absolute value is from 100000000000 up to, but not including, 100000000000000. So `vrk epoch --iso 1792042275000` prints `2026-10-15T05:31:15Z`. Ten-digit values stay seconds. With `--json`, millisecond input adds `"unit":"ms"`.
 
 Relative units: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks).
 

@@ -1,10 +1,10 @@
 name: recase
 tagline: naming convention converter - snake, camel, kebab, pascal, title
-meta_description: "Convert between naming conventions. snake_case, camelCase, kebab-case, PascalCase, and Title Case."
-meta_lead: "vrk recase converts between naming conventions - snake_case, camelCase, kebab-case, PascalCase, and more."
+meta_description: "vrk recase converts text between naming conventions: snake_case, camelCase, kebab-case, PascalCase, and Title Case. Pick one with --to."
+meta_lead: "vrk recase converts text between naming conventions such as snake_case, camelCase, kebab-case, and PascalCase."
 og_title: "vrk recase - convert between snake, camel, kebab, and more"
 description: |
-  `vrk recase` converts between naming conventions: snake_case, camelCase, PascalCase, kebab-case, SCREAMING_SNAKE, Title Case, and more. Auto-detects the input convention and handles acronyms correctly. Processes line by line for batch conversion.
+  `vrk recase` converts between naming conventions: snake_case, camelCase, PascalCase, kebab-case, SCREAMING_SNAKE, Title Case, and more. It detects the input convention and handles acronyms. It converts line by line, so you can convert a batch.
 problem: >
   Converting 200 field names from snake_case to camelCase takes 30 lines of Python
   to handle edge cases: leading underscores, consecutive capitals, numeric suffixes.

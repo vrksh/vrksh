@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
@@ -17,6 +18,12 @@ import (
 
 // isTerminal is a var so tests can override TTY detection without a real fd.
 var isTerminal = shared.IsTerminal
+
+// stripMarkdown and plainTimeout are vars so tests can force a timeout.
+var (
+	stripMarkdown = plaintext.StripMarkdown
+	plainTimeout  = 10 * time.Second
+)
 
 // plainOutput is the shape emitted by --json on success.
 type plainOutput struct {
@@ -88,7 +95,21 @@ func Run() int {
 	// Strip exactly one trailing newline — echo appends one, printf does not.
 	input := strings.TrimSuffix(string(rawBytes), "\n")
 
-	stripped := plaintext.StripMarkdown(input)
+	// Run the parse with a deadline: goldmark has quadratic paths that the
+	// nesting check in plaintext does not catch. On timeout the goroutine is
+	// abandoned; the process exits right after.
+	done := make(chan string, 1)
+	go func() { done <- stripMarkdown(input) }()
+	var stripped string
+	select {
+	case stripped = <-done:
+	case <-time.After(plainTimeout):
+		msg := fmt.Sprintf("plain: markdown too complex to parse within %s", plainTimeout)
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": msg, "code": 1})
+		}
+		return shared.Errorf("%s", msg)
+	}
 	outputBytes := len(stripped)
 
 	if jsonFlag {

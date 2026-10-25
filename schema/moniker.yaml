@@ -1,10 +1,10 @@
 name: moniker
 tagline: memorable name generator - run IDs, job labels, temp dirs
-meta_description: "Generate memorable names for run IDs, job labels, and temp dirs. No more UUIDs in log output."
+meta_description: "vrk moniker generates memorable adjective-noun names for run IDs, job labels, and temp dirs. Use --seed for repeatable output."
 meta_lead: "vrk moniker generates memorable adjective-noun names for run IDs, job labels, and temp directories."
 og_title: "vrk moniker - memorable name generator for run IDs and labels"
 description: |
-  `vrk moniker` generates memorable adjective-noun names from embedded wordlists. Deterministic with `--seed` for reproducible names. `--count` for batches, `--words` for longer names when you need more uniqueness. No duplicates within a single batch.
+  `vrk moniker` generates memorable adjective-noun names from embedded wordlists. Use `--seed` to get the same names on every run. Use `--count` to make a batch and `--words` to make longer names. A single batch has no duplicates.
 problem: >
   Timestamp labels like `run-20260330-174856` collide when three runs start in the
   same minute. UUIDs are unique but nobody can say "check run 98d06ca5" in an

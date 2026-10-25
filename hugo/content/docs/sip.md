@@ -1,6 +1,6 @@
 ---
 title: "vrk sip"
-description: "Sample lines from a stream. Take the first N, every Nth, or a random percentage. Works on unbounded input."
+description: "vrk sip samples lines from stdin. Take the first N, a reservoir sample, every Nth line, or a random percentage, on input of any size."
 meta_lead: "vrk sip samples lines from stdin using first-N, reservoir sampling, every-Nth, or percentage strategies."
 og_title: "vrk sip - sample lines from streams and large files"
 tool: sip
@@ -67,7 +67,7 @@ cat access.log | vrk sip --count 1000 --seed 42
 
 ## Sampling strategies
 
-Exactly one must be specified.
+`vrk sip` takes a sample of lines from stdin, by position, at random or by chance. Set exactly one strategy.
 
 ### --first N (deterministic, take first N)
 
@@ -80,7 +80,7 @@ $ seq 100 | vrk sip --first 5
 5
 ```
 
-Like `head -n` but integrated with sip's `--json` metadata.
+This works like `head -n`, and `--json` adds metadata.
 
 ### --count N (random reservoir sample)
 
@@ -91,7 +91,7 @@ $ seq 100 | vrk sip --count 3 --seed 42
 58
 ```
 
-Uniform random sample using reservoir sampling. Uses O(N) memory regardless of input size. A 10-million-line file sampled to 1,000 lines uses the same memory as sampling 100 lines.
+This is a uniform random sample, taken with reservoir sampling. Memory use depends on N, not on the input size. A 10-million-line file sampled to 1,000 lines uses the same memory as a 1,000-line file sampled to 1,000 lines.
 
 ### --every N (deterministic, every Nth line)
 
@@ -103,7 +103,7 @@ $ seq 20 | vrk sip --every 5
 20
 ```
 
-Useful for systematic sampling at regular intervals.
+Use this to take lines at regular intervals.
 
 ### --sample N (probabilistic, N% chance per line)
 
@@ -111,7 +111,7 @@ Useful for systematic sampling at regular intervals.
 seq 1000 | vrk sip --sample 10
 ```
 
-Each line has a 10% chance of being included. The output count is approximate.
+Each line has a 10% chance of being in the output. The output count is approximate.
 
 ### Deterministic output (--seed)
 
@@ -124,7 +124,7 @@ $ seq 100 | vrk sip --count 5 --seed 42
 81
 ```
 
-Use `--seed` for reproducible samples in tests and CI pipelines.
+Use `--seed` to get the same sample every time in tests and CI pipelines.
 
 ### JSON metadata (--json)
 
@@ -156,7 +156,7 @@ cat records.jsonl | vrk sip --sample 10 | \
   done
 ```
 
-### Rate-limit combined with sampling
+### Rate-limit a sample
 
 ```bash
 # Sample 100 records, then throttle to 5/s for API calls
@@ -165,7 +165,7 @@ cat data.jsonl | vrk sip --count 100 | vrk throttle --rate 5/s | process-each
 
 ## When it fails
 
-No strategy specified:
+If you set no strategy, sip exits 2:
 
 ```bash
 $ seq 10 | vrk sip
@@ -174,7 +174,7 @@ $ echo $?
 2
 ```
 
-Multiple strategies:
+If you set more than one strategy, sip exits 2:
 
 ```bash
 $ seq 10 | vrk sip --first 5 --count 3

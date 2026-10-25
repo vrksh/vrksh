@@ -24,6 +24,11 @@ check() {
 }
 v() { "$VRK" "$@"; }
 
+# ---- toolchain (DEP-1): the binary must be built with go.mod's pinned toolchain ----
+want_tc=$(sed -n 's/^toolchain //p' go.mod)
+have_tc=$(go version "$VRK" | awk '{print $2}')
+[ -z "$want_tc" ] || [ "$have_tc" = "$want_tc" ] && ok A-TC || bad A-TC "binary built with $have_tc, go.mod pins $want_tc"
+
 # ---- mock LLM ----
 MOCK_LOG="$T/mock.jsonl"; : > "$MOCK_LOG"
 # build first: killing `go run` would leave the compiled mock holding the port

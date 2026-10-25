@@ -3,7 +3,7 @@
   "tools": [
     {
       "name": "jwt",
-      "description": "JWT inspector - decode, --claim, --expired, --valid."
+      "description": "JWT inspector - decode, --claim, --expired, --valid"
     },
     {
       "name": "epoch",
@@ -27,11 +27,11 @@
     },
     {
       "name": "prompt",
-      "description": "LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain."
+      "description": "LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain"
     },
     {
       "name": "kv",
-      "description": "key-value store - SQLite-backed, namespaces, TTL, atomic counters."
+      "description": "key-value store - SQLite-backed, namespaces, TTL, atomic counters"
     },
     {
       "name": "chunk",
@@ -39,7 +39,7 @@
     },
     {
       "name": "grab",
-      "description": "URL fetcher - clean markdown, plain text, or raw HTML."
+      "description": "URL fetcher - clean markdown, plain text, or raw HTML"
     },
     {
       "name": "jsonl",
@@ -88,6 +88,14 @@
     {
       "name": "moniker",
       "description": "memorable name generator - run IDs, job labels, temp dirs"
+    },
+    {
+      "name": "pdf",
+      "description": "PDF text extractor - Markdown, --text, JSONL per page"
+    },
+    {
+      "name": "sql",
+      "description": "SQL over CSV or JSONL - SQLite in memory, CSV or JSONL out"
     },
     {
       "name": "pct",

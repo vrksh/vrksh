@@ -44,6 +44,7 @@ vrk grab https://example.com --json      # {"url": "...", "title": "...", "conte
 ```bash
 vrk grab https://example.com             # markdown (default)
 vrk grab https://example.com --text      # plain prose, no ## headers or **bold**
+vrk pdf report.pdf --text                 # same for pdf: Markdown is the default
 
 cat response.md | vrk plain               # redundant here but valid
 ```
@@ -171,6 +172,34 @@ cat prompt.txt | vrk tok --check 4000    # exit 1 if over 4000 tokens, pass thro
 ```bash
 cat data.txt | vrk prompt --schema s.json --retry 3   # retry if Claude's output fails schema
 ```
+
+---
+
+### `--pages <range>` (pdf)
+
+**Meaning:** Select a page range. `N` is one page, `N-M` an inclusive range, `N-` runs to the last page. 1-indexed. A malformed range exits 2; a page past the end exits 1. Short form `-p`.
+
+```bash
+vrk pdf --pages 2-5 report.pdf     # pages 2, 3, 4, 5
+vrk pdf -p 4- report.pdf           # page 4 to the end
+```
+
+---
+
+### `--query <sql>` (sql)
+
+**Meaning:** The SQL query, given as a flag. With `--query`, every positional argument is a CSV file. Without it, the first positional is the query. No short form.
+
+```bash
+vrk sql --query "SELECT * FROM users" users.csv
+vrk sql "SELECT * FROM users" users.csv   # same thing
+```
+
+---
+
+### `--no-header` (sql)
+
+**Meaning:** Leave the header row out of CSV output. It does not change how input is read: the first row of every input CSV is always the header. No effect with `--json`.
 
 ---
 

@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk pct` percent-encodes and decodes text, as defined in RFC 3986, so you can build safe URLs in a pipeline.
+
 ### Encode (default)
 
 ```bash
@@ -10,7 +12,7 @@ $ echo 'key=value&other=data' | vrk pct --encode
 key%3Dvalue%26other%3Ddata
 ```
 
-Spaces become `%20`. All RFC 3986 reserved characters are encoded.
+A space becomes `%20`. Every RFC 3986 reserved character is encoded.
 
 ### Encode (form mode)
 
@@ -19,7 +21,7 @@ $ echo 'hello world' | vrk pct --encode --form
 hello+world
 ```
 
-Spaces become `+` instead of `%20`. Use this for HTML form data and `application/x-www-form-urlencoded` content.
+A space becomes `+` instead of `%20`. Use this for HTML form data and `application/x-www-form-urlencoded` content.
 
 ### Decode
 
@@ -31,11 +33,11 @@ $ echo 'hello+world' | vrk pct --decode --form
 hello world
 ```
 
-Without `--form`, `+` is left as-is. With `--form`, `+` decodes to a space.
+Without `--form`, `+` stays as `+`. With `--form`, `+` decodes to a space.
 
 ### Batch processing
 
-Processes line by line:
+pct reads the input line by line:
 
 ```bash
 $ printf 'hello world\nfoo bar\n' | vrk pct --encode
@@ -68,7 +70,7 @@ vrk urlinfo --field query.q 'https://example.com?q=hello%20world' | vrk pct --de
 
 ## When it fails
 
-Both --encode and --decode:
+If you pass both `--encode` and `--decode`, pct exits 2:
 
 ```bash
 $ echo 'test' | vrk pct --encode --decode
@@ -77,7 +79,7 @@ $ echo $?
 2
 ```
 
-Neither flag:
+If you pass neither flag, pct exits 2:
 
 ```bash
 $ echo 'test' | vrk pct
@@ -86,7 +88,7 @@ $ echo $?
 2
 ```
 
-Invalid percent sequence:
+If the input has an invalid percent sequence, pct exits 1:
 
 ```bash
 $ echo '%ZZ' | vrk pct --decode

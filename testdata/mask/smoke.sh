@@ -320,6 +320,10 @@ assert_exit "corpus: all secrets redacted" 0 "$miss"
 decoys_out=$("$VRK" mask < "$DIR/decoys.txt")
 assert_stdout_equals "corpus: decoys unchanged" "$(cat "$DIR/decoys.txt")" "$decoys_out"
 
+# json.dumps-shaped records: quoted keys, hex tokens, short passwords.
+stdout=$(printf '%s\n' '[{"id": 0, "password": "pw0", "token": "f9c0b7fb5a83541b7e4924b2d17670dbdf99c483"}, {"id": 1, "password": "pw1", "token": "813924b2fd8d01583142086d2d275718d5cc72e7"}]' | "$VRK" mask)
+assert_stdout_equals "json.dumps records: values gone, JSON intact" '[{"id": 0, "password": "[REDACTED]", "token": "[REDACTED]"}, {"id": 1, "password": "[REDACTED]", "token": "[REDACTED]"}]' "$stdout"
+
 stdout=$(echo 'key sk-proj-FAKE0000example0000notreal0000000, please' | "$VRK" mask)
 assert_stdout_equals "punctuation kept after redaction" "key [REDACTED], please" "$stdout"
 

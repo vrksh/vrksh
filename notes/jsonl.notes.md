@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk jsonl` converts a JSON array to JSONL (one JSON object per line), and converts JSONL back to an array with `--collect`.
+
 ### Split a JSON array into JSONL
 
 ```bash

@@ -1,10 +1,10 @@
 name: uuid
 tagline: UUID generator - v4/v7, --count, --json
-meta_description: "Generate UUIDs from the command line. v4 random or v7 time-sorted. Batch with --count."
+meta_description: "vrk uuid generates v4 (random) or v7 (time-ordered) UUIDs from the command line, with the same output on macOS and Linux. Use --count for a batch."
 meta_lead: "vrk uuid generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across platforms."
 og_title: "vrk uuid - UUID v4 and v7 generator"
 description: |
-  `vrk uuid` generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across macOS and Linux. v7 UUIDs sort by creation time, which keeps B-tree indexes compact. `--count` generates batches in one call.
+  `vrk uuid` generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across macOS and Linux. v7 UUIDs sort by creation time, which keeps B-tree indexes compact. Use `--count` to generate a batch in one call.
 problem: >
   `uuidgen` generates v4 UUIDs, which fragment B-tree indexes because they are
   random. v7 UUIDs sort by creation time and fix this, but `uuidgen` does not

@@ -340,6 +340,20 @@ exit_code=0; stderr=$(echo '{}' | "$VRK" validate --schema '{"type":"object","pr
 assert_exit "JSON Schema: exit 2" 2 "$exit_code"
 case "$stderr" in *"JSON Schema"*) ok "JSON Schema: stderr names it" ;; *) fail "JSON Schema: stderr names it" "$stderr" ;; esac
 
+# A second JSON value on the line, or a non-object, is invalid
+exit_code=0; stdout=$(echo '{"name":"a"} {"name":1,"admin":true}' | "$VRK" validate --schema '{"name":"string"}' --strict 2>/dev/null) || exit_code=$?
+assert_exit "trailing JSON value: exit 1" 1 "$exit_code"
+assert_stdout_equals "trailing JSON value: stdout empty" "" "$stdout"
+exit_code=0; echo 'null' | "$VRK" validate --schema '{}' --strict > /dev/null 2>&1 || exit_code=$?
+assert_exit "null record: exit 1" 1 "$exit_code"
+
+# Bad schema values are not echoed
+schema_file=$(mktemp)
+echo '{"OPENAI_API_KEY":"sk-fake-0000000000000000000000"}' > "$schema_file"
+stderr=$(echo '{}' | "$VRK" validate --schema "$schema_file" 2>&1 >/dev/null || true)
+rm -f "$schema_file"
+case "$stderr" in *"sk-fake"*) fail "schema error hides values" "$stderr" ;; *) ok "schema error hides values" ;; esac
+
 # ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------

@@ -163,16 +163,16 @@ Exit 2: No input, unknown flag, ambiguous timezone, --tz without --iso/--json
 vrk epoch '+3d' --iso
 ```
 
-## grab - URL fetcher - clean markdown, plain text, or raw HTML.
+## grab - URL fetcher - clean markdown, plain text, or raw HTML
 
-| Flag               | Short | Description                                                                                        |
-|--------------------|-------|----------------------------------------------------------------------------------------------------|
-| `--text`           | -t    | Plain prose output, no markdown syntax                                                             |
-| `--raw`            |       | Raw HTML, no processing                                                                            |
-| `--json`           | -j    | Emit JSON envelope with metadata                                                                   |
-| `--quiet`          | -q    | Suppress stderr output                                                                             |
-| `--max-size`       |       | Max response body size in bytes (default 10MB)                                                     |
-| `--allow-internal` |       | Allow requests to private, loopback, and link-local addresses (blocked by default for SSRF safety) |
+| Flag               | Short | Description                                                                                                                                                     |
+|--------------------|-------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--text`           | -t    | Plain prose output, no markdown syntax                                                                                                                          |
+| `--raw`            |       | Raw HTML, no processing                                                                                                                                         |
+| `--json`           | -j    | Emit JSON envelope with metadata                                                                                                                                |
+| `--quiet`          | -q    | Suppress stderr output                                                                                                                                          |
+| `--max-size`       |       | Max response body size in bytes (default 10MB)                                                                                                                  |
+| `--allow-internal` |       | Allow requests to private, loopback, and link-local addresses (blocked by default for SSRF safety). Only works with VRK_ALLOW_INTERNAL=1 set in the environment |
 
 Exit 0: Success
 Exit 1: HTTP error, fetch timeout, response too large, blocked internal address, or I/O error
@@ -197,7 +197,7 @@ Exit 2: Interactive TTY with no input, unknown flag
 cat api-response.json | vrk jsonl | vrk validate --schema '{"name":"string"}'
 ```
 
-## jwt - JWT inspector - decode, --claim, --expired, --valid.
+## jwt - JWT inspector - decode, --claim, --expired, --valid
 
 | Flag        | Short | Description                                               |
 |-------------|-------|-----------------------------------------------------------|
@@ -215,7 +215,7 @@ Exit 2: Usage error - bad format, too many args
 echo $TOKEN | vrk jwt --claim sub
 ```
 
-## kv - key-value store - SQLite-backed, namespaces, TTL, atomic counters.
+## kv - key-value store - SQLite-backed, namespaces, TTL, atomic counters
 
 | Flag        | Short | Description                               |
 |-------------|-------|-------------------------------------------|
@@ -304,6 +304,24 @@ Exit 2: Neither --encode nor --decode specified, both specified, interactive TTY
 echo 'hello world&foo=bar' | vrk pct --encode
 ```
 
+## pdf - PDF text extractor - Markdown, --text, JSONL per page
+
+| Flag           | Short | Description                                                                    |
+|----------------|-------|--------------------------------------------------------------------------------|
+| `--text`       | -t    | Plain text instead of Markdown                                                 |
+| `--pages`      | -p    | Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)                     |
+| `--json`       | -j    | One record per page, then a metadata trailer                                   |
+| `--as-printed` |       | Keep running headers, footers, page numbers and end-of-line hyphens as printed |
+| `--quiet`      | -q    | Suppress stderr output                                                         |
+
+Exit 0: Success, including empty stdin
+Exit 1: File not found, not a PDF, encrypted, corrupt, page out of range, or no extractable text
+Exit 2: Invalid --pages range, more than one file, unknown flag, or interactive TTY with no input
+
+```bash
+vrk pdf --pages 1-3 report.pdf | vrk tok
+```
+
 ## plain - markdown stripper - removes syntax, keeps prose
 
 | Flag      | Short | Description                                    |
@@ -319,7 +337,7 @@ Exit 2: Interactive TTY with no piped input and no positional arg
 vrk grab https://example.com/docs | vrk plain | vrk tok
 ```
 
-## prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
+## prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain
 
 | Flag         | Short | Description                                                                |
 |--------------|-------|----------------------------------------------------------------------------|
@@ -395,6 +413,25 @@ Exit 2: Interactive TTY with no stdin
 
 ```bash
 echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
+```
+
+## sql - SQL over CSV or JSONL - SQLite in memory, CSV or JSONL out
+
+| Flag          | Short | Description                                                                   |
+|---------------|-------|-------------------------------------------------------------------------------|
+| `--query`     |       | SQL query; every positional argument is then a CSV file                       |
+| `--no-header` |       | Leave the header row out of CSV output                                        |
+| `--delimiter` | -d    | Input field separator, one character or \t (default , or tab for .tsv)        |
+| `--json`      | -j    | One JSON object per row, then a metadata trailer                              |
+| `--quiet`     | -q    | Suppress stderr output                                                        |
+| `--timeout`   |       | Stop and exit 1 if loading and the query take longer, e.g. 30s (default none) |
+
+Exit 0: Success, including empty stdin when the query reads stdin
+Exit 1: SQL error, file not found, CSV parse error, empty file, gzip file, or --timeout reached
+Exit 2: No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, negative --timeout, or unknown flag
+
+```bash
+vrk sql --json 'SELECT * FROM users WHERE age > 25' users.csv | jq -c 'select(.id)'
 ```
 
 ## sse - SSE stream parser - text/event-stream to JSONL

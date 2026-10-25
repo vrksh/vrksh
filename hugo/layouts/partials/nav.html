@@ -16,9 +16,9 @@
         "
     >
         {{ $items := slice
-            "26 Unix tools. One binary. Zero dependencies."
+            "28 Unix tools. One binary. Zero dependencies."
             "the missing coreutils for the agent era"
-            "vrk mcp - list all 26 tools to any AI agent"
+            "try vrk in your browser at vrk.sh/play"
             "curl vrk.sh/install.sh | sh - ready in 5 seconds"
         }}
         <!-- Two identical copies side by side. The animation translates by
@@ -118,6 +118,11 @@
             href="/quickstart/"
             class="hover:text-[var(--color-text)] transition-colors"
             >quickstart</a
+        >
+        <a
+            href="/play/"
+            class="hover:text-[var(--color-text)] transition-colors"
+            >playground</a
         >
         <a
             href="/docs/"
@@ -272,6 +277,7 @@
     <div class="flex flex-col gap-3 text-sm" style="color: var(--color-muted)">
         <a href="/about/" class="hover:text-[var(--color-text)]">about</a>
         <a href="/quickstart/" class="hover:text-[var(--color-text)]">quickstart</a>
+        <a href="/play/" class="hover:text-[var(--color-text)]">playground</a>
         <a href="/docs/" class="hover:text-[var(--color-text)]">docs</a>
         <a href="/recipes/" class="hover:text-[var(--color-text)]">recipes</a>
         <a href="/agents/" class="hover:text-[var(--color-text)]">agents</a>

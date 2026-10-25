@@ -1,9 +1,9 @@
 ---
 title: "Daily token budget"
 meta_title: "Daily token budget - vrk pipeline recipe"
-description: "A runaway loop cannot burn through your API budget, because the counter says no. Count tokens into a kv key named after today's date, then gate the ..."
-why: "A runaway loop cannot burn through your API budget, because the counter says no."
-body: "Count tokens into a kv key named after today's date, then gate the call with assert."
+description: "The counter refuses the call once the daily limit is reached, so a runaway loop cannot use up your API budget. Add each prompt's token count to a kv ..."
+why: "The counter refuses the call once the daily limit is reached, so a runaway loop cannot use up your API budget."
+body: "Add each prompt's token count to a kv counter named after today's date, and use assert to stop the call when the total is over the limit."
 slug: "daily-token-budget"
 steps:
   - "DAY=$(date +%F)"

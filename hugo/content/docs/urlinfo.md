@@ -1,6 +1,6 @@
 ---
 title: "vrk urlinfo"
-description: "Parse URLs and extract components. Get scheme, host, path, query params, or any field individually."
+description: "vrk urlinfo parses a URL into scheme, host, port, path, query, and fragment as JSON. Use --field to print one component."
 meta_lead: "vrk urlinfo parses URLs into structured JSON components with dot-path field extraction."
 og_title: "vrk urlinfo - URL parser and component extractor"
 tool: urlinfo
@@ -19,7 +19,7 @@ vrk urlinfo parses URLs into structured JSON components with dot-path field extr
 
 ## The solution
 
-`vrk urlinfo` parses URLs into structured JSON components: scheme, host, port, path, query parameters, fragment, and user. `--field` with dot-path syntax extracts a single component. Handles edge cases that regex approaches miss. No network calls, pure parsing.
+`vrk urlinfo` parses URLs into structured JSON components: scheme, host, port, path, query parameters, fragment, and user. Use `--field` with a dot-path to extract one component. It handles edge cases that regex approaches miss. It makes no network calls.
 
 ## Before and after
 
@@ -63,6 +63,8 @@ vrk urlinfo 'https://api.example.com:8080/v1/search?q=llm+tools&limit=10'
 
 ## How it works
 
+`vrk urlinfo` splits a URL into its parts (scheme, host, port, path, query, fragment, user) and prints them as JSON.
+
 ### Full JSON output
 
 ```bash
@@ -70,7 +72,7 @@ $ vrk urlinfo 'https://api.example.com:8080/v1/search?q=llm+tools&limit=10#resul
 {"scheme":"https","host":"api.example.com","port":8080,"path":"/v1/search","query":{"limit":"10","q":"llm tools"},"fragment":"results","user":""}
 ```
 
-Every URL component is extracted into a structured JSON object. Query parameters are parsed into a nested object.
+urlinfo puts every URL part in one JSON object. It parses the query parameters into a nested object.
 
 ### Extract a single field (--field)
 
@@ -85,7 +87,7 @@ $ vrk urlinfo --field query.q 'https://api.example.com?q=llm+tools'
 llm tools
 ```
 
-Dot-path syntax reaches into query parameters: `query.q`, `query.page`, etc.
+A dot path reaches a query parameter, for example `query.q` or `query.page`.
 
 ### Batch processing
 
@@ -95,7 +97,7 @@ a.com
 b.com
 ```
 
-Processes multiple URLs, one per line.
+urlinfo reads one URL per line.
 
 ### JSON metadata (--json)
 
@@ -137,7 +139,7 @@ done | sort -u
 vrk urlinfo --field query.q 'https://example.com?q=hello%20world' | vrk pct --decode
 ```
 
-### Parse links from a web page by domain
+### Count the links on a web page by domain
 
 ```bash
 # Grab a page, extract links, group by domain
@@ -149,7 +151,7 @@ vrk grab https://example.com | vrk links --bare | \
 
 ## When it fails
 
-Invalid URL:
+If the URL is invalid, urlinfo exits 1:
 
 ```bash
 $ vrk urlinfo 'not a url'
@@ -158,7 +160,7 @@ $ echo $?
 1
 ```
 
-No input:
+If you give no input on an interactive terminal, urlinfo exits 2:
 
 <!-- doccheck: skip (needs an interactive terminal, doccheck runs with empty stdin) -->
 ```bash

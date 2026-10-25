@@ -200,7 +200,22 @@ func extractLinks(lines []string, refMap map[string]string) []linkRecord {
 // check logic.
 func extractFromLine(line string, lineNum int, refMap map[string]string) []linkRecord {
 	var links []foundLink
-	consumed := make([][2]int, 0, 4)
+	// consumed marks bytes already claimed by an earlier pattern. A bitmap
+	// keeps the check O(line length); a list of ranges was O(matches^2).
+	consumed := make([]bool, len(line))
+	mark := func(a, b int) {
+		for i := a; i < b; i++ {
+			consumed[i] = true
+		}
+	}
+	overlaps := func(a, b int) bool {
+		for i := a; i < b; i++ {
+			if consumed[i] {
+				return true
+			}
+		}
+		return false
+	}
 
 	// 1. Markdown inline: [text](url)
 	for _, m := range reMarkdownInline.FindAllStringSubmatchIndex(line, -1) {
@@ -209,19 +224,19 @@ func extractFromLine(line string, lineNum int, refMap map[string]string) []linkR
 			pos: m[0],
 			rec: linkRecord{Text: line[m[2]:m[3]], URL: line[m[4]:m[5]], Line: lineNum},
 		})
-		consumed = append(consumed, [2]int{m[0], m[1]})
+		mark(m[0], m[1])
 	}
 
 	// 2. Markdown ref usage: [text][label] — resolve via refMap.
 	for _, m := range reMarkdownRef.FindAllStringSubmatchIndex(line, -1) {
-		if overlaps(m[0], m[1], consumed) {
+		if overlaps(m[0], m[1]) {
 			continue
 		}
 		// Lowercase to match the case-folded keys stored by collectRefDefs.
 		label := strings.ToLower(strings.TrimSpace(line[m[4]:m[5]]))
 		url, ok := refMap[label]
 		// Always consume the span so bare URL extraction skips it.
-		consumed = append(consumed, [2]int{m[0], m[1]})
+		mark(m[0], m[1])
 		if !ok {
 			continue
 		}
@@ -233,7 +248,7 @@ func extractFromLine(line string, lineNum int, refMap map[string]string) []linkR
 
 	// 3. HTML <a href="url">text</a> — case-insensitive.
 	for _, m := range reHTMLAnchor.FindAllStringSubmatchIndex(line, -1) {
-		if overlaps(m[0], m[1], consumed) {
+		if overlaps(m[0], m[1]) {
 			continue
 		}
 		url := line[m[2]:m[3]]
@@ -243,18 +258,18 @@ func extractFromLine(line string, lineNum int, refMap map[string]string) []linkR
 			pos: m[0],
 			rec: linkRecord{Text: text, URL: url, Line: lineNum},
 		})
-		consumed = append(consumed, [2]int{m[0], m[1]})
+		mark(m[0], m[1])
 	}
 
 	// 4. Mark ref definition spans consumed so their URLs aren't re-extracted
 	//    as bare URLs. (Definitions are not emitted — only usages are.)
 	if m := reRefDef.FindStringIndex(line); m != nil {
-		consumed = append(consumed, [2]int{m[0], m[1]})
+		mark(m[0], m[1])
 	}
 
 	// 5. Bare URLs — only at positions not already consumed.
 	for _, m := range reBareURL.FindAllStringIndex(line, -1) {
-		if overlaps(m[0], m[1], consumed) {
+		if overlaps(m[0], m[1]) {
 			continue
 		}
 		url := line[m[0]:m[1]]
@@ -262,7 +277,7 @@ func extractFromLine(line string, lineNum int, refMap map[string]string) []linkR
 			pos: m[0],
 			rec: linkRecord{Text: url, URL: url, Line: lineNum},
 		})
-		consumed = append(consumed, [2]int{m[0], m[1]})
+		mark(m[0], m[1])
 	}
 
 	// Sort by byte position so links on the same line emit in source order.
@@ -271,22 +286,14 @@ func extractFromLine(line string, lineNum int, refMap map[string]string) []linkR
 		sort.Slice(links, func(i, j int) bool { return links[i].pos < links[j].pos })
 	}
 
+	// Page text and URLs can carry ESC/OSC sequences meant for a terminal.
 	result := make([]linkRecord, len(links))
 	for i, fl := range links {
+		fl.rec.Text = shared.StripControls(fl.rec.Text)
+		fl.rec.URL = shared.StripControls(fl.rec.URL)
 		result[i] = fl.rec
 	}
 	return result
-}
-
-// overlaps reports whether [start, end) overlaps any range in consumed.
-// Two ranges [a,b) and [c,d) overlap when a < d && c < b.
-func overlaps(start, end int, consumed [][2]int) bool {
-	for _, r := range consumed {
-		if r[0] < end && start < r[1] {
-			return true
-		}
-	}
-	return false
 }
 
 // Flags returns flag metadata for MCP schema generation.

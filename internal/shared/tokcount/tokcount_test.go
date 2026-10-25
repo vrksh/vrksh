@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -334,6 +335,92 @@ func FuzzMatchesTiktokenGo(f *testing.F) {
 		assertSameAsTiktokenGo(t, Cl100k, input)
 		assertSameAsTiktokenGo(t, O200k, input)
 	})
+}
+
+// TestLongPieceChunkedMatchesWhole: long pieces are BPE'd in chunks to bound
+// memory. For the long runs that hit this path, the ids must equal a merge
+// over the whole piece, and must always decode back to the input.
+func TestLongPieceChunkedMatchesWhole(t *testing.T) {
+	enc, err := O200k.get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, piece := range []string{
+		strings.Repeat(" ", 20000), strings.Repeat("x", 20000),
+		strings.Repeat("ab", 10000), strings.Repeat("\n", 20000), strings.Repeat("\t", 9000),
+	} {
+		got := encodePiece([]byte(piece), enc.ranks)
+		want := bytePairEncode([]byte(piece), enc.ranks)
+		if !slices.Equal(got, want) {
+			t.Errorf("%q x%d: chunked %d ids, whole %d ids", piece[:1], len(piece), len(got), len(want))
+		}
+		if string(enc.decode(got)) != piece {
+			t.Errorf("%q x%d: chunked ids do not decode back", piece[:1], len(piece))
+		}
+	}
+}
+
+// TestSegmentedMatchesSinglePass: cutting long whitespace runs before the
+// split regex gives the same ids as one regex pass over the whole text.
+func TestSegmentedMatchesSinglePass(t *testing.T) {
+	for _, enc := range []*Encoding{O200k, Cl100k} {
+		e, err := enc.get()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, in := range []string{
+			"abc" + strings.Repeat(" ", 9000) + "x y",
+			strings.Repeat(" ", 4096) + "x",
+			strings.Repeat(" ", 12289) + "hello",
+			"word " + strings.Repeat(" ", 5000) + "\n\nnext",
+			strings.Repeat("a b\n", 10) + strings.Repeat(" ", 20000),
+		} {
+			got, want := encodeBoth(t, e, in)
+			if !slices.Equal(got, want) {
+				t.Errorf("len %d: segmented %d ids, single pass %d ids", len(in), len(got), len(want))
+			}
+		}
+		// Another whitespace rune right before a long space run puts the
+		// regex piece start off the cut, so the count can move by one per
+		// 4 KB of run. It must still decode back to the input.
+		for _, in := range []string{
+			"x\n" + strings.Repeat(" ", 5000) + "\nz",
+			"x\t" + strings.Repeat(" ", 5000) + "z",
+		} {
+			got, want := encodeBoth(t, e, in)
+			if d := len(got) - len(want); d < -2 || d > 2 || string(e.decode(got)) != in {
+				t.Errorf("len %d: segmented %d ids, single pass %d ids", len(in), len(got), len(want))
+			}
+		}
+	}
+}
+
+func encodeBoth(t *testing.T, e *encoder, in string) (segmented, single []int) {
+	t.Helper()
+	segmented, err := e.encode(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	single, err = e.encodeSegment(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return segmented, single
+}
+
+// TestLongWhitespaceBoundedMemory: 10 MB of spaces used to allocate 1.3 GB
+// in regexp2 backtrack state.
+func TestLongWhitespaceBoundedMemory(t *testing.T) {
+	in := strings.Repeat(" ", 10<<20) + "x"
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	if _, err := O200k.Count(in); err != nil {
+		t.Fatal(err)
+	}
+	runtime.ReadMemStats(&after)
+	if got := after.TotalAlloc - before.TotalAlloc; got > 300<<20 {
+		t.Errorf("allocated %d MB, want under 300 MB", got>>20)
+	}
 }
 
 // TestLongRepeatedRunIsFast guards the heap-based merge: 200 KB of one

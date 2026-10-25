@@ -328,6 +328,83 @@ func TestUnknownMethodReturnsError(t *testing.T) {
 	}
 }
 
+func TestOversizedRequestIsAnError(t *testing.T) {
+	big := strings.Repeat("a", 2<<20)
+	in := big + "\n" + `{"jsonrpc":"2.0","id":9,"method":"initialize"}` + "\n"
+	stdout, stderr, code := runMCP(nil, in, stubDescriptions, stubFlagsFn, stubStdinRequired)
+	if code != 1 {
+		t.Fatalf("want exit 1, got %d", code)
+	}
+	if stderr == "" {
+		t.Error("want a message on stderr")
+	}
+	var resp struct {
+		Error struct {
+			Code int `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &resp); err != nil {
+		t.Fatalf("want one JSON error on stdout: %v\nstdout: %.200s", err, stdout)
+	}
+	if resp.Error.Code != -32700 {
+		t.Errorf("error code: want -32700, got %d", resp.Error.Code)
+	}
+}
+
+func TestInvalidIDRejected(t *testing.T) {
+	for _, id := range []string{`{"a":1}`, `[1]`, `true`} {
+		req := `{"jsonrpc":"2.0","id":` + id + `,"method":"initialize"}` + "\n"
+		stdout, _, _ := runMCP(nil, req, stubDescriptions, stubFlagsFn, stubStdinRequired)
+		var resp struct {
+			ID    any `json:"id"`
+			Error struct {
+				Code int `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &resp); err != nil {
+			t.Fatalf("id %s: %v\nstdout: %s", id, err, stdout)
+		}
+		if resp.Error.Code != -32600 || resp.ID != nil {
+			t.Errorf("id %s: want -32600 with null id, got %+v", id, resp)
+		}
+	}
+}
+
+func TestStringAndNumberIDsEchoed(t *testing.T) {
+	stdout, _, _ := runMCP(nil, `{"jsonrpc":"2.0","id":"abc","method":"initialize"}`+"\n", stubDescriptions, stubFlagsFn, stubStdinRequired)
+	if !strings.Contains(stdout, `"id":"abc"`) {
+		t.Errorf("string id not echoed: %s", stdout)
+	}
+}
+
+// Tools and flags that exec commands, read paths or switch off a safety
+// guard must never be advertised to an LLM client.
+func TestUnsafeToolsAndFlagsHidden(t *testing.T) {
+	risky := func() *pflag.FlagSet {
+		fs := pflag.NewFlagSet("risky", pflag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		for _, n := range []string{"until", "file", "system", "schema", "allow-internal", "keep"} {
+			fs.String(n, "", "x")
+		}
+		return fs
+	}
+	flagsFn := map[string]func() *pflag.FlagSet{"coax": risky, "kv": risky, "prompt": risky, "grab": risky}
+	desc := map[string]string{}
+	stdout, _, _ := runMCP(nil, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`+"\n", desc, flagsFn, map[string]bool{})
+	for _, bad := range []string{"vrk_coax", "vrk_kv", "vrk_prompt", `"until"`, `"file"`, `"system"`, `"schema"`, `"allow-internal"`} {
+		if strings.Contains(stdout, bad) {
+			t.Errorf("tools/list must not contain %s: %s", bad, stdout)
+		}
+	}
+	if !strings.Contains(stdout, `"vrk_grab"`) || !strings.Contains(stdout, `"keep"`) {
+		t.Errorf("safe tool and flag should remain: %s", stdout)
+	}
+	list, _, _ := runMCP([]string{"--list"}, "", desc, flagsFn, map[string]bool{})
+	if strings.Contains(list, "coax") || strings.Contains(list, "prompt") {
+		t.Errorf("--list must hide unsafe tools: %s", list)
+	}
+}
+
 func TestMalformedJSONReturnsParseError(t *testing.T) {
 	req := "not json at all\n"
 	stdout, _, code := runMCP(nil, req, stubDescriptions, stubFlagsFn, stubStdinRequired)

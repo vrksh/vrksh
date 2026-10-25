@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk bare` creates a symlink for each vrk tool, so you can run `tok` instead of `vrk tok`.
+
 ### Create symlinks
 
 <!-- doccheck: skip (creates symlinks next to the binary) -->
@@ -11,7 +13,7 @@ Linking base     → /usr/local/bin/base  ✓
 26 linked.
 ```
 
-Each tool gets a symlink: `tok -> vrk`, `jwt -> vrk`, `epoch -> vrk`, etc. The multicall binary detects which name it was invoked as and dispatches to the right tool.
+Each tool gets a symlink: `tok -> vrk`, `jwt -> vrk`, `epoch -> vrk`, and so on. The multicall binary checks the name it was started as and runs that tool.
 
 ### Preview before creating (--dry-run)
 
@@ -44,7 +46,7 @@ Removed base
 26 removed.
 ```
 
-Only removes symlinks that point to the vrk binary. Other files with the same names are left untouched.
+`--remove` deletes only symlinks that point to the vrk binary. It does not touch other files with the same names.
 
 ### Overwrite conflicts (--force)
 
@@ -54,7 +56,7 @@ If a file already exists at a symlink path, `--force` replaces it:
 vrk bare --force
 ```
 
-Without `--force`, existing files are skipped with a warning.
+If you do not use `--force`, bare skips existing files and prints a warning.
 
 ## After setup
 
@@ -67,4 +69,4 @@ tok --check 8000 < prompt.txt
 grab https://example.com | prompt --system 'Summarize'
 ```
 
-All flags and piping work identically.
+All flags and pipes work the same as before.

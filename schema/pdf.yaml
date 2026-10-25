@@ -1,0 +1,51 @@
+name: pdf
+tagline: PDF text extractor - Markdown, --text, JSONL per page
+meta_description: "vrk pdf extracts the text layer of a PDF as Markdown or plain text, or as one JSONL record per page. It does no OCR and needs no Python."
+meta_lead: "vrk pdf reads a PDF from a file path or stdin and writes its text layer to stdout."
+og_title: "vrk pdf - extract text from PDFs for AI pipelines"
+description: |
+  `vrk pdf` extracts the text layer of a PDF. The default output is Markdown: headings from font size and weight, bullet lists, tables, and paragraphs. It removes running headers, page numbers, and line-end hyphens. Use `--text` for plain text. A form feed (`\f`) separates the pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. Use `--pages` to select pages, for example `3`, `2-5`, `4-` or `1,3,5-7`. If a scanned PDF has no text layer, pdf exits 1, so the pipeline stops before it sends empty text to a model.
+problem: >
+  Getting text out of a PDF usually means installing poppler for `pdftotext`
+  or a Python package with its own dependencies. Neither tells you which page
+  the text came from in a form a pipeline can use, and a scanned PDF quietly
+  produces an empty string that goes straight to the LLM.
+before: |
+  pip install pypdf
+  python -c 'import sys, pypdf; print("".join(p.extract_text() for p in pypdf.PdfReader(sys.argv[1]).pages))' report.pdf
+  # no page numbers, scanned PDFs print nothing and exit 0
+after: "vrk pdf --json report.pdf"
+group: v1
+category: pipeline
+example: "vrk pdf --pages 1-3 report.pdf | vrk tok"
+flags:
+  - flag: --text
+    short: "-t"
+    type: bool
+    description: Plain text instead of Markdown
+  - flag: --pages
+    short: "-p"
+    type: string
+    description: "Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)"
+  - flag: --json
+    short: "-j"
+    type: bool
+    description: One record per page, then a metadata trailer
+  - flag: --as-printed
+    type: bool
+    description: Keep running headers, footers, page numbers and end-of-line hyphens as printed
+  - flag: --quiet
+    short: "-q"
+    type: bool
+    description: Suppress stderr output
+exit_codes:
+  - code: 0
+    meaning: Success, including empty stdin
+  - code: 1
+    meaning: File not found, not a PDF, encrypted, corrupt, page out of range, or no extractable text
+  - code: 2
+    meaning: Invalid --pages range, more than one file, unknown flag, or interactive TTY with no input
+og_image:
+  headline: "PDF in, text out. Page by page."
+  code: "vrk pdf --json report.pdf"
+mcp_callable: false

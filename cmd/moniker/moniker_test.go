@@ -115,6 +115,15 @@ func TestCountZero(t *testing.T) {
 	}
 }
 
+// TestCountTooLarge: a huge --count is a usage error, not a multi-GB allocation.
+func TestCountTooLarge(t *testing.T) {
+	for _, n := range []string{"1000001", "9223372036854775807"} {
+		if _, _, code := runMoniker(t, []string{"--words", "3", "--count", n}, ""); code != 2 {
+			t.Errorf("--count %s: exit code = %d, want 2", n, code)
+		}
+	}
+}
+
 // TestCountNegative verifies --count -1 exits 2 (usage error).
 func TestCountNegative(t *testing.T) {
 	_, _, code := runMoniker(t, []string{"--count", "-1"}, "")

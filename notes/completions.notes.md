@@ -1,5 +1,7 @@
 ## Setup
 
+`vrk completions` prints a shell completion script for bash, zsh, or fish.
+
 ### Bash
 
 ```bash

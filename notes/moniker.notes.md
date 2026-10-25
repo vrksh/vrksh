@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk moniker` generates short, readable names like `distant-shore` that you can use as run IDs, labels or directory names.
+
 ```bash
 $ vrk moniker --seed 42
 distant-shore
@@ -14,7 +16,7 @@ slate-contour
 northern-brine
 ```
 
-Same seed always produces the same names. Use this in tests or when you need reproducible identifiers.
+The same seed always gives the same names. Use a seed in tests or when you need names you can reproduce.
 
 ### Custom separator
 
@@ -25,7 +27,7 @@ distant_shore
 
 ### Longer names (--words)
 
-More words means more uniqueness. Use `--words 3` when two-word names aren't enough:
+More words give more unique names. Use `--words 3` when two-word names are not enough:
 
 ```bash
 $ vrk moniker --words 3 --seed 42
@@ -70,7 +72,7 @@ echo "Batch $BATCH started" | vrk emit --tag batch --level info
 
 ## When it fails
 
-More names than the word lists can make (unlikely with default settings):
+If you ask for more names than the word lists can make, moniker exits 1:
 
 ```bash
 $ vrk moniker --count 100000
@@ -79,7 +81,7 @@ $ echo $?
 1
 ```
 
-Invalid count:
+If the count is below 1, moniker exits 2:
 
 ```bash
 $ vrk moniker --count 0

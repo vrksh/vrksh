@@ -1,17 +1,21 @@
 ---
 title: "About"
 meta_title: "About vrksh - Unix CLI Tools for AI Pipelines"
-description: "What vrk is, why it exists, and how the binary works."
+description: "vrk is one static binary with 28 Unix tools for LLM pipelines. Learn why it exists, what its contract is, and when to use it."
 noindex: false
 ---
 
 ## Why vrksh exists
 
-You're working with LLMs. Maybe you're building pipelines in Python. Maybe your agent needs to call tools. Maybe you're debugging a prompt from the terminal at 11 PM. Wherever you are, the same problems keep showing up: How many tokens is this document? Did the model's JSON actually match the schema? Is there a secret in this log I'm about to send to an API?
+vrk is one static binary with 28 Unix tools for working with LLMs. Each tool reads stdin, writes stdout, and returns an exit code that a pipeline can trust.
 
-These aren't hard problems. But the solutions are scattered. Token counting is a Python library. Retry with backoff is another library. Secret redaction is a third. Schema validation is a fourth. Each one pulls in dependencies, needs a runtime, and only works inside your Python process. Your agent can't call them. Your CI pipeline can't call them. The developer SSHed into a production box at 2 AM definitely can't call them.
+If you work with LLMs, the same questions come up again and again. How many tokens is this document? Did the model's JSON match the schema? Is there a secret in this log that I am about to send to an API?
 
-vrk puts all of it in one place. 26 Unix tools for the things that come up constantly when you work with LLMs - token counting, API calls, schema validation, secret redaction, retry logic, rate limiting, state persistence. Each one is a Unix command: stdin in, stdout out, exit codes that mean something. A developer can run them from the terminal. A Python script can shell out to them. An agent can call them as tools. A cron job can chain them together. One static binary, no runtime dependencies, works the same on every platform.
+These are not hard problems, but the solutions are scattered. Token counting is a Python library. Retry with backoff is another library. Secret redaction is a third, and schema validation is a fourth. Each one needs a runtime and only works inside your Python process. Your agent cannot call them. Your CI pipeline cannot call them. A developer on a production box at 2 AM cannot call them.
+
+vrk puts all of this in one place. The 28 tools cover token counting, API calls, schema validation, secret redaction, retry logic, rate limiting, and state storage. Each tool is a Unix command: stdin in, stdout out, and exit codes that mean something.
+
+You can run the tools from the terminal. A Python script can call them as subprocesses. An agent can use them as tools, and a cron job can chain them. The binary is static, has no runtime dependencies, and works the same on every supported platform.
 
 ## The name
 
@@ -21,7 +25,7 @@ Pronunciation: **vrksh** is "vruksh", **vrk** is "vruk" (rhymes with truck).
 
 ## The contract
 
-Every tool follows the same rules. No exceptions.
+Every tool follows the same rules.
 
 ```
 stdin   ->  data in
@@ -34,26 +38,25 @@ exit 2  ->  usage error (bad flags, missing input)
 --help  ->  always works, even with no stdin
 ```
 
-This is what makes the tools composable. You don't parse stderr to check if something failed - you check the exit code. You don't guess the output format - stdout is always the data.
+These rules make the tools easy to chain. To find out if a step failed, read the exit code. Do not parse stderr. Stdout is always the data, so you never have to guess the output format.
 
-It also means every caller gets the same interface. A developer typing in a terminal, a Python subprocess call, an agent executing a tool, a CI step in a GitHub Action - they all interact with vrk the same way. Exit 0 means continue. Exit 1 means stop. Exit 2 means the command was wrong. No SDK, no client library, no language-specific wrapper. The process boundary is the API.
+Every caller gets the same interface. A terminal, a Python subprocess call, an agent, and a CI step all use vrk the same way. Exit 0 means continue. Exit 1 means stop. Exit 2 means the command was wrong. You need no SDK, client library, or language-specific wrapper. The process boundary is the API.
 
 ## What vrksh is not
 
-vrksh is not a Python library. It has no import, no runtime, no dependency
-on a virtualenv. This is the design - it means vrk works identically from a
-Python subprocess, a bash script, a Go program, an AI agent, a CI step, or
-a terminal at 2 AM on a production box.
+vrksh is not a Python library. It has no import, no runtime, and no virtualenv.
+This is by design. vrk works the same way from a Python subprocess, a bash
+script, a Go program, an AI agent, a CI step, or a terminal on a production box.
 
 `vrk tok` is not tiktoken. tiktoken counts tokens inside a Python process.
-`vrk tok` is a shell command - any program that can run a subprocess can use it.
+`vrk tok` is a shell command, so any program that can run a subprocess can use it.
 
 `vrk coax` is not tenacity or backoff. Those are Python decorators. `vrk coax`
-wraps any shell command, any language, any binary.
+wraps any shell command, in any language.
 
-`vrk validate` is not jsonschema the library. It is a pipeline gate - exit 1
-on schema mismatch stops the next command from running. You do not write
-error-handling code around it. The Unix pipeline handles it.
+`vrk validate` is not the jsonschema library. It is a pipeline gate. If the
+input does not match the schema, it exits 1 and the next command does not run.
+You do not write error-handling code around it.
 
 ## When to use vrksh
 
@@ -62,17 +65,17 @@ error-handling code around it. The Unix pipeline handles it.
 - You need secret redaction in a pipeline, not as a library call inside one program
 - You want retry and backoff logic around any shell command, not just Python functions
 - You're building an AI agent that calls tools via subprocess
-- You want one install, zero dependencies, and the same interface on every platform
+- You want one install, no dependencies, and the same interface on every platform
 
 ## When NOT to use vrksh
 
-- You're already inside a Python process and want a library. Use tiktoken, tenacity, jsonschema directly. vrk is for callers outside your process.
-- You need GPU-accelerated inference. vrk prompt calls APIs - it does not run models locally.
-- You want a framework that manages state and orchestrates steps. vrksh is tools, not a framework. It handles one step; your pipeline handles the sequence.
+- You are already inside a Python process and want a library. Use tiktoken, tenacity, or jsonschema directly. vrk is for callers outside your process.
+- You need GPU-accelerated inference. `vrk prompt` calls APIs and does not run models locally.
+- You want a framework that manages state and orchestrates steps. vrksh is a set of tools. Each tool does one step, and your pipeline sets the order.
 
 ## How the binary works
 
-One binary, 26 tools. vrk uses multicall dispatch - the first argument selects which tool runs:
+One binary, 28 tools. vrk uses multicall dispatch - the first argument selects which tool runs:
 
 ```bash
 vrk tok              # count tokens
@@ -82,7 +85,7 @@ vrk mask             # redact secrets
 vrk chunk            # split text into token-sized pieces
 ```
 
-24 of 26 tools need zero configuration. Only [prompt](/docs/prompt/) and [kv](/docs/kv/) read [environment variables](/env/). No config file.
+26 of 28 tools need no configuration. Only [prompt](/docs/prompt/) and [kv](/docs/kv/) read [environment variables](/env/). No config file.
 
 Two built-in flags for agent discovery:
 
@@ -92,11 +95,11 @@ vrk --skills         # full reference with flags, exit codes, gotchas
 vrk --skills tok     # reference for a single tool (lower token cost)
 ```
 
-The manifest and skills reference are embedded in the binary. An agent can call `vrk --skills tok` to learn everything about a tool without reading documentation or making network calls.
+The binary contains the manifest and the skills reference. An agent can run `vrk --skills tok` to learn about a tool without reading documentation or using the network.
 
 ## Bare mode
 
-Typing `vrk` before every command adds friction in interactive sessions. [Bare mode](/docs/bare/) creates symlinks so you can call tools directly by name:
+Typing `vrk` before every command is slow in an interactive session. [Bare mode](/docs/bare/) creates symlinks so you can call each tool by its own name:
 
 ```bash
 vrk --bare                     # link all tools
@@ -112,7 +115,7 @@ vrk --bare --list              # see what's linked
 vrk --bare --remove            # undo everything
 ```
 
-Collisions are handled safely. If a file already exists at a symlink path, bare mode skips it and warns you. Use `--force` to overwrite. `--remove` only deletes symlinks that point to vrk - it will never touch a file it didn't create.
+If a file already exists at a symlink path, bare mode skips it and warns you. Use `--force` to overwrite it. `--remove` only deletes symlinks that point to vrk. It never touches a file it did not create.
 
 ## Shell completions
 
@@ -124,36 +127,36 @@ vrk completions zsh > ~/.zsh/completions/_vrk
 vrk completions fish > ~/.config/fish/completions/vrk.fish
 ```
 
-After sourcing, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags. The completions are generated from the binary itself, so they always match the version you have installed.
+After you source the file, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags. The binary generates the completions, so they match the version you have installed.
 
 ## FAQ
 
 <details>
 <summary>Why not just write a Python script?</summary>
 
-You can. But your Python script only works inside Python. It needs a virtualenv, a runtime, and an import. vrk works from bash, from Go, from a cron job, from an AI agent, from a CI step. The process boundary means any caller gets the same interface - no SDK, no client library, no language-specific wrapper.
+You can. But a Python script only works inside Python. It needs a virtualenv, a runtime, and an import. vrk works from bash, Go, a cron job, an AI agent, or a CI step. Any caller gets the same interface, with no SDK, client library, or language-specific wrapper.
 </details>
 
 <details>
 <summary>Why not jq + curl + shell functions?</summary>
 
-jq is great for JSON reshaping. curl is great for HTTP. But neither counts tokens, validates against a JSON schema, redacts secrets by entropy, or retries with exponential backoff. vrk fills the gaps that come up specifically when building LLM pipelines. And every vrk tool uses the same exit code contract (0/1/2), so pipeline error handling is consistent across all 26 tools.
+jq reshapes JSON and curl makes HTTP requests. Neither counts tokens, validates against a JSON schema, redacts secrets by entropy, or retries with exponential backoff. vrk covers these tasks for LLM pipelines. Every vrk tool uses the same exit code contract (0/1/2), so error handling is the same across all 28 tools.
 </details>
 
 <details>
 <summary>Does this work with local models (Ollama, vLLM)?</summary>
 
-Yes. `vrk prompt --endpoint http://localhost:11434/v1` works with any OpenAI-compatible API. Ollama, vLLM, LiteLLM, and LocalAI all work out of the box.
+Yes. `vrk prompt --endpoint http://localhost:11434/v1` works with any OpenAI-compatible API. Ollama, vLLM, LiteLLM, and LocalAI all work.
 </details>
 
 <details>
-<summary>Why 26 tools? Isn't that scope creep?</summary>
+<summary>Why 28 tools? Isn't that scope creep?</summary>
 
-Every tool solves a problem that comes up repeatedly when working with LLMs. The utility tools (uuid, epoch, slug, recase) are things agents need constantly - generating run IDs, converting timestamps, normalizing names. They're free because they ship in the same binary. You don't install what you don't use; you just don't call it.
+Every tool solves a problem that comes up often when you work with LLMs. Agents need the utility tools (uuid, epoch, slug, recase) all the time, for example to make run IDs, convert timestamps, and normalize names. These tools ship in the same binary, so they add no install step. If you do not need a tool, do not call it.
 </details>
 
 <details>
 <summary>Does vrk work offline?</summary>
 
-Every tool except `vrk prompt` and `vrk grab` works fully offline with no network access. Token counting, secret masking, schema validation, encoding, hashing - all local, all instant.
+Every tool except `vrk prompt` and `vrk grab` works offline. Token counting, secret masking, schema validation, encoding, and hashing all run locally.
 </details>

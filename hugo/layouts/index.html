@@ -22,8 +22,9 @@
                     class="text-lg md:text-xl mb-8 font-sans"
                     style="color: var(--color-muted);"
                 >
-                    zero silent failures &ensp;•&ensp; composable by default
-                    &ensp;•&ensp; one static CLI binary
+                    vrk is one static binary with Unix tools for AI pipelines.
+                    It counts tokens, masks secrets, validates JSON and calls LLMs,
+                    and every tool exits non-zero when something goes wrong.
                 </p>
 
                 <pre
@@ -75,26 +76,12 @@
                     </button>
                 </div>
 
-                <!-- Quick examples -->
-                <div class="mt-8 max-w-2xl mx-auto text-left">
-                    <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
-                        try it now - no API key needed
-                    </p>
-                    <div class="terminal">
-                        <div class="terminal-header">
-                            <div class="terminal-dots"><span></span><span></span><span></span></div>
-                            <div class="terminal-title">~ vrk</div>
-                        </div>
-                        <div class="terminal-body">
-                            <pre class="text-sm"><code class="language-bash"># Count tokens in a document
-cat README.md | vrk tok
-# → 342
-
-# Mask secrets before they leak
-echo "key: sk-ant-api-abc123xyz" | vrk mask
-# → key: [REDACTED]</code></pre>
-                        </div>
-                    </div>
+                <!-- Playground -->
+                <div class="mt-10 max-w-2xl mx-auto text-left">
+                    <h2 class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
+                        Try vrk here. It runs in your browser and needs no install or API key.
+                    </h2>
+                    {{ partial "playground.html" (dict "id" "try") }}
                 </div>
             </section>
 
@@ -153,6 +140,52 @@ jsonschema.validate(json.loads(result), schema)</code></pre>
                     </div>
                 </div>
 
+            </section>
+
+            <!-- Documents and data: pdf, sql -->
+            <section class="max-w-6xl mx-auto px-4 pb-16">
+                <h2 class="text-2xl font-semibold mb-2">Your PDFs and spreadsheets, in the pipe</h2>
+                <p class="text-sm mb-6" style="color: var(--color-muted);">
+                    Most of what you want an LLM to read is not markdown. Two tools, no Python, no database server.
+                </p>
+                <div class="grid md:grid-cols-2 gap-8">
+                    <div>
+                        <a href="/docs/pdf/" class="text-sm mb-2 font-mono inline-block" style="color: var(--color-accent); text-decoration: none;">vrk pdf &rarr;</a>
+                        <div class="terminal">
+                            <div class="terminal-header">
+                                <div class="terminal-dots"><span></span><span></span><span></span></div>
+                                <div class="terminal-title">~ vrk</div>
+                            </div>
+                            <div class="terminal-body">
+                                <pre class="text-xs"><code class="language-bash">vrk pdf contract.pdf \
+  | vrk chunk --size 4000 \
+  | vrk prompt --field text \
+      --system 'List every termination clause'</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
+                            text per page, or JSONL with page numbers. a scanned PDF exits 1 instead of feeding the model nothing.
+                        </p>
+                    </div>
+                    <div>
+                        <a href="/docs/sql/" class="text-sm mb-2 font-mono inline-block" style="color: var(--color-accent); text-decoration: none;">vrk sql &rarr;</a>
+                        <div class="terminal">
+                            <div class="terminal-header">
+                                <div class="terminal-dots"><span></span><span></span><span></span></div>
+                                <div class="terminal-title">~ vrk</div>
+                            </div>
+                            <div class="terminal-body">
+                                <pre class="text-xs"><code class="language-bash">vrk sql 'SELECT u.city, SUM(o.total) AS revenue
+         FROM orders o JOIN users u ON u.id = o.user_id
+         GROUP BY u.city' users.csv orders.csv \
+  | vrk prompt --system 'Explain this revenue split'</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
+                            every CSV becomes a table. joins, group by, types inferred. CSV or JSONL out.
+                        </p>
+                    </div>
+                </div>
             </section>
 
             <!-- Exit code contract -->

@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -89,16 +91,30 @@ func openDB() (*sql.DB, error) {
 		return nil, fmt.Errorf("kv: cannot determine home directory: %w\nset VRK_KV_PATH to override", err)
 	}
 
-	// Create the database file with restricted permissions (0600) if it does
-	// not already exist. sql.Open would create it with the default umask
-	// (typically 0644), making it world-readable.
-	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
-		f, createErr := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
-		if createErr != nil {
-			return nil, fmt.Errorf("kv: create database %s: %w", path, createErr)
-		}
-		_ = f.Close()
+	// Create the file as 0600 if missing (sql.Open would use the umask, so
+	// typically 0644). O_NOFOLLOW refuses a symlink planted at the path. An
+	// existing file must be ours, and gets tightened to 0600 (older versions
+	// created it world-readable).
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("kv: open database %s: %w", path, err)
 	}
+	fi, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("kv: stat database %s: %w", path, err)
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok && int(st.Uid) != os.Getuid() {
+		_ = f.Close()
+		return nil, fmt.Errorf("kv: %s is owned by another user", path)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		if err := f.Chmod(0o600); err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("kv: chmod database %s: %w", path, err)
+		}
+	}
+	_ = f.Close()
 
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -131,6 +147,14 @@ func openDB() (*sql.DB, error) {
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("kv: create table: %w", err)
+	}
+
+	// The WAL sidecars may predate the chmod above; missing ones are fine.
+	for _, side := range []string{path + "-wal", path + "-shm"} {
+		if err := os.Chmod(side, 0o600); err != nil && !os.IsNotExist(err) {
+			_ = db.Close()
+			return nil, fmt.Errorf("kv: chmod %s: %w", side, err)
+		}
 	}
 
 	return db, nil
@@ -166,7 +190,8 @@ func getVal(db *sql.DB, ns, key string) (string, error) {
 func setVal(db *sql.DB, ns, key, value string, ttl time.Duration) error {
 	var expiresAt interface{}
 	if ttl > 0 {
-		expiresAt = time.Now().Unix() + int64(ttl.Seconds())
+		// Round up: a 500ms TTL must not truncate to 0 and expire at once.
+		expiresAt = time.Now().Unix() + int64(math.Ceil(ttl.Seconds()))
 	}
 
 	_, err := db.Exec(
@@ -338,6 +363,10 @@ func kvSet(args []string) int {
 			return printSubUsage("set", fs)
 		}
 		return shared.UsageErrorf("%s", err.Error())
+	}
+
+	if *ttl < 0 {
+		return shared.UsageErrorf("kv set: --ttl must be >= 0")
 	}
 
 	posArgs := fs.Args()

@@ -1,10 +1,10 @@
 name: jwt
-tagline: JWT inspector - decode, --claim, --expired, --valid.
-meta_description: "Decode JWTs and extract claims from the command line. Check expiry, validate structure, pull fields."
+tagline: JWT inspector - decode, --claim, --expired, --valid
+meta_description: "vrk jwt decodes a JWT on your machine, prints its claims, and checks expiry with --expired. It does not verify the signature."
 meta_lead: "vrk jwt decodes JWT tokens locally without sending them anywhere, and checks expiry and claims."
 og_title: "vrk jwt - JWT decoder and claim inspector"
 description: |
-  `vrk jwt` decodes JWT tokens locally, without sending them anywhere. It prints the payload as JSON, extracts individual claims with `--claim`, and checks expiry with `--expired`. No signature verification. This is an inspection tool, not an auth library.
+  `vrk jwt` decodes JWT tokens locally, without sending them anywhere. It prints the payload as JSON, extracts individual claims with `--claim`, and checks expiry with `--expired`. It does not verify signatures. Use it to inspect a token, not to authenticate one.
 problem: >
   A CI pipeline gets a 401. The token looks valid. You paste it into jwt.io to
   inspect it, which sends a production token to a third-party server. Or you

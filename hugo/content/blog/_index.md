@@ -1,6 +1,6 @@
 ---
 title: "vrk blog"
-description: "Deep dives, release notes, and field reports on building reliable AI pipelines with vrk - the Unix tools for the agent era."
+description: "Essays, release notes, and field reports on building reliable AI pipelines with vrk, the Unix tools for AI agents and LLM workflows."
 keywords:
   [
     "vrksh",
@@ -13,4 +13,4 @@ keywords:
   ]
 ---
 
-Essays, release notes, and field reports from the vrksh project. Unix philosophy, applied to AI pipelines.
+This blog has essays, release notes, and field reports from the vrksh project. They apply Unix design rules to AI pipelines.

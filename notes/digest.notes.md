@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk digest` prints the hash (sha256 by default, also md5 and sha512) or the HMAC of its input.
+
 ### Hash from stdin
 
 ```bash
@@ -21,7 +23,7 @@ $ vrk digest --file release.tar.gz
 sha256:c5ac14f502d9bc308ca094278d0adddaaad100b9fe09e38db93f1c17d0c09c9a
 ```
 
-Streams the file, so it works on files larger than available memory.
+digest reads the file as a stream, so it works on files larger than memory.
 
 ### Different algorithms
 
@@ -42,7 +44,7 @@ $ echo 'hello' | vrk digest --algo md5 --json
 
 ### Compare file hashes
 
-Check if multiple files have identical content:
+To check if files have identical content, compare them:
 
 ```bash
 vrk digest --file original.txt --file copy.txt --compare
@@ -60,7 +62,17 @@ $ echo $?
 0
 ```
 
-`--verify` accepts the `sha256:<hex>` form that digest prints, or bare hex. If the prefix names a different algorithm than `--algo`, it exits 2.
+`--key` puts the secret on the command line, where `ps` and shell history can see it. `--key-env NAME` reads it from an environment variable instead, and `--key-file PATH` from a file (one trailing newline is dropped). Pass only one of the three flags.
+
+```bash
+$ export WEBHOOK_SECRET='secret'
+$ SIG=$(echo 'message' | vrk digest --hmac --key-env WEBHOOK_SECRET)
+$ echo 'message' | vrk digest --hmac --key-env WEBHOOK_SECRET --verify "$SIG"
+$ echo $?
+0
+```
+
+`--verify` accepts the `sha256:<hex>` form that digest prints, or bare hex. If the prefix names a different algorithm than `--algo`, digest exits 2. An empty value (an unset `$SIG`, or just `sha256:`) is a mismatch and exits 1, so a missing signature header never passes. `--verify` reads stdin or a positional argument. If you use it with `--file`, digest exits 2.
 
 The `--verify` flag uses constant-time comparison to prevent timing attacks.
 
@@ -103,7 +115,7 @@ HMAC without key:
 
 ```bash
 $ echo 'hello' | vrk digest --hmac
-usage error: digest: --hmac requires --key
+usage error: digest: --hmac requires --key, --key-env or --key-file
 $ echo $?
 2
 ```

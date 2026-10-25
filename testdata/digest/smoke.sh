@@ -261,6 +261,29 @@ assert_exit "--verify different key exits 1" 1 "$ec"
 ec=$(set +e; echo 'x' | $VRK digest --verify "$HMAC_HEX" >/dev/null 2>&1; echo $?)
 assert_exit "--verify without --hmac exits 2" 2 "$ec"
 
+# Empty expected MAC (unset $SIG) must fail closed with nothing on stdout
+for v in '' 'sha256:'; do
+  out=$(set +e; echo 'payload' | $VRK digest --hmac --key mysecret --verify "$v" 2>/dev/null; true)
+  ec=$(set +e; echo 'payload' | $VRK digest --hmac --key mysecret --verify "$v" >/dev/null 2>&1; echo $?)
+  assert_exit "--verify '$v' exits 1" 1 "$ec"
+  assert_eq "--verify '$v' prints nothing" "" "$out"
+done
+
+# --key-env and --key-file give the same MAC as --key
+want=$(echo 'payload' | $VRK digest --hmac --key mysecret)
+got=$(echo 'payload' | WEBHOOK_SECRET=mysecret $VRK digest --hmac --key-env WEBHOOK_SECRET)
+assert_eq "--key-env matches --key" "$want" "$got"
+echo 'mysecret' > "$TMPDIR/key"
+got=$(echo 'payload' | $VRK digest --hmac --key-file "$TMPDIR/key")
+assert_eq "--key-file matches --key" "$want" "$got"
+ec=$(set +e; echo 'payload' | $VRK digest --hmac --key a --key-file "$TMPDIR/key" >/dev/null 2>&1; echo $?)
+assert_exit "--key with --key-file exits 2" 2 "$ec"
+
+# --verify with --file is rejected instead of silently ignored
+printf 'payload\n' > "$TMPDIR/verify.txt"
+ec=$(set +e; $VRK digest --hmac --key mysecret --verify "$HMAC_HEX" --file "$TMPDIR/verify.txt" >/dev/null 2>&1; echo $?)
+assert_exit "--verify with --file exits 2" 2 "$ec"
+
 # ---------------------------------------------------------------------------
 # Section 11 — mutual exclusion and usage errors
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 trap 'kill "$(cat server.pid)" 2>/dev/null' EXIT
 set -e
 check() {
-  NEW=$(vrk grab --text --allow-internal http://localhost:8099/pricing.html | vrk digest --bare)
+  NEW=$(VRK_ALLOW_INTERNAL=1 vrk grab --text --allow-internal http://localhost:8099/pricing.html | vrk digest --bare)
   OLD=$(vrk kv get --ns pages pricing 2>/dev/null || true)
   if [ "$NEW" = "$OLD" ]; then echo unchanged; else echo changed; vrk kv set --ns pages pricing "$NEW"; fi
 }

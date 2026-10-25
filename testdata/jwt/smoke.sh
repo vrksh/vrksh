@@ -475,6 +475,20 @@ assert_exit            "--quiet success: exit 0"        0        "$exit_code"
 assert_stdout_contains "--quiet success: value" '"sub"'          "$stdout"
 
 # ------------------------------------------------------------
+# Non-integer time claims fail closed
+# ------------------------------------------------------------
+echo ""
+echo "--- non-integer time claims ---"
+FLOAT_EXP_JWT='eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ4IiwiZXhwIjoxMDAwMDAwMDAwLjV9.'
+FLOAT_NBF_JWT='eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ4IiwibmJmIjo0MTAyNDQ0ODAwLjB9.'
+exit_code=$(set +e; "$VRK" jwt --expired "$FLOAT_EXP_JWT" > /dev/null 2>&1; echo $?)
+assert_exit "float exp in 2001: --expired exit 1" 1 "$exit_code"
+exit_code=$(set +e; "$VRK" jwt --valid "$FLOAT_NBF_JWT" > /dev/null 2>&1; echo $?)
+assert_exit "float nbf in 2100: --valid exit 1" 1 "$exit_code"
+stdout=$("$VRK" jwt --json "$FLOAT_EXP_JWT" 2>/dev/null) || true
+assert_stdout_contains "--json: signature_verified false" '"signature_verified":false' "$stdout"
+
+# ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
 echo ""

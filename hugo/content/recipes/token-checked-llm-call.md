@@ -1,9 +1,9 @@
 ---
 title: "Token-checked LLM call"
 meta_title: "Token-checked LLM call - vrk pipeline recipe"
-description: "Prevents silent truncation - the model never sees a prompt it can only half-fit. Count tokens before sending to an LLM - abort if too large."
-why: "Prevents silent truncation - the model never sees a prompt it can only half-fit."
-body: "Count tokens before sending to an LLM - abort if too large."
+description: "If the prompt is over the budget, the pipeline stops and the model never sees a prompt that only half fits. Count the tokens in a prompt and stop the ..."
+why: "If the prompt is over the budget, the pipeline stops and the model never sees a prompt that only half fits."
+body: "Count the tokens in a prompt and stop the pipeline before the LLM call if the prompt is over a budget."
 slug: "token-checked-llm-call"
 steps:
   - |-
@@ -19,13 +19,13 @@ tags:
 
 LLMs have context windows. When your input exceeds the limit, the API either truncates silently or returns an error after you've already waited for the response and spent tokens on the request. In a pipeline, this is worse - downstream steps process garbage output without knowing the input was incomplete.
 
-This is the most expensive bug in LLM pipelines because it looks like success. The API returns 200, the model responds, but the answer is based on a truncated document.
+This bug is expensive because it looks like success. The API returns 200, the model responds, but the answer is based on a truncated document.
 
 ## How the pipeline works
 
 `vrk tok --check 4000` reads stdin, counts tokens, and makes a decision. If the count is 4000 or under, it passes the text through unchanged to stdout. If over, it exits 1 with empty stdout. `vrk prompt` gets no input, exits 1 with `prompt: empty prompt, nothing sent`, and no request reaches the API.
 
-No wasted API call. No truncated output. No silent failure.
+The pipeline sends no request and returns a clear exit code, so you never get a truncated answer.
 
 ## When it fails
 

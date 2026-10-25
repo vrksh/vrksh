@@ -25,6 +25,8 @@ cmd/
   chunk/chunk.go                — package chunk, exports Run()
   grab/grab.go                  — package grab, exports Run()
   links/links.go                — package links, exports Run()  ← most recent tool; reference for patterns
+  pdf/pdf.go                    - package pdf, exports Run()
+  sql/sql.go                    - package sql, exports Run()
   plain/plain.go                — package plain, exports Run()
   validate/validate.go          — package validate, exports Run()
   mask/mask.go                  — package mask, exports Run()

@@ -1,9 +1,9 @@
 ---
 title: "SSE stream to text"
 meta_title: "SSE stream to text - vrk pipeline recipe"
-description: "Raw SSE is unusable without parsing - sse extracts the content field so downstream tools get clean text, not protocol framing. Parse an SSE stream ..."
-why: "Raw SSE is unusable without parsing - sse extracts the content field so downstream tools get clean text, not protocol framing."
-body: "Parse an SSE stream and extract text tokens."
+description: "Raw SSE has protocol framing that other tools cannot read, so sse extracts the text field and prints clean text. Parse a Server-Sent Events stream ..."
+why: "Raw SSE has protocol framing that other tools cannot read, so sse extracts the text field and prints clean text."
+body: "Parse a Server-Sent Events stream from an LLM API and print the streamed text."
 slug: "sse-stream-to-text"
 steps:
   - |-

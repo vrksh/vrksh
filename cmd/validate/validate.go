@@ -179,13 +179,17 @@ func loadSchema(value string) (map[string]string, error) {
 		return parseSchema([]byte(value))
 	}
 
-	// File path.
-	data, err := os.ReadFile(value)
+	// File path. Capped, and regular files or pipes only, so a mistyped
+	// path to /dev/zero or a huge file can't hang or exhaust memory.
+	data, err := shared.ReadFileLimited(value, maxSchemaBytes, true)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read schema file: %w", err)
 	}
 	return parseSchema(data)
 }
+
+// maxSchemaBytes caps a --schema file. A flat field->type map is tiny.
+const maxSchemaBytes = 1 << 20
 
 var errJSONSchema = errors.New("--schema looks like JSON Schema; vrk validate takes a flat {\"key\":\"type\"} map. Types: string, number, boolean, array, object")
 
@@ -222,7 +226,12 @@ func parseSchema(data []byte) (map[string]string, error) {
 func validateSchemaTypes(schema map[string]string) (map[string]string, error) {
 	for key, typ := range schema {
 		if !allowedTypes[typ] {
-			return nil, fmt.Errorf("invalid schema type %q for key %q (must be one of: string number boolean array object)", typ, key)
+			// The bad value is not echoed: --schema may point at a secrets
+			// file by mistake, and its values would land in logs.
+			if len(key) > 64 {
+				key = key[:64] + "..."
+			}
+			return nil, fmt.Errorf("invalid schema type for key %q (must be one of: string number boolean array object)", key)
 		}
 	}
 	return schema, nil
@@ -232,11 +241,13 @@ func validateSchemaTypes(schema map[string]string) (map[string]string, error) {
 // the correct type. Returns a slice of human-readable failure messages;
 // empty means the record is valid.
 func validateRecord(line string, schema map[string]string) []string {
-	var m map[string]interface{}
-	dec := json.NewDecoder(strings.NewReader(line))
-	dec.UseNumber()
-	if err := dec.Decode(&m); err != nil {
+	var v any
+	if err := shared.DecodeOne(line, &v); err != nil {
 		return []string{"line is not valid JSON"}
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return []string{"line is not a JSON object"}
 	}
 
 	var failures []string
