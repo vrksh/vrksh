@@ -2091,7 +2091,7 @@ The shape is identical regardless of `--words`:
 |------|---------|
 | 0 | Success |
 | 1 | Requested count exceeds available unique combinations |
-| 2 | Usage error — `--count 0`, `--words < 2`, unknown flag |
+| 2 | Usage error — `--count 0` or over 1000000, `--words < 2`, unknown flag |
 
 ### Examples
 

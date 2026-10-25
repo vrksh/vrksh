@@ -75,6 +75,11 @@ assert_eq "--count 5 produces 5 lines" "5" "$line_count"
 assert_exit "--count 0 exits 2" 2 "${exit_code:-0}"
 unset exit_code
 
+# Huge --count is a usage error, not a panic or a multi-GB allocation
+"$VRK" moniker --words 3 --count 9223372036854775807 2>/dev/null || exit_code=$?
+assert_exit "--count max int64 exits 2" 2 "${exit_code:-0}"
+unset exit_code
+
 # Smoke 4: --separator _ uses underscore
 out=$("$VRK" moniker --separator _)
 assert_match "--separator _ output matches adj_noun pattern" '^[a-z]+_[a-z]+$' "$out"

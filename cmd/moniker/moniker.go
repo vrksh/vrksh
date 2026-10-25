@@ -24,6 +24,10 @@ var adjectivesData string
 //go:embed data/nouns.txt
 var nounsData string
 
+// maxCount caps --count. generateN sizes a map and slice from it, so an
+// unchecked value panics or allocates GBs.
+const maxCount = 1_000_000
+
 var (
 	adjectives []string
 	nouns      []string
@@ -104,6 +108,9 @@ func Run() int {
 
 	if count <= 0 {
 		return shared.UsageErrorf("moniker: --count must be >= 1, got %d", count)
+	}
+	if count > maxCount {
+		return shared.UsageErrorf("moniker: --count must be <= %d, got %d", maxCount, count)
 	}
 	if numWords < 2 {
 		return shared.UsageErrorf("moniker: --words must be >= 2, got %d", numWords)

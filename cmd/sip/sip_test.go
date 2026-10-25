@@ -221,6 +221,14 @@ func TestReservoirExact(t *testing.T) {
 	}
 }
 
+// TestReservoirHugeCount: memory tracks lines seen, not the flag value.
+func TestReservoirHugeCount(t *testing.T) {
+	stdout, stderr, code := runSip(t, "a\nb\n", "--count", "9223372036854775807")
+	if code != 0 || stdout != "a\nb\n" {
+		t.Fatalf("exit %d stdout %q stderr %q, want 0 and both lines", code, stdout, stderr)
+	}
+}
+
 func TestReservoirShorterStream(t *testing.T) {
 	// Stream shorter than count → emit all, exit 0.
 	stdout, _, code := runSip(t, "1\n2\n3\n4\n5\n", "--count", "10")
