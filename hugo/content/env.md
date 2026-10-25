@@ -33,7 +33,7 @@ When `VRK_LLM_URL` (or `--endpoint`) is set, there is no default model. Pass `--
 
 ## Everything else
 
-The other 24 tools (tok, chunk, grab, mask, validate, jwt, epoch, uuid, sse, coax, links, plain, jsonl, emit, assert, sip, throttle, digest, base, recase, slug, moniker, pct, urlinfo) need no environment variables. They work with zero setup.
+The other 26 tools (tok, chunk, grab, mask, validate, jwt, epoch, uuid, sse, coax, links, plain, jsonl, emit, assert, sip, throttle, digest, base, recase, slug, moniker, pct, urlinfo, pdf, sql) need no environment variables. They work with zero setup.
 
 ## Flag precedence
 

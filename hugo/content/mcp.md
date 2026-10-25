@@ -1,6 +1,6 @@
 ---
 title: "MCP discovery"
-description: "MCP discovery for vrksh - let your agent see all 26 tools and their flags through Model Context Protocol. The agent runs them in its shell."
+description: "MCP discovery for vrksh - let your agent see all 28 tools and their flags through Model Context Protocol. The agent runs them in its shell."
 noindex: false
 ---
 
