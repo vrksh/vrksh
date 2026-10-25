@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	lpdf "github.com/vrksh/vrksh/internal/pdfread"
+	"github.com/vrksh/vrksh/internal/shared"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -302,7 +303,7 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 			if w.clip && (x < w.box[0]-2 || x > w.box[2]+2 || y < w.box[1]-2 || y > w.box[3]+2) {
 				continue
 			}
-			g := glyph{s: norm.NFKC.String(f.decode(raw)), x: x, y: y, endX: end[4], endY: end[5], ux: 1, bold: f.bold}
+			g := glyph{s: glyphText(f.decode(raw)), x: x, y: y, endX: end[4], endY: end[5], ux: 1, bold: f.bold}
 			g.size = math.Hypot(start[2], start[3])
 			if n := math.Hypot(start[0], start[1]); n > 0 {
 				g.ux, g.uy = start[0]/n, start[1]/n
@@ -422,6 +423,15 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 		}
 	})
 }
+
+// glyphText normalises a decoded glyph and drops control characters, so a
+// PDF can't drive the terminal or forge a page break (\f) or a line. Lines
+// come from glyph positions, so a newline or tab inside a string is a space.
+func glyphText(s string) string {
+	return shared.StripControls(glyphSpaces.Replace(norm.NFKC.String(s)))
+}
+
+var glyphSpaces = strings.NewReplacer("\n", " ", "\t", " ")
 
 // line is one line of a page's text.
 type line struct {

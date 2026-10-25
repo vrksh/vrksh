@@ -139,3 +139,30 @@ func TestDocGlyphBudget(t *testing.T) {
 		t.Errorf("stderr %.300q", stderr)
 	}
 }
+
+// Text and warnings from a PDF can't drive the terminal (ESC, BEL, OSC 52) or
+// forge a page break or a line: control characters are dropped from glyph
+// text and from library errors, and a newline inside a string is a space.
+func TestControlChars(t *testing.T) {
+	clean := func(s string) bool {
+		for _, r := range s {
+			if r < 0x20 && r != '\n' && r != '\t' && r != '\f' || r == 0x7f || r >= 0x80 && r <= 0x9f {
+				return false
+			}
+		}
+		return true
+	}
+	for _, name := range []string{"ansi_win.pdf", "hexerr.pdf", "formfeed.pdf"} {
+		stdout, stderr, code, _ := runHostile(t, name, "--text")
+		if code != 0 || !clean(stdout) || !clean(stderr) {
+			t.Errorf("%s: exit %d stdout %q stderr %q", name, code, stdout, stderr)
+		}
+	}
+	stdout, _, _, _ := runHostile(t, "formfeed.pdf", "--text")
+	if strings.Contains(stdout, "\f") || strings.Count(stdout, "\n") != 1 {
+		t.Errorf("formfeed.pdf: one page, one line, got %q", stdout)
+	}
+	if got := short("bad \x1b]0;title\a here"); got != "bad ]0;title here" {
+		t.Errorf("short: %q", got)
+	}
+}

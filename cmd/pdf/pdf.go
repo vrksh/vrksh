@@ -346,9 +346,11 @@ func extract(all []lpdf.Page, pages []int, clean bool) (lines [][]line, pageErrs
 }
 
 // short keeps library error text to its first line and about 120 bytes; some
-// panics carry a dump of the object that broke.
+// panics carry a dump of the object that broke. Control characters from the
+// file are dropped so a warning can't drive the terminal.
 func short(s string) string {
 	s, _, cut := strings.Cut(s, "\n")
+	s = shared.StripControls(s)
 	if len(s) > 120 {
 		i := 120
 		for i > 0 && !utf8.RuneStart(s[i]) {
