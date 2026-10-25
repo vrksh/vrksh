@@ -203,6 +203,7 @@ CUTOFF=$(vrk epoch -30d --at "$BASELINE")
 - Negative integers (`-1000`) are valid pre-epoch Unix timestamps — pass via stdin to avoid flag parsing.
 - When `--json` is active, errors go to stdout as `{"error":"msg","code":N}` and stderr is empty.
 - Stdout is always empty on error unless `--json` is active.
+- Relative offsets that overflow int64 seconds (`-9223372036854775807d`) exit 1 with `relative time ... is out of range`. They never wrap.
 
 ---
 

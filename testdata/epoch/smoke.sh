@@ -357,6 +357,12 @@ exit_code=$(set +e; "$VRK" epoch 2026-02-29 > /dev/null 2>&1; echo $?)
 assert_exit "invalid date: exit 1" 1 "$exit_code"
 assert_stderr_contains "invalid date: stderr" "invalid date" "$stderr"
 
+# Offsets past int64 fail instead of wrapping into the wrong direction
+exit_code=$(set +e; "$VRK" epoch --at 1740009600 -- '-9223372036854775807d' > /dev/null 2>&1; echo $?)
+assert_exit "overflowing -Nd: exit 1" 1 "$exit_code"
+exit_code=$(set +e; "$VRK" epoch --at 1740009600 -- '+9223372036854775807s' > /dev/null 2>&1; echo $?)
+assert_exit "overflowing +Ns: exit 1" 1 "$exit_code"
+
 # Error + --json: JSON to stdout, stderr empty
 stdout=$(set +e; echo '3d' | "$VRK" epoch --json 2>/dev/null; true)
 stderr=$(set +e; echo '3d' | "$VRK" epoch --json 2>&1 >/dev/null; true)
