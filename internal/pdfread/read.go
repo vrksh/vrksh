@@ -89,6 +89,15 @@ type Reader struct {
 	trailerptr objptr
 	key        []byte
 	useAES     bool
+	resolving  map[objptr]bool // object streams being opened, to catch loops
+}
+
+// maxObjects bounds the object numbers an xref may use. /Size, /Index and a
+// table's subsection start all come from the file and size the in-memory
+// table directly; an object takes at least a few bytes of file, so neither a
+// real PDF nor this cap ever gets near 4M objects or the file's length.
+func (r *Reader) maxObjects() int64 {
+	return min(1<<22, r.end)
 }
 
 type xref struct {
@@ -266,6 +275,9 @@ func readXrefStream(r *Reader, b *buffer) ([]xref, objptr, dict, error) {
 	if !ok {
 		return nil, objptr{}, nil, fmt.Errorf("malformed PDF: xref stream missing Size")
 	}
+	if size < 0 || size > r.maxObjects() {
+		return nil, objptr{}, nil, fmt.Errorf("malformed PDF: xref stream Size %d out of range", size)
+	}
 	table := make([]xref, size)
 
 	table, err := readXrefStreamData(r, strm, table, size)
@@ -347,6 +359,9 @@ func readXrefStreamData(r *Reader, strm stream, table []xref, size int64) ([]xre
 			return nil, fmt.Errorf("malformed Index pair %v %v %T %T", objfmt(index[0]), objfmt(index[1]), index[0], index[1])
 		}
 		index = index[2:]
+		if start < 0 || n < 0 || n > r.maxObjects()-start {
+			return nil, fmt.Errorf("Index range %d %d out of range", start, n)
+		}
 		for i := 0; i < int(n); i++ {
 			_, err := io.ReadFull(data, buf)
 			if err != nil {
@@ -401,7 +416,7 @@ func ensureXrefLen(table []xref, x int) []xref {
 func readXrefTable(r *Reader, b *buffer) ([]xref, objptr, dict, error) {
 	var table []xref
 
-	table, err := readXrefTableData(b, table)
+	table, err := readXrefTableData(b, table, r.maxObjects())
 	if err != nil {
 		return nil, objptr{}, nil, fmt.Errorf("malformed PDF: %v", err)
 	}
@@ -416,7 +431,7 @@ func readXrefTable(r *Reader, b *buffer) ([]xref, objptr, dict, error) {
 			return nil, fmt.Errorf("malformed PDF: xref Prev does not point to xref")
 		}
 		var dataErr error
-		table, dataErr = readXrefTableData(b, table)
+		table, dataErr = readXrefTableData(b, table, r.maxObjects())
 		if dataErr != nil {
 			return nil, fmt.Errorf("malformed PDF: %v", dataErr)
 		}
@@ -442,7 +457,7 @@ func readXrefTable(r *Reader, b *buffer) ([]xref, objptr, dict, error) {
 	return table, objptr{}, trailer, nil
 }
 
-func readXrefTableData(b *buffer, table []xref) ([]xref, error) {
+func readXrefTableData(b *buffer, table []xref, limit int64) ([]xref, error) {
 	for {
 		tok := b.readToken()
 		if tok == keyword("trailer") {
@@ -452,6 +467,9 @@ func readXrefTableData(b *buffer, table []xref) ([]xref, error) {
 		n, ok2 := b.readToken().(int64)
 		if !ok1 || !ok2 {
 			return nil, fmt.Errorf("malformed xref table")
+		}
+		if start < 0 || n < 0 || n > limit-start {
+			return nil, fmt.Errorf("xref subsection %d %d out of range", start, n)
 		}
 		for i := 0; i < int(n); i++ {
 			off, ok1 := b.readToken().(int64)
@@ -763,6 +781,18 @@ func (r *Reader) resolve(parent objptr, x interface{}) Value {
 		}
 		var obj object
 		if xref.inStream {
+			// An object stream said to live in itself, directly, via another
+			// object stream, or through its own /Length, recursed until the
+			// stack overflowed: a fatal error no recover catches. Valid files
+			// never nest object streams, so seeing one twice is a loop.
+			if r.resolving[xref.stream] {
+				panic("object stream loop")
+			}
+			if r.resolving == nil {
+				r.resolving = map[objptr]bool{}
+			}
+			r.resolving[xref.stream] = true
+			defer delete(r.resolving, xref.stream)
 			strm := r.resolve(parent, xref.stream)
 			seen := map[objptr]bool{}
 		Search:
@@ -778,15 +808,24 @@ func (r *Reader) resolve(parent objptr, x interface{}) Value {
 				if strm.Key("Type").Name() != "ObjStm" {
 					panic("not an object stream")
 				}
-				n := int(strm.Key("N").Int64())
+				// /N is only a claim; stop at the end of the header too, or a
+				// huge /N spins on io.EOF tokens for ever.
+				n := strm.Key("N").Int64()
+				if n < 0 || n > 1<<20 {
+					panic("bad object stream N")
+				}
 				first := strm.Key("First").Int64()
-				if first == 0 {
+				if first <= 0 {
 					panic("missing First")
 				}
 				b := newBuffer(strm.Reader(), 0)
 				b.allowEOF = true
-				for i := 0; i < n; i++ {
-					id, _ := b.readToken().(int64)
+				for i := int64(0); i < n; i++ {
+					tok := b.readToken()
+					if tok == io.EOF {
+						break
+					}
+					id, _ := tok.(int64)
 					off, _ := b.readToken().(int64)
 					if uint32(id) == ptr.id {
 						b.seekForward(first + off)

@@ -722,7 +722,7 @@ func FuzzPdf(f *testing.F) {
 	f.Add(buildLoopPDF())
 	f.Add(buildMissingKidPDF())
 	f.Add([]byte("%PDF-1.4\n%%EOF\n"))
-	for _, name := range []string{"prev_loop.pdf", "form_bomb.pdf", "count_huge.pdf"} {
+	for _, name := range append([]string{"prev_loop.pdf", "form_bomb.pdf", "count_huge.pdf"}, hostile...) {
 		if data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "pdf", "fixtures", name)); err == nil {
 			f.Add(data)
 		}
