@@ -606,7 +606,7 @@ wait
 - **Namespaces are isolated.** `--ns a` and `--ns b` never share keys. The default namespace is `"default"`. Using `--ns` consistently is required — omitting it on `get` after setting with `--ns` always gives "key not found".
 - **`incr`/`decr` on missing key starts at 0.** The first `vrk kv incr counter` on a fresh database stores and prints `1`. The first `vrk kv decr counter` stores `-1`. This mirrors shell counter idioms.
 - **`incr`/`decr` on non-numeric value exits 1.** Stored values must be parseable as 64-bit integers. Float strings (`"1.5"`) and alphabetic strings fail with "value is not a number".
-- **TTL precision is whole seconds.** `--ttl 1500ms` rounds down to 1 second. Sub-second TTLs are not a real use case for a persistent store.
+- **TTL precision is whole seconds.** `--ttl 1500ms` rounds up to 2 seconds, so a short TTL never expires instantly. A negative `--ttl` exits 2. The database file must be yours and not a symlink; kv tightens it to 0600.
 - **`list` output is sorted alphabetically.** This is deterministic — safe to diff and assert in scripts. No namespace prefix is included.
 - **`del` on a missing key exits 0.** This matches filesystem `rm -f` semantics.
 - **Concurrent writers serialise cleanly.** `kv` uses SQLite WAL mode with `PRAGMA busy_timeout=5000`. The `incr`/`decr` operations use `BEGIN IMMEDIATE` to take the write lock before reading, preventing lost updates. Running 10 parallel `vrk kv incr counter` processes always yields a final value of 10.
@@ -638,7 +638,7 @@ the command on every attempt.
 |------|-----------|
 | 0 | Command exits 0 on some attempt, or `--until` condition exits 0 |
 | last cmd code | All retries exhausted — coax passes through the last command's actual exit code |
-| 2 | Usage error — `--times < 1`, no command, unknown flag, bad `--backoff` format |
+| 2 | Usage error — `--times < 1`, no command, unknown flag, bad or negative `--backoff` or `--backoff-max` |
 
 ### Backoff formats
 
@@ -2711,6 +2711,8 @@ printf '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}\n' | vrk mcp
 ### Gotchas
 
 - **Discovery only** — `tools/call` returns method-not-found (-32601). Use shell invocation (`vrk <tool> [flags]`) to call tools.
+- **Some tools and flags are hidden** — `coax`, `kv` and `prompt` are not listed, and neither are flags that take a file path, a shell command or turn off a safety guard (`--file`, `--schema`, `--system`, `--until`, `--allow-internal`).
+- **Request limits** — a request line over 1 MiB ends the server with a -32700 error and exit 1. An `id` that is not a string or number gets -32600.
 - **Stdout purity** — nothing goes to stdout except JSON-RPC responses. All logging goes to stderr.
 - **Tool names are prefixed** — MCP tool names use `vrk_` prefix (e.g. `vrk_tok`, `vrk_jwt`) to avoid collisions in MCP clients.
 - **`input` field in schemas** — tools that require stdin have `"input"` in their inputSchema's `required` array. Tools that don't need stdin (uuid, epoch, moniker) do not.
