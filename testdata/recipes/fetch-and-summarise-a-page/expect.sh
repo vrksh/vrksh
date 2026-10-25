@@ -1,4 +1,5 @@
 # Rerun the recipe with the fetch pointed at the local fixture site (no network needed).
+export VRK_ALLOW_INTERNAL=1
 fail() { echo "expect: $*" >&2; exit 1; }
 : > "$MOCK_LOG"
 sed "s#grab https://example.com#grab --allow-internal $SITE_URL/index.html#g" "$STEPS" > local.sh

@@ -1017,10 +1017,10 @@ Input: positional argument or stdin.
 | `--json` | `-j` | Emit a JSON envelope with metadata |
 | `--quiet` | `-q` | Suppress stderr output |
 | `--max-size` | - | Max response body size in bytes (default 10MB) |
-| `--allow-internal` | - | Allow requests to private/loopback/link-local addresses |
+| `--allow-internal` | - | Allow requests to private/loopback/link-local addresses (needs `VRK_ALLOW_INTERNAL=1`) |
 
 `--text`, `--raw`, and `--json` are mutually exclusive. Combining any two exits 2.
-Requests to internal network addresses (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, link-local) are blocked by default. Pass `--allow-internal` to allow them.
+Requests to internal network addresses (loopback, private, CGNAT 100.64.0.0/10, link-local, reserved, and NAT64/6to4 addresses that wrap one of those) are blocked by default. Pass `--allow-internal` with `VRK_ALLOW_INTERNAL=1` in the environment to allow them.
 
 ### --json output shape
 
@@ -1046,6 +1046,7 @@ Requests to internal network addresses (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 
 | 1 | Response body exceeded `--max-size` limit |
 | 1 | Request to internal address blocked (without `--allow-internal`) |
 | 2 | No URL provided (interactive terminal or empty stdin) |
+| 2 | `--allow-internal` without `VRK_ALLOW_INTERNAL=1` in the environment |
 | 2 | Invalid URL format (no scheme, non-http/https scheme, unparseable) |
 | 2 | Unknown flag |
 | 2 | Mutually exclusive flags combined |
@@ -1111,7 +1112,11 @@ vrk coax --times 3 --backoff exp:1s -- vrk grab https://example.com
 - **`token_estimate` uses o200k_base (exact for GPT-4o and later, an estimate for Claude).** The estimate reflects the extracted `content` field, not the raw HTML. Set downstream budgets at 90% of the actual model limit to absorb the error margin.
 - **`--text` output is whitespace-normalised.** `grab --text` runs the HTML extractor then `vrk plain`'s markdown stripper. Consecutive blank lines are collapsed to one, and multiple spaces on a line are collapsed to one. The prose content is unchanged, but whitespace structure may differ from the raw page.
 - **Stdout is always empty on error.** All error messages go to stderr. Stdout is empty on exit 1 and exit 2.
-- **Internal addresses are blocked by default.** Requests to 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, ::1, and link-local IPv6 exit 1 unless `--allow-internal` is passed. This includes addresses reached via redirects - a public URL that redirects to localhost is also blocked.
+- **Internal addresses are blocked by default.** Requests to 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, other reserved ranges, ::1, ULA and link-local IPv6, and NAT64 (64:ff9b::/96) or 6to4 (2002::/16) addresses that embed one of those, exit 1 unless `--allow-internal` is passed. This includes addresses reached via redirects - a public URL that redirects to localhost is also blocked.
+- **`--allow-internal` needs `VRK_ALLOW_INTERNAL=1`.** The flag alone exits 2. A model can add a flag to a command line, so the person running vrk has to opt in through the environment.
+- **Credentials in the URL are not echoed.** A password in `https://user:pass@host/` shows as `***` in errors and in the `--json` `url` field, and is not copied into resolved links.
+- **Terminal control characters are stripped.** Escape sequences in page text and titles are removed from the output. A non-HTML body passes through byte for byte in a pipe and is only stripped when stdout is a terminal.
+- **Redirects drop the `Referer` header,** so a token in the original URL's query string does not leak to the redirect target.
 - **Response size is capped at 10MB by default.** Use `--max-size` to raise or lower the limit. Responses that exceed the limit exit 1.
 
 ---

@@ -632,7 +632,7 @@
   description: Hash the page text and compare it with the hash stored on the last run.
   steps:
     - |-
-      NEW=$(vrk grab --text --allow-internal http://localhost:8099/pricing.html | vrk digest --bare)
+      NEW=$(VRK_ALLOW_INTERNAL=1 vrk grab --text --allow-internal http://localhost:8099/pricing.html | vrk digest --bare)
       OLD=$(vrk kv get --ns pages pricing 2>/dev/null || true)
       if [ "$NEW" = "$OLD" ]; then echo unchanged; else echo changed; vrk kv set --ns pages pricing "$NEW"; fi
   tags:
@@ -652,7 +652,7 @@
 
     `vrk kv get --ns pages pricing` reads the hash from the last run. The first time there is none, so the page counts as changed and the new hash is saved. After that you only hear about real changes.
 
-    The example uses a page on localhost, so it needs `--allow-internal`. For a public URL, drop that flag. `grab` refuses private addresses unless you pass it.
+    The example uses a page on localhost, so it needs `--allow-internal`, and that flag only works with `VRK_ALLOW_INTERNAL=1` set in the environment. For a public URL, drop both. `grab` refuses private addresses unless you pass them.
 
     ## Running it on a schedule
 

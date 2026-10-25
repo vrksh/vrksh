@@ -165,14 +165,14 @@ vrk epoch '+3d' --iso
 
 ## grab - URL fetcher - clean markdown, plain text, or raw HTML.
 
-| Flag               | Short | Description                                                                                        |
-|--------------------|-------|----------------------------------------------------------------------------------------------------|
-| `--text`           | -t    | Plain prose output, no markdown syntax                                                             |
-| `--raw`            |       | Raw HTML, no processing                                                                            |
-| `--json`           | -j    | Emit JSON envelope with metadata                                                                   |
-| `--quiet`          | -q    | Suppress stderr output                                                                             |
-| `--max-size`       |       | Max response body size in bytes (default 10MB)                                                     |
-| `--allow-internal` |       | Allow requests to private, loopback, and link-local addresses (blocked by default for SSRF safety) |
+| Flag               | Short | Description                                                                                                                                                     |
+|--------------------|-------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--text`           | -t    | Plain prose output, no markdown syntax                                                                                                                          |
+| `--raw`            |       | Raw HTML, no processing                                                                                                                                         |
+| `--json`           | -j    | Emit JSON envelope with metadata                                                                                                                                |
+| `--quiet`          | -q    | Suppress stderr output                                                                                                                                          |
+| `--max-size`       |       | Max response body size in bytes (default 10MB)                                                                                                                  |
+| `--allow-internal` |       | Allow requests to private, loopback, and link-local addresses (blocked by default for SSRF safety). Only works with VRK_ALLOW_INTERNAL=1 set in the environment |
 
 Exit 0: Success
 Exit 1: HTTP error, fetch timeout, response too large, blocked internal address, or I/O error

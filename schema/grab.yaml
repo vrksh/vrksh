@@ -45,7 +45,7 @@ flags:
   - flag: --allow-internal
     short: ""
     type: bool
-    description: Allow requests to private, loopback, and link-local addresses (blocked by default for SSRF safety)
+    description: Allow requests to private, loopback, and link-local addresses (blocked by default for SSRF safety). Only works with VRK_ALLOW_INTERNAL=1 set in the environment
 exit_codes:
   - code: 0
     meaning: Success

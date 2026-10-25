@@ -126,3 +126,14 @@ usage error: grab: no URL provided
 $ echo $?
 2
 ```
+
+`--allow-internal` without `VRK_ALLOW_INTERNAL=1` in the environment:
+
+```bash
+$ vrk grab --allow-internal http://127.0.0.1:8080/
+usage error: grab: --allow-internal needs VRK_ALLOW_INTERNAL=1 in the environment
+$ echo $?
+2
+```
+
+A model choosing what to run can add a flag, so reaching private, loopback and link-local addresses takes both: the flag, and the variable set by whoever runs vrk. Local testing looks like `VRK_ALLOW_INTERNAL=1 vrk grab --allow-internal http://localhost:8080/`.
