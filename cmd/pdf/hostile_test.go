@@ -17,6 +17,7 @@ var hostile = []string{
 	"xs_index_huge.pdf", "xref_start_1000000000.pdf", "xs_size_1099511627776.pdf",
 	"contents_arr_20000.pdf", "operands_10.pdf", "array_10.pdf", "litstr_10.pdf",
 	"pred_cols_1000000000000.pdf", "pred_cols_-5.pdf", "w_form.pdf", "type0_w_200.pdf",
+	"cr_tail.pdf",
 }
 
 // runHostile runs vrk pdf on a fixture with a 2s deadline and reports how
@@ -186,4 +187,11 @@ func TestInvisibleText(t *testing.T) {
 	if code != 0 || stdout != "shown again\n" {
 		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
 	}
+}
+
+// A file shorter than the 100-byte tail window used to read the tail from a
+// negative offset and see only zeros, so its %%EOF was never found.
+func TestShortTail(t *testing.T) {
+	stdout, stderr, code := runPdf(t, []string{"--json"}, []byte("%PDF-1.7\n%%EOF\n"))
+	assertJSONError(t, stdout, stderr, code, 1, "missing final startxref")
 }
