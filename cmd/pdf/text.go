@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -8,7 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	lpdf "github.com/ledongthuc/pdf"
+	lpdf "github.com/vrksh/vrksh/internal/pdfread"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -21,6 +22,18 @@ import (
 // maxFormDepth caps Form XObject nesting. Real files nest a level or two; a
 // form that draws itself would otherwise recurse forever.
 const maxFormDepth = 8
+
+// Per-page budgets. Depth alone doesn't stop a form that draws itself ten
+// times at each of eight levels (10^8 runs from a 1 KB file). Real pages stay
+// far below both.
+const (
+	maxGlyphs = 1_000_000
+	maxForms  = 10_000
+	maxSaves  = 10_000 // q nesting
+)
+
+// errBudget stops a page's walk when it goes over a budget.
+var errBudget = errors.New("exceeds the per-page glyph or form budget; text after that is lost")
 
 // matrix is a PDF transform [a b c d e f], applied to row vectors.
 type matrix [6]float64
@@ -178,6 +191,7 @@ type walker struct {
 	st    textState
 	stack []textState
 	out   []glyph
+	forms int        // Form XObjects run so far
 	box   [4]float64 // llx lly urx ury
 	clip  bool
 }
@@ -187,6 +201,15 @@ type walker struct {
 // read before it.
 func pageGlyphs(p lpdf.Page) (gs []glyph, err error) {
 	w := &walker{st: textState{ctm: identity, tm: identity, tlm: identity, th: 1}}
+	defer func() {
+		if r := recover(); r != nil {
+			if e, ok := r.(error); ok && e == errBudget {
+				gs, err = w.out, errBudget
+				return
+			}
+			gs, err = w.out, fmt.Errorf("%v", r)
+		}
+	}()
 	box := inherited(p.V, "CropBox")
 	if box.Len() != 4 {
 		box = inherited(p.V, "MediaBox")
@@ -196,11 +219,6 @@ func pageGlyphs(p lpdf.Page) (gs []glyph, err error) {
 		w.box = [4]float64{math.Min(x0, x1), math.Min(y0, y1), math.Max(x0, x1), math.Max(y0, y1)}
 		w.clip = w.box[2] > w.box[0] && w.box[3] > w.box[1]
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			gs, err = w.out, fmt.Errorf("%v", r)
-		}
-	}()
 	w.run(p.V.Key("Contents"), inherited(p.V, "Resources"), 0)
 	return w.out, nil
 }
@@ -267,6 +285,9 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 			if n := math.Hypot(start[0], start[1]); n > 0 {
 				g.ux, g.uy = start[0]/n, start[1]/n
 			}
+			if len(w.out) >= maxGlyphs {
+				panic(errBudget)
+			}
 			w.out = append(w.out, g)
 		}
 	}
@@ -290,7 +311,7 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 		}
 		st := &w.st
 		switch {
-		case op == "q":
+		case op == "q" && len(w.stack) < maxSaves:
 			w.stack = append(w.stack, *st)
 		case op == "Q" && len(w.stack) > 0:
 			*st = w.stack[len(w.stack)-1]
@@ -352,6 +373,9 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 			xo := res.Key("XObject").Key(args[0].Name())
 			if xo.Key("Subtype").Name() != "Form" {
 				return
+			}
+			if w.forms++; w.forms > maxForms {
+				panic(errBudget)
 			}
 			saved, savedStack := *st, w.stack
 			m := identity

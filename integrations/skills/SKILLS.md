@@ -2542,13 +2542,14 @@ vrk pdf scan.pdf | vrk prompt --system 'Summarise.' || echo "no text layer, need
 - **Running headers and footers are dropped** - a line among the top or bottom two of a page that repeats (digits ignored) on three or more of the extracted pages is removed, except its first copy. Bare page numbers are removed everywhere. Only extracted pages count, so `--pages 5` keeps that page's header.
 - **Hyphenated line breaks are joined** - `trans-` at a line end and `former` on the next becomes `transformer`. The hyphen stays when the document uses the compound elsewhere (`self-attention`) or either half already has one. Soft hyphens always join.
 - **Separators differ by mode** - Markdown puts a blank line before each `\f` (`page\n\n\f\n`); `--text` puts `\f` right after the page. `--json` records hold Markdown unless you add `--text`.
-- **A broken page does not stop the rest** - the page warns on stderr (`pdf: page N: ...`) and keeps whatever text was read before the error; with `--json` its record has an `error` field. Only when no page has text does it exit 1.
+- **A broken page does not stop the rest** - the page warns on stderr (`pdf: page N: ...`) and keeps whatever text was read before the error; with `--json` its record has an `error` field. Only when no page has text does it exit 1. A page that draws more than 1,000,000 glyphs or runs more than 10,000 Form XObjects stops there with the error `exceeds the per-page glyph or form budget`, so a small hostile file can't hang the pipeline.
 - **Text outside the page box is dropped** - content past the CropBox (or MediaBox) does not come out. Form XObjects are followed, up to 8 levels deep.
 - **PDF 2.0 is rejected** - the underlying reader handles PDF 1.0 to 1.7. A `%PDF-2.0` header exits 1 with `pdf: PDF 2.0 is not supported (PDF 1.0 to 1.7 only)`.
 - **Encrypted PDFs exit 1** - there is no password flag. A PDF encrypted with an empty user password (owner-only restrictions) still opens.
 - **Ligatures are expanded** - `ﬁ` comes out as `fi`. Fonts with no ToUnicode map for a glyph can still produce `�`.
 - **The `--json` trailer is a record too** - use `jq 'select(.page)'` to skip `{"_vrk":"pdf","count":N}`.
 - **An empty page is still a page** - output keeps its `\f`, so the form-feed count is always pages minus one.
+- **Page count comes from the page tree, not `/Count`** - pages are found by walking the tree once, so a wrong or huge `/Count` doesn't matter. An entry in the tree that can't be read is skipped with `pdf: page tree: skipped N unreadable entries` on stderr (not with `--json`), and later pages move up a number.
 - **`--pages` past the end exits 1** - `pdf: page 9 does not exist (PDF has 3 pages)`. A malformed range like `0`, `5-2` or `abc` exits 2.
 - **Whole file held in memory** - the reader needs random access, so a 500 MB PDF uses about 500 MB.
 

@@ -158,6 +158,20 @@ assert_exit "two file args" 2
 run /dev/null --bogus
 assert_exit "unknown flag" 2
 
+# --- hostile input (each of these used to hang or eat gigabytes) ---
+
+run /dev/null --text "$FIX/prev_loop.pdf"
+assert_exit "/Prev loop" 0
+assert_eq "/Prev loop: text" "Prev loop" "$stdout"
+
+run /dev/null --text "$FIX/count_huge.pdf"
+assert_exit "huge /Count" 0
+assert_eq "huge /Count: real page" "Hello count" "$stdout"
+
+run /dev/null --text "$FIX/form_bomb.pdf"
+assert_exit "form bomb" 0
+assert_contains "form bomb: budget warning" "exceeds the per-page" "$stderr"
+
 # --- empty input and help ---
 
 run /dev/null

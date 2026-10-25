@@ -5,7 +5,7 @@
 //
 // Text layer only. No OCR, so scanned PDFs exit 1. Text comes out in
 // content-stream order, with spaces and line breaks rebuilt from glyph
-// positions and headings guessed from font size. The underlying library (github.com/ledongthuc/pdf)
+// positions and headings guessed from font size. The underlying library (internal/pdfread, vendored from github.com/ledongthuc/pdf)
 // reads PDF 1.0-1.7; 2.0 files exit 1.
 package pdf
 
@@ -21,8 +21,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	lpdf "github.com/ledongthuc/pdf"
 	"github.com/spf13/pflag"
+	lpdf "github.com/vrksh/vrksh/internal/pdfread"
 	"github.com/vrksh/vrksh/internal/shared"
 )
 
@@ -140,9 +140,16 @@ func Run() int {
 	if bytes.HasPrefix(data, []byte("%PDF-2.")) {
 		return fail(1, "pdf: PDF 2.0 is not supported (PDF 1.0 to 1.7 only)")
 	}
-	r, n, err := open(data)
+	all, broken, err := open(data)
 	if err != nil {
 		return fail(1, "%s", errMessage(err))
+	}
+	n := len(all)
+	if n == 0 {
+		return fail(1, "pdf: corrupt PDF: page tree has no readable pages")
+	}
+	if broken > 0 && !jsonFlag {
+		shared.Warn("pdf: page tree: skipped %d unreadable entries", broken)
 	}
 
 	pages, bad := selectPages(ranges, n)
@@ -150,10 +157,7 @@ func Run() int {
 		return fail(1, "pdf: page %d does not exist (PDF has %d pages)", bad, n)
 	}
 
-	lines, pageErrs, err := extract(r, pages)
-	if err != nil {
-		return fail(1, "pdf: %v", err)
-	}
+	lines, pageErrs := extract(all, pages)
 
 	texts := make([]string, len(lines))
 	var h headings
@@ -296,42 +300,36 @@ func selectPages(ranges []pageRange, n int) (pages []int, bad int) {
 	return pages, 0
 }
 
-// open parses a PDF held in memory and returns it with its page count.
-// The library panics on some malformed input; that comes back as an error.
-func open(data []byte) (r *lpdf.Reader, n int, err error) {
+// open parses a PDF held in memory and returns its pages, from one walk of
+// the page tree (/Count is never trusted). broken is how many page-tree
+// entries couldn't be read. The library panics on some malformed input; that
+// comes back as an error.
+func open(data []byte) (pages []lpdf.Page, broken int, err error) {
 	defer func() {
 		if p := recover(); p != nil {
-			r, n, err = nil, 0, fmt.Errorf("%v", p)
+			pages, broken, err = nil, 0, fmt.Errorf("%v", p)
 		}
 	}()
-	r, err = lpdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	r, err := lpdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, 0, err
 	}
-	return r, r.NumPage(), nil
+	pages, broken = r.Pages(maxTreeDepth)
+	return pages, broken, nil
 }
 
-// extract lays out each page into lines. A page whose content stream breaks
-// partway keeps the text read before the break, and its error comes back in
-// pageErrs; err is for a broken page tree.
-func extract(r *lpdf.Reader, pages []int) (lines [][]line, pageErrs []error, err error) {
-	defer func() {
-		if p := recover(); p != nil {
-			lines, pageErrs, err = nil, nil, fmt.Errorf("corrupt PDF: %s", short(fmt.Sprint(p)))
-		}
-	}()
+// extract lays out each selected page (1-indexed) into lines. A page whose
+// content stream breaks partway keeps the text read before the break, and its
+// error comes back in pageErrs.
+func extract(all []lpdf.Page, pages []int) (lines [][]line, pageErrs []error) {
 	for _, i := range pages {
-		page, ok := pageAt(r, i)
-		if !ok {
-			return nil, nil, fmt.Errorf("corrupt PDF: page %d missing from page tree", i)
-		}
-		gs, perr := pageGlyphs(page)
+		gs, perr := pageGlyphs(all[i-1])
 		lines = append(lines, layout(columns(gs)))
 		pageErrs = append(pageErrs, perr)
 	}
 	lines = stripRunning(lines)
 	joinHyphens(lines)
-	return lines, pageErrs, nil
+	return lines, pageErrs
 }
 
 // short keeps library error text to its first line and about 120 bytes; some
@@ -349,38 +347,6 @@ func short(s string) string {
 		s += "..."
 	}
 	return s
-}
-
-// pageAt finds 1-indexed page n. Same walk as lpdf.Reader.Page, but with a
-// depth cap so a /Kids cycle fails instead of hanging.
-func pageAt(r *lpdf.Reader, n int) (lpdf.Page, bool) {
-	n--
-	node := r.Trailer().Key("Root").Key("Pages")
-	for depth := 0; depth < maxTreeDepth; depth++ {
-		kids := node.Key("Kids")
-		next := lpdf.Value{}
-		for i := 0; i < kids.Len() && next.IsNull(); i++ {
-			kid := kids.Index(i)
-			switch kid.Key("Type").Name() {
-			case "Pages":
-				if c := int(kid.Key("Count").Int64()); n < c {
-					next = kid
-				} else {
-					n -= c
-				}
-			case "Page":
-				if n == 0 {
-					return lpdf.Page{V: kid}, true
-				}
-				n--
-			}
-		}
-		if next.IsNull() {
-			return lpdf.Page{}, false
-		}
-		node = next
-	}
-	return lpdf.Page{}, false
 }
 
 // errMessage turns a library error into the user-facing message.

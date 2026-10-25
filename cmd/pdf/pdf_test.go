@@ -15,7 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	lpdf "github.com/ledongthuc/pdf"
+	lpdf "github.com/vrksh/vrksh/internal/pdfread"
 )
 
 // runPdf replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and returns
@@ -722,16 +722,22 @@ func FuzzPdf(f *testing.F) {
 	f.Add(buildLoopPDF())
 	f.Add(buildMissingKidPDF())
 	f.Add([]byte("%PDF-1.4\n%%EOF\n"))
+	for _, name := range []string{"prev_loop.pdf", "form_bomb.pdf", "count_huge.pdf"} {
+		if data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "pdf", "fixtures", name)); err == nil {
+			f.Add(data)
+		}
+	}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			r, n, err := open(data)
-			if err != nil {
+			all, _, err := open(data)
+			if err != nil || len(all) == 0 {
 				return
 			}
+			n := len(all)
 			pages, _ := selectPages([]pageRange{{start: 1, end: min(n, 20)}}, n)
-			lines, _, _ := extract(r, pages)
+			lines, _ := extract(all, pages)
 			h := findHeadings(lines)
 			for _, ls := range lines {
 				_ = markdown(ls, h)
@@ -830,4 +836,81 @@ func TestJoinHyphens(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
+}
+
+// runPdfDeadline is runPdf with a 5s limit, for inputs that used to hang.
+func runPdfDeadline(t *testing.T, args []string, stdin []byte) (stdout, stderr string, code int) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		stdout, stderr, code = runPdf(t, args, stdin)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("hung")
+	}
+	return stdout, stderr, code
+}
+
+func readFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "pdf", "fixtures", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+// A trailer whose /Prev points back at its own xref section used to spin forever.
+func TestPrevLoop(t *testing.T) {
+	stdout, stderr, code := runPdfDeadline(t, []string{"--text"}, readFixture(t, "prev_loop.pdf"))
+	if code != 0 || stdout != "Prev loop\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
+// A form that draws itself ten times, eight deep, is 10^8 calls without a budget.
+func TestFormBomb(t *testing.T) {
+	stdout, stderr, code := runPdfDeadline(t, []string{"--text"}, readFixture(t, "form_bomb.pdf"))
+	if code != 0 || !strings.HasPrefix(stdout, "Top") || !strings.Contains(stderr, "pdf: page 1: exceeds") {
+		t.Errorf("exit %d stdout %.40q stderr %q", code, stdout, stderr)
+	}
+}
+
+// /Count is whatever the file says; the page tree has one leaf.
+func TestCountLies(t *testing.T) {
+	stdout, stderr, code := runPdfDeadline(t, []string{"--text"}, readFixture(t, "count_huge.pdf"))
+	if code != 0 || stdout != "Hello count\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+	_, stderr, code = runPdfDeadline(t, []string{"--pages", "2"}, readFixture(t, "count_huge.pdf"))
+	if code != 1 || !strings.Contains(stderr, "pdf: page 2 does not exist (PDF has 1 pages)") {
+		t.Errorf("--pages 2: exit %d stderr %q", code, stderr)
+	}
+}
+
+// One broken kid in the page tree loses that page, not the document.
+func TestMissingKidKeepsGoodPages(t *testing.T) {
+	data := assemblePDF("4 0 R 99 0 R 6 0 R", "", textPages([]string{"p1", "p2"}))
+	stdout, stderr, code := runPdfDeadline(t, []string{"--text"}, data)
+	if code != 0 || stdout != "p1\n\fp2\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
+// Page lookup used to restart from the root for every page, O(n^2) overall:
+// 5000 pages took 49s. One walk of the tree makes it linear.
+func TestManyPages(t *testing.T) {
+	pages := make([]string, 2000)
+	for i := range pages {
+		pages[i] = fmt.Sprintf("page %d", i+1)
+	}
+	start := time.Now()
+	stdout, stderr, code := runPdfDeadline(t, []string{"--text"}, buildPDF(pages...))
+	if code != 0 || strings.Count(stdout, "\f") != 1999 || !strings.HasSuffix(stdout, "page 2000\n") {
+		t.Errorf("exit %d stderr %q tail %q", code, stderr, stdout[max(0, len(stdout)-20):])
+	}
+	t.Logf("2000 pages in %v", time.Since(start))
 }
