@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"sort"
@@ -32,7 +33,27 @@ const httpTimeout = 120 * time.Second
 var maxResponseBytes int64 = 50 * 1024 * 1024
 
 // apiClient is the shared HTTP client used for all LLM API calls.
-var apiClient = &http.Client{Timeout: httpTimeout}
+// Redirects are never followed: a 307 re-sends the POST body (the prompt) and,
+// on the same host, the Authorization header to wherever the server points.
+var apiClient = &http.Client{
+	Timeout: httpTimeout,
+	CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
+
+// maxErrBody caps how much of an API error body is echoed to stderr.
+const maxErrBody = 2048
+
+// errBody makes an API error body safe to print: key scrubbed, cut to
+// maxErrBody bytes, terminal control characters dropped.
+func errBody(b []byte, key string) string {
+	s := scrubKey(string(b), key)
+	if len(s) > maxErrBody {
+		s = strings.ToValidUTF8(s[:maxErrBody], "") + "...(truncated)"
+	}
+	return shared.StripControls(s)
+}
 
 type provider int
 
@@ -307,7 +328,7 @@ func callAnthropic(model, key, prompt, systemPrompt string, temp float64) (callR
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		safeBody := scrubKey(string(respBody), key)
+		safeBody := errBody(respBody, key)
 		return callResult{}, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
 	}
 
@@ -414,7 +435,7 @@ func callOpenAI(model, key, prompt string, temp float64, schema map[string]strin
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		safeBody := scrubKey(string(respBody), key)
+		safeBody := errBody(respBody, key)
 		return callResult{}, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
 	}
 
@@ -460,14 +481,14 @@ func printExplain(w io.Writer, prov provider, model, prompt string, schema map[s
 	switch prov {
 	case providerOpenAI:
 		bodyJSON, _ := json.Marshal(openAIBody(model, prompt, 0, schema, systemPrompt))
-		_, _ = fmt.Fprintf(bw, "curl https://api.openai.com/v1/chat/completions \\\n")
+		_, _ = fmt.Fprintf(bw, "curl 'https://api.openai.com/v1/chat/completions' \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"Authorization: Bearer $OPENAI_API_KEY\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"content-type: application/json\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -d '%s'\n", shellEscapeSingleQuote(string(bodyJSON)))
 
 	default: // providerAnthropic; systemPrompt already includes schema instructions.
 		bodyJSON, _ := json.Marshal(anthropicBody(model, prompt, systemPrompt, 0))
-		_, _ = fmt.Fprintf(bw, "curl https://api.anthropic.com/v1/messages \\\n")
+		_, _ = fmt.Fprintf(bw, "curl 'https://api.anthropic.com/v1/messages' \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"x-api-key: $ANTHROPIC_API_KEY\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"anthropic-version: 2023-06-01\" \\\n")
 		_, _ = fmt.Fprintf(bw, "  -H \"content-type: application/json\" \\\n")
@@ -491,7 +512,7 @@ func resolveEndpoint(raw string) (string, error) {
 		return "", nil
 	}
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme == "" {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return "", fmt.Errorf("invalid endpoint URL")
 	}
 	p := u.Path
@@ -532,11 +553,53 @@ func endpointBody(model, prompt string, temp float64, schema map[string]string, 
 	return req
 }
 
+// endpointKey returns the VRK_LLM_KEY to send to endpoint, or "" when it must
+// not go there. The key belongs to VRK_LLM_URL: an --endpoint on any other
+// origin (scheme, host, port) gets no key, so a caller that can pick the
+// endpoint can't collect it. warn says why a set key was held back. Plain http
+// to a host that isn't loopback is an error, since the key would cross the
+// network in clear.
+func endpointKey(endpoint string) (key, warn string, err error) {
+	key = os.Getenv("VRK_LLM_KEY")
+	if key == "" {
+		return "", "", nil
+	}
+	ep, e1 := url.Parse(endpoint)
+	home, e2 := url.Parse(os.Getenv("VRK_LLM_URL"))
+	if e1 != nil || e2 != nil || origin(ep) != origin(home) || origin(ep) == "" {
+		return "", fmt.Sprintf("prompt: VRK_LLM_KEY not sent to %s (not the VRK_LLM_URL origin)", ep.Redacted()), nil
+	}
+	if ep.Scheme == "http" && !isLoopback(ep.Hostname()) {
+		return "", "", errors.New("prompt: refusing to send VRK_LLM_KEY over plain http to non-loopback host " + ep.Hostname())
+	}
+	return key, "", nil
+}
+
+// origin is scheme://host:port with the default port filled in, or "".
+func origin(u *url.URL) string {
+	if u == nil || u.Host == "" {
+		return ""
+	}
+	port := u.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443"}[u.Scheme]
+	}
+	return strings.ToLower(u.Scheme + "://" + u.Hostname() + ":" + port)
+}
+
+func isLoopback(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	a, err := netip.ParseAddr(host)
+	return err == nil && a.Unmap().IsLoopback()
+}
+
 // callOpenAICompatible sends a request to an OpenAI-compatible endpoint and returns
 // a callResult with the assistant reply and token counts.
-// Auth: reads VRK_LLM_KEY and sets Authorization: Bearer only if non-empty.
+// Auth: sets Authorization: Bearer only if key is non-empty (see endpointKey).
 // Never uses OPENAI_API_KEY or ANTHROPIC_API_KEY.
-func callOpenAICompatible(endpointURL, model, prompt string, temp float64, schema map[string]string, systemPrompt string) (callResult, error) {
+func callOpenAICompatible(endpointURL, key, model, prompt string, temp float64, schema map[string]string, systemPrompt string) (callResult, error) {
 	body, err := json.Marshal(endpointBody(model, prompt, temp, schema, systemPrompt))
 	if err != nil {
 		return callResult{}, fmt.Errorf("marshaling request: %w", err)
@@ -547,7 +610,7 @@ func callOpenAICompatible(endpointURL, model, prompt string, temp float64, schem
 		return callResult{}, fmt.Errorf("creating request: %w", err)
 	}
 	httpReq.Header.Set("content-type", "application/json")
-	if key := os.Getenv("VRK_LLM_KEY"); key != "" {
+	if key != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+key)
 	}
 
@@ -566,7 +629,7 @@ func callOpenAICompatible(endpointURL, model, prompt string, temp float64, schem
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		safeBody := scrubKey(string(respBody), os.Getenv("VRK_LLM_KEY"))
+		safeBody := errBody(respBody, key)
 		return callResult{}, fmt.Errorf("API error %d: %s", resp.StatusCode, safeBody)
 	}
 
@@ -597,15 +660,15 @@ func callOpenAICompatible(endpointURL, model, prompt string, temp float64, schem
 }
 
 // printExplainEndpoint writes a curl command for a custom endpoint to w.
-// The Authorization header line is included only when VRK_LLM_KEY is set,
-// and is shown as $VRK_LLM_KEY — the actual value is never printed.
-func printExplainEndpoint(w io.Writer, endpointURL, model, prompt string, schema map[string]string, systemPrompt string) int {
+// The Authorization header line is included only when the key would be sent,
+// and is shown as $VRK_LLM_KEY - the actual value is never printed.
+func printExplainEndpoint(w io.Writer, endpointURL string, withKey bool, model, prompt string, schema map[string]string, systemPrompt string) int {
 	bw := bufio.NewWriter(w)
 
 	bodyJSON, _ := json.Marshal(endpointBody(model, prompt, 0, schema, systemPrompt))
 
-	_, _ = fmt.Fprintf(bw, "curl %s \\\n", endpointURL)
-	if os.Getenv("VRK_LLM_KEY") != "" {
+	_, _ = fmt.Fprintf(bw, "curl '%s' \\\n", shellEscapeSingleQuote(endpointURL))
+	if withKey {
 		_, _ = fmt.Fprintf(bw, "  -H \"Authorization: Bearer $VRK_LLM_KEY\" \\\n")
 	}
 	_, _ = fmt.Fprintf(bw, "  -H \"content-type: application/json\" \\\n")
@@ -638,6 +701,22 @@ func dotGet(obj map[string]any, path string) (any, error) {
 // sender makes one request at the given temperature.
 type sender func(prompt string, temp float64) (callResult, error)
 
+// resolveEndpointKey wraps endpointKey for Run and runFieldMode: prints the
+// warning (stderr, not under --json) and turns the error into exit 2.
+func resolveEndpointKey(endpoint string, jsonFlag bool) (string, int) {
+	key, warn, err := endpointKey(endpoint)
+	if err != nil {
+		if jsonFlag {
+			return "", shared.PrintJSONError(map[string]any{"error": err.Error(), "code": 2})
+		}
+		return "", shared.UsageErrorf("%s", err.Error())
+	}
+	if warn != "" && !jsonFlag {
+		shared.Warn("%s", warn)
+	}
+	return key, 0
+}
+
 // newSender decides how a request is built and sent. Validation, retry,
 // --fail, and output are the same for every provider (see callWithSchema).
 // Anthropic and --endpoint get the schema as system prompt instructions;
@@ -647,7 +726,7 @@ func newSender(endpoint string, prov provider, model, apiKey, systemPrompt strin
 	case endpoint != "":
 		sys := withSchemaInstructions(systemPrompt, schema)
 		return func(p string, t float64) (callResult, error) {
-			return callOpenAICompatible(endpoint, model, p, t, schema, sys)
+			return callOpenAICompatible(endpoint, apiKey, model, p, t, schema, sys)
 		}
 	case prov == providerOpenAI:
 		return func(p string, t float64) (callResult, error) {
@@ -887,8 +966,12 @@ func Run() int {
 	var apiKey string
 	if endpoint != "" {
 		// Custom endpoint: always OpenAI chat completions format, no provider detection.
+		var keyCode int
+		if apiKey, keyCode = resolveEndpointKey(endpoint, jsonFlag); keyCode != 0 {
+			return keyCode
+		}
 		if explainFlag {
-			return printExplainEndpoint(os.Stdout, endpoint, model, promptText, schema, withSchemaInstructions(systemPrompt, schema))
+			return printExplainEndpoint(os.Stdout, endpoint, apiKey != "", model, promptText, schema, withSchemaInstructions(systemPrompt, schema))
 		}
 		// Local model names cannot be guessed - require an explicit --model.
 		if model == "" {
@@ -897,7 +980,6 @@ func Run() int {
 			}
 			return shared.UsageErrorf("prompt: --model is required when using --endpoint")
 		}
-		apiKey = os.Getenv("VRK_LLM_KEY")
 	} else {
 		// Read API keys so we can select provider.
 		anthropicKey := os.Getenv("ANTHROPIC_API_KEY")
@@ -963,7 +1045,9 @@ func Run() int {
 			ResponseTokens: cr.responseTokens,
 			ElapsedMs:      elapsedMs,
 		}
-		if systemSet {
+		// A prompt read from @path is not echoed: that would turn --json into
+		// a file reader for whoever controls the flags.
+		if systemSet && !strings.HasPrefix(systemArg, "@") {
 			out.SystemPrompt = systemPrompt
 		}
 		enc := json.NewEncoder(bw)
@@ -1035,7 +1119,10 @@ func runFieldMode(fieldPath, model, endpoint string, budget int, jsonFlag, quiet
 			}
 			return shared.UsageErrorf("prompt: --model is required when using --endpoint")
 		}
-		apiKey = os.Getenv("VRK_LLM_KEY")
+		var keyCode int
+		if apiKey, keyCode = resolveEndpointKey(endpoint, jsonFlag); keyCode != 0 {
+			return keyCode
+		}
 	}
 
 	send := newSender(endpoint, prov, model, apiKey, systemPrompt, schema)

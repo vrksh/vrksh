@@ -193,7 +193,7 @@ Wraps the response in a JSON envelope with metadata (model used, token counts, t
 
 ### --endpoint
 
-Point prompt at any OpenAI-compatible API. Works with Ollama, vLLM, LiteLLM, or any provider that speaks the OpenAI chat completions format. `--schema`, `--fail`, and `--retry` work here too. `--model` is required. Set `VRK_LLM_KEY` if the server needs a bearer token:
+Point prompt at any OpenAI-compatible API. Works with Ollama, vLLM, LiteLLM, or any provider that speaks the OpenAI chat completions format. `--schema`, `--fail`, and `--retry` work here too. `--model` is required. Set `VRK_LLM_KEY` if the server needs a bearer token. The key is only sent to the `VRK_LLM_URL` origin (scheme, host, port): an `--endpoint` anywhere else gets no Authorization header and a warning on stderr. Plain `http` with a key is refused (exit 2) unless the host is loopback. Redirects are not followed:
 
 ```bash
 cat notes.txt | vrk prompt \

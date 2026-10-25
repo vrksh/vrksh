@@ -124,9 +124,31 @@ fi
 pass "--endpoint --explain does not leak VRK_LLM_KEY value"
 
 # --endpoint + --explain with VRK_LLM_KEY set includes $VRK_LLM_KEY reference
-out=$(echo 'hello' | env VRK_LLM_KEY=somekey "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
+out=$(echo 'hello' | env VRK_LLM_KEY=somekey VRK_LLM_URL=http://localhost:11434/v1 "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
 echo "$out" | grep -q 'VRK_LLM_KEY' || fail "--endpoint --explain with key: missing \$VRK_LLM_KEY in output" "got: $out"
 pass "--endpoint --explain shows \$VRK_LLM_KEY reference when key is set"
+
+# --endpoint on another origin than VRK_LLM_URL gets no key (no Authorization line)
+out=$(echo 'hello' | env VRK_LLM_KEY=somekey VRK_LLM_URL=http://localhost:11434/v1 "$BIN" prompt --endpoint http://localhost:9999/v1 --model llama3.2 --explain 2>/dev/null)
+if echo "$out" | grep -q "Authorization"; then
+  fail "--endpoint other origin: key would be sent" "got: $out"
+fi
+pass "--endpoint on another origin than VRK_LLM_URL gets no key"
+
+# key over plain http to a non-loopback host is refused, exit 2
+code=0; echo 'hello' | env VRK_LLM_KEY=somekey VRK_LLM_URL=http://gpu.lan:8000/v1 "$BIN" prompt --model x >/dev/null 2>&1 || code=$?
+[ "$code" = 2 ] || fail "plain http non-loopback with key: want exit 2" "got $code"
+pass "VRK_LLM_KEY over plain http to non-loopback host exits 2"
+
+# non-http scheme is a usage error
+code=0; echo 'hello' | "$BIN" prompt --endpoint file:///etc/passwd --model x >/dev/null 2>&1 || code=$?
+[ "$code" = 2 ] || fail "file:// endpoint: want exit 2" "got $code"
+pass "file:// endpoint exits 2"
+
+# --explain quotes the URL so a pasted command can't run $(...)
+out=$(echo 'hello' | "$BIN" prompt --endpoint 'http://h/v1?a=$(id)' --model x --explain | head -1)
+[ "$out" = "curl 'http://h/v1/chat/completions?a=\$(id)' \\" ] || fail "--explain URL not quoted" "got: $out"
+pass "--explain single-quotes the URL"
 
 # --endpoint + --explain without VRK_LLM_KEY omits Authorization header line
 out=$(echo 'hello' | env -u VRK_LLM_KEY "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)

@@ -443,7 +443,7 @@ func TestEndpointWithAPIKey(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, code := runPrompt(t, map[string]string{"VRK_LLM_KEY": "testkey"},
+	_, _, code := runPrompt(t, map[string]string{"VRK_LLM_KEY": "testkey", "VRK_LLM_URL": srv.URL + "/v1"},
 		[]string{"--endpoint", srv.URL, "--model", "llama3.2"}, "hello")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
@@ -1265,5 +1265,157 @@ func TestResponseBodyLimit(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "exceeded") {
 		t.Errorf("stderr = %q, want it to mention 'exceeded'", stderr)
+	}
+}
+
+// TestEndpointKeyNotSentToOtherOrigin: --endpoint pointing anywhere other than
+// VRK_LLM_URL must not get VRK_LLM_KEY, or a model that picks the endpoint can
+// collect the key.
+func TestEndpointKeyNotSentToOtherOrigin(t *testing.T) {
+	var gotAuth string
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mockOpenAIResponse))
+	}))
+	defer other.Close()
+
+	for _, llmURL := range []string{"", "http://127.0.0.1:1/v1"} {
+		gotAuth = ""
+		env := map[string]string{"VRK_LLM_KEY": "sk-test", "VRK_LLM_URL": llmURL}
+		stdout, stderr, code := runPrompt(t, env, []string{"--endpoint", other.URL + "/v1", "--model", "x"}, "hi")
+		if code != 0 {
+			t.Fatalf("VRK_LLM_URL=%q: exit %d, stderr %q", llmURL, code, stderr)
+		}
+		if gotAuth != "" {
+			t.Errorf("VRK_LLM_URL=%q: key sent to other origin: %q", llmURL, gotAuth)
+		}
+		if !strings.Contains(stderr, "VRK_LLM_KEY not sent") {
+			t.Errorf("VRK_LLM_URL=%q: stderr %q, want a not-sent warning", llmURL, stderr)
+		}
+		if !strings.Contains(stdout, "pong") {
+			t.Errorf("stdout = %q, want the response", stdout)
+		}
+	}
+}
+
+func TestEndpointKeyRules(t *testing.T) {
+	cases := []struct {
+		llmURL, endpoint string
+		send, fail       bool
+	}{
+		{"http://127.0.0.1:8080/v1", "http://127.0.0.1:8080/v1/chat/completions", true, false},
+		{"http://localhost:11434", "http://localhost:11434/v1/chat/completions", true, false},
+		{"https://api.example.com/v1", "https://API.example.com:443/v1/chat/completions", true, false},
+		{"http://127.0.0.1:8080/v1", "http://127.0.0.1:8081/v1/chat/completions", false, false},
+		{"https://api.example.com/v1", "http://api.example.com/v1/chat/completions", false, false},
+		{"", "https://api.example.com/v1/chat/completions", false, false},
+		{"http://gpu.lan:8000/v1", "http://gpu.lan:8000/v1/chat/completions", false, true},
+		{"http://10.0.0.5/v1", "http://10.0.0.5/v1/chat/completions", false, true},
+	}
+	for _, c := range cases {
+		t.Setenv("VRK_LLM_KEY", "sk-test")
+		t.Setenv("VRK_LLM_URL", c.llmURL)
+		key, _, err := endpointKey(c.endpoint)
+		if (err != nil) != c.fail {
+			t.Errorf("%s -> %s: err = %v, want fail=%v", c.llmURL, c.endpoint, err, c.fail)
+		}
+		if (key != "") != c.send {
+			t.Errorf("%s -> %s: key sent = %v, want %v", c.llmURL, c.endpoint, key != "", c.send)
+		}
+	}
+}
+
+func TestEndpointPlainHTTPRemoteWithKeyExits2(t *testing.T) {
+	env := map[string]string{"VRK_LLM_KEY": "sk-test", "VRK_LLM_URL": "http://gpu.lan:8000/v1"}
+	_, stderr, code := runPrompt(t, env, []string{"--model", "x"}, "hi")
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "plain http") || strings.Contains(stderr, "sk-test") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestEndpointRejectsOtherSchemes(t *testing.T) {
+	for _, ep := range []string{"file:///etc/passwd", "ftp://h/v1", "unix:///tmp/s"} {
+		_, _, code := runPrompt(t, map[string]string{}, []string{"--endpoint", ep, "--model", "x"}, "hi")
+		if code != 2 {
+			t.Errorf("%s: exit %d, want 2", ep, code)
+		}
+	}
+}
+
+// TestEndpointRedirectNotFollowed: a 307 would re-send the prompt (and, on the
+// same host, the key) to wherever the server points.
+func TestEndpointRedirectNotFollowed(t *testing.T) {
+	hit := false
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(mockOpenAIResponse))
+	}))
+	defer target.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/v1/chat/completions", http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+
+	_, _, code := runPrompt(t, map[string]string{}, []string{"--endpoint", srv.URL, "--model", "x"}, "hi")
+	if code != 1 {
+		t.Errorf("exit = %d, want 1", code)
+	}
+	if hit {
+		t.Error("redirect was followed")
+	}
+}
+
+func TestExplainEndpointShellQuoted(t *testing.T) {
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--explain", "--endpoint", "http://h/v1/chat/completions?a=$(id)'x", "-m", "x"}, "hi")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	first := strings.SplitN(stdout, "\n", 2)[0]
+	want := `curl 'http://h/v1/chat/completions?a=$(id)'\''x' \`
+	if first != want {
+		t.Errorf("first line = %q, want %q", first, want)
+	}
+}
+
+func TestErrorBodyStrippedAndTruncated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("\x1b]52;c;eA==\x07bad" + strings.Repeat("x", 10000)))
+	}))
+	defer srv.Close()
+
+	_, stderr, code := runPrompt(t, map[string]string{}, []string{"--endpoint", srv.URL, "--model", "x"}, "hi")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if strings.ContainsAny(stderr, "\x1b\x07") {
+		t.Errorf("stderr has control bytes: %q", stderr[:80])
+	}
+	if !strings.Contains(stderr, "bad") || len(stderr) > 2300 {
+		t.Errorf("stderr len %d, want the body cut to about 2 KB", len(stderr))
+	}
+}
+
+// TestJSONOmitsSystemPromptFromFile: echoing a file's contents back in --json
+// only helps someone using prompt to read files.
+func TestJSONOmitsSystemPromptFromFile(t *testing.T) {
+	srv := newMockServer(t)
+	defer srv.Close()
+	f := t.TempDir() + "/sys.txt"
+	if err := os.WriteFile(f, []byte("SECRET_TOKEN=abc123\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, code := runPrompt(t, map[string]string{},
+		[]string{"--endpoint", srv.URL, "--model", "x", "--json", "--system", "@" + f}, "hi")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if strings.Contains(stdout, "SECRET_TOKEN") || strings.Contains(stdout, "system_prompt") {
+		t.Errorf("stdout echoes the file: %s", stdout)
 	}
 }
