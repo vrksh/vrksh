@@ -19,7 +19,7 @@ Getting text out of a PDF usually means installing poppler for `pdftotext` or a 
 
 ## The solution
 
-`vrk pdf` extracts the text layer of a PDF. Markdown by default (headings from font size, bullet lists, paragraphs), `--text` for plain text, with a form feed (`\f`) between pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. `--pages` selects pages like `3`, `2-5`, `4-` or `1,3,5-7`. Scanned PDFs with no text layer exit 1 so a pipeline stops before sending empty text to a model.
+`vrk pdf` extracts the text layer of a PDF. Markdown by default (headings from font size and weight, bullet lists, tables, paragraphs; running headers, page numbers and line-end hyphens cleaned up), `--text` for plain text, with a form feed (`\f`) between pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. `--pages` selects pages like `3`, `2-5`, `4-` or `1,3,5-7`. Scanned PDFs with no text layer exit 1 so a pipeline stops before sending empty text to a model.
 
 ## Before and after
 
@@ -72,7 +72,17 @@ $ vrk pdf --pages 1 report.pdf
 Quarterly report, page one.
 ```
 
-Output is Markdown. Lines set noticeably bigger than the body text, and followed by smaller text, become headings: the largest size is `#`, the next `##`, the rest `###`. Bullet glyphs like `•` become `- ` list items, and a bigger vertical gap starts a new paragraph. Ligatures like `ﬁ` come out as plain `fi`.
+Output is Markdown. Lines set noticeably bigger than the body text, and followed by smaller text, become headings: the largest size is `#`, the next `##`, the rest `###`. A short bold line at body size, like `3.2.1 Scaled Attention`, followed by a full line of plain text, is a heading one level below those. Bullet glyphs like `•` become `- ` list items, and a bigger vertical gap starts a new paragraph. Ligatures like `ﬁ` come out as plain `fi`.
+
+Rows whose cells are split by wide gaps and line up with the row above become a Markdown table, first row as header. It's a guess from spacing: a merged cell splits a table in two, and aligned code comments can come out as a table.
+
+### Cleanup
+
+Running headers, footers and page numbers are dropped: a line near the top or bottom of a page that repeats on three or more of the pages you extract, ignoring digits, keeps only its first copy, and bare page numbers go everywhere. Only extracted pages count, so `--pages 5` keeps that page's header.
+
+A word split across lines, like `trans-` and `former`, is joined back into `transformer`. The hyphen stays when the document spells the compound with one elsewhere, as in `self-attention`.
+
+Most two-column papers already read in order. When a page is written row by row across two columns and no text crosses the gutter, the left column comes out first.
 
 Without `--pages` you get every page, with a form feed (`\f`) on its own line between pages. A PDF with three pages has two form feeds, even if a page is empty.
 

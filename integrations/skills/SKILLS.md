@@ -2455,7 +2455,7 @@ echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set last_result
 
 ## pdf - PDF Text Extractor
 
-Extracts the text layer of a PDF as Markdown by default: bigger lines become `#` headings, bullet glyphs become `- ` items, paragraphs are split by blank lines. `--text` gives plain text instead. Pages are separated by form feeds (`\f`).
+Extracts the text layer of a PDF as Markdown by default: bigger or bold lines become `#` headings, bullet glyphs become `- ` items, aligned rows become tables, paragraphs are split by blank lines. Running headers, footers and page numbers are dropped, and words hyphenated across lines are joined. `--text` gives plain text instead. Pages are separated by form feeds (`\f`).
 With `--json`, one record per page: `{"page":N,"text":"..."}`, then `{"_vrk":"pdf","count":N}`.
 Input: a file path as the positional argument, or PDF bytes on stdin. Empty stdin exits 0 with no output.
 
@@ -2536,8 +2536,11 @@ vrk pdf scan.pdf | vrk prompt --system 'Summarise.' || echo "no text layer, need
 
 - **The argument is a path, not content** - unlike most vrk tools, `vrk pdf 'text'` opens a file called `text`. Pipe bytes on stdin or pass a path.
 - **Text layer only, no OCR** - scanned PDFs (images of pages) exit 1 with `pdf: no extractable text found; document may be scanned (OCR required)`. If only the pages you picked with `--pages` are blank, the message is `pdf: no extractable text on the selected pages`.
-- **Spacing is rebuilt from glyph positions** - word gaps written as kerning (LaTeX, arXiv) become spaces, and baseline jumps become newlines. Text still comes out in content-stream order, so multi-column layouts may interleave. Math can lose its spacing.
-- **Headings are guessed from font size** - a run of lines noticeably bigger than the body text, followed by smaller text, becomes a heading. The largest size is `#`, the next `##`, the rest `###`. Big equations can turn into headings; use `--text` if that matters.
+- **Spacing is rebuilt from glyph positions** - word gaps written as kerning (LaTeX, arXiv) become spaces, and baseline jumps become newlines. Text comes out in content-stream order, which is reading order for LaTeX and most two-column papers. A page written row by row across two columns is reordered left column first, but only when no text crosses the gutter, so a full-width title above row-ordered columns can still interleave. Figures and tables land where the stream puts them. Math can lose its spacing.
+- **Headings are guessed from font size and weight** - a run of lines noticeably bigger than the body text, followed by smaller text, becomes a heading. The largest size is `#`, the next `##`, the rest `###`. A short bold line at body size (like `3.2.1 Scaled Attention`) followed by a full line of plain text is one level below the smallest sized heading. Big equations can turn into headings; use `--text` if that matters.
+- **Tables are guessed from wide gaps** - two or more rows whose cells are split by gaps wider than two ems, with the same number of cells starting at the same x, become a Markdown table with the first row as header. A row with a merged or empty cell splits the table, cells spaced like words stay one cell, and aligned code comments can come out as a two-column table. `--text` keeps them as plain lines.
+- **Running headers and footers are dropped** - a line among the top or bottom two of a page that repeats (digits ignored) on three or more of the extracted pages is removed, except its first copy. Bare page numbers are removed everywhere. Only extracted pages count, so `--pages 5` keeps that page's header.
+- **Hyphenated line breaks are joined** - `trans-` at a line end and `former` on the next becomes `transformer`. The hyphen stays when the document uses the compound elsewhere (`self-attention`) or either half already has one. Soft hyphens always join.
 - **Separators differ by mode** - Markdown puts a blank line before each `\f` (`page\n\n\f\n`); `--text` puts `\f` right after the page. `--json` records hold Markdown unless you add `--text`.
 - **A broken page does not stop the rest** - the page warns on stderr (`pdf: page N: ...`) and keeps whatever text was read before the error; with `--json` its record has an `error` field. Only when no page has text does it exit 1.
 - **Text outside the page box is dropped** - content past the CropBox (or MediaBox) does not come out. Form XObjects are followed, up to 8 levels deep.

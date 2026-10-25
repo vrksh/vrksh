@@ -43,6 +43,7 @@ type glyph struct {
 	x, y, endX, endY float64 // where the glyph starts and where the pen ends up
 	ux, uy           float64 // unit vector along the baseline
 	size             float64 // rendered font size
+	bold             bool
 }
 
 // font is what the walker needs from a font dictionary.
@@ -51,14 +52,17 @@ type font struct {
 	twoByte bool              // Type0 fonts use 2-byte codes (Identity-H and friends)
 	widths  map[int]float64   // per-code advance, in 1/1000 em
 	dw      float64           // advance for codes missing from widths
+	bold    bool
 }
 
 func loadFont(f lpdf.Font) *font {
 	v := f.V
 	ft := &font{enc: f.Encoder(), widths: map[int]float64{}}
+	ft.bold = isBold(v.Key("BaseFont").Name(), v.Key("FontDescriptor"))
 	if v.Key("Subtype").Name() == "Type0" {
 		ft.twoByte = true
 		desc := v.Key("DescendantFonts").Index(0)
+		ft.bold = ft.bold || isBold("", desc.Key("FontDescriptor"))
 		ft.dw = 1000
 		if dw := desc.Key("DW"); !dw.IsNull() {
 			ft.dw = dw.Float64()
@@ -136,6 +140,22 @@ func stdFontName(base string) string {
 		return "Times-Roman"
 	}
 	return ""
+}
+
+// isBold reads weight off the font name, the way most PDFs say it, or off the
+// descriptor's FontWeight or ForceBold flag. Nimbus calls its bold "Medi" and
+// TeX's bold roman is CMBX.
+func isBold(base string, desc lpdf.Value) bool {
+	if i := strings.IndexByte(base, '+'); i == 6 {
+		base = base[7:]
+	}
+	for _, w := range []string{"Bold", "Black", "Heavy", "Demi", "Semibold", "-Medi"} {
+		if strings.Contains(base, w) {
+			return true
+		}
+	}
+	return strings.HasPrefix(base, "CMBX") || desc.Key("FontWeight").Float64() >= 600 ||
+		desc.Key("Flags").Int64()&(1<<18) != 0
 }
 
 func (f *font) decode(raw string) string {
@@ -242,7 +262,7 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 			if w.clip && (x < w.box[0]-2 || x > w.box[2]+2 || y < w.box[1]-2 || y > w.box[3]+2) {
 				continue
 			}
-			g := glyph{s: norm.NFKC.String(f.decode(raw)), x: x, y: y, endX: end[4], endY: end[5], ux: 1}
+			g := glyph{s: norm.NFKC.String(f.decode(raw)), x: x, y: y, endX: end[4], endY: end[5], ux: 1, bold: f.bold}
 			g.size = math.Hypot(start[2], start[3])
 			if n := math.Hypot(start[0], start[1]); n > 0 {
 				g.ux, g.uy = start[0]/n, start[1]/n
@@ -355,9 +375,80 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 // line is one line of a page's text.
 type line struct {
 	text    string
-	size    float64 // average font size of its characters
-	brk     bool    // a paragraph break comes before it
-	upright bool    // runs left to right, not rotated
+	size    float64   // average font size of its characters
+	brk     bool      // a paragraph break comes before it
+	upright bool      // runs left to right, not rotated
+	bold    bool      // every letter in it is bold
+	cells   []string  // text split at gaps wider than two ems, nil if none
+	xs      []float64 // where each cell starts
+	y       float64   // baseline of its first glyph, in page space
+}
+
+// columns reorders a page written row by row across two columns, left
+// fragment then right fragment on each baseline, so the left column reads
+// first. It needs a gutter that no glyph or word gap crosses and at least
+// five lines that jump over it. Pages in stream order come back unchanged.
+// ponytail: one gutter, whole page. A full-width title above row-ordered
+// columns crosses the gutter and leaves the page alone; split by bands if
+// that shows up.
+func columns(gs []glyph) []glyph {
+	type span struct{ a, b float64 }
+	var jumps, joins []span
+	var prev *glyph
+	for i := range gs {
+		g := &gs[i]
+		if g.s == "" || g.ux < 0.9 {
+			continue
+		}
+		joins = append(joins, span{g.x, g.endX})
+		if prev != nil {
+			size := math.Max(math.Max(g.size, prev.size), 1)
+			if math.Abs(g.y-prev.endY) < size*0.5 {
+				switch gap := g.x - prev.endX; {
+				case gap > size*2:
+					jumps = append(jumps, span{prev.endX, g.x})
+				case gap > 0:
+					joins = append(joins, span{prev.endX, g.x})
+				}
+			}
+		}
+		prev = g
+	}
+	if len(jumps) < 5 {
+		return gs
+	}
+	mids := make([]float64, len(jumps))
+	for i, j := range jumps {
+		mids[i] = (j.a + j.b) / 2
+	}
+	sort.Float64s(mids)
+	gutter := mids[len(mids)/2]
+	over := 0
+	for _, j := range jumps {
+		if j.a < gutter && gutter < j.b {
+			over++
+		}
+	}
+	if over < 5 || over*2 < len(jumps) {
+		return gs
+	}
+	for _, j := range joins {
+		if j.a < gutter && gutter < j.b {
+			return gs
+		}
+	}
+	out := make([]glyph, 0, len(gs))
+	for _, g := range gs {
+		if g.x < gutter {
+			out = append(out, g)
+		}
+	}
+	for _, g := range gs {
+		if g.x >= gutter {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // layout joins glyphs into lines. A gap wider than a fraction of the font
@@ -367,18 +458,30 @@ func layout(gs []glyph) []line {
 	var lines []line
 	var downs []float64 // per line: distance below the line before, 0 if not below
 	var b strings.Builder
-	var sizeSum float64
-	var chars int
+	var sizeSum, y float64
+	var chars, letters, boldLetters int
+	var cuts []int // builder offsets where a wide gap starts a new cell
+	var xs []float64
 	var prev *glyph // last glyph placed, so the last of the line inside end
 	end := func(down float64) {
 		size := 0.0
 		if chars > 0 {
 			size = sizeSum / float64(chars)
 		}
-		lines = append(lines, line{text: strings.TrimRight(b.String(), " "), size: size, upright: prev.ux > 0.9})
+		text := b.String()
+		l := line{text: strings.TrimRight(text, " "), size: size, upright: prev.ux > 0.9,
+			bold: letters > 0 && boldLetters == letters, y: y}
+		if len(cuts) > 1 {
+			cuts = append(cuts, len(text))
+			for k := 1; k < len(cuts); k++ {
+				l.cells = append(l.cells, strings.TrimSpace(text[cuts[k-1]:cuts[k]]))
+			}
+			l.xs = xs
+		}
+		lines = append(lines, l)
 		downs = append(downs, down)
 		b.Reset()
-		sizeSum, chars = 0, 0
+		sizeSum, chars, letters, boldLetters, cuts, xs = 0, 0, 0, 0, nil, nil
 	}
 
 	firstDown := 0.0
@@ -403,11 +506,25 @@ func layout(gs []glyph) []line {
 				}
 			case along > size*0.15 && !isSpace(prev.s) && !isSpace(g.s):
 				b.WriteByte(' ')
+				if along > size*2 {
+					cuts = append(cuts, b.Len())
+					xs = append(xs, g.x)
+				}
 			}
+		}
+		if b.Len() == 0 {
+			y = g.y
+			cuts, xs = []int{0}, []float64{g.x}
 		}
 		b.WriteString(g.s)
 		sizeSum += g.size * float64(utf8.RuneCountInString(g.s))
 		chars += utf8.RuneCountInString(g.s)
+		if strings.IndexFunc(g.s, unicode.IsLetter) >= 0 {
+			letters++
+			if g.bold {
+				boldLetters++
+			}
+		}
 		prev = g
 	}
 	if prev != nil {
@@ -432,6 +549,128 @@ func layout(gs []glyph) []line {
 		lines[i].brk = downs[i] > math.Max(size*1.8, pitch*1.4)
 	}
 	return lines
+}
+
+// stripRunning drops running headers, footers and page numbers: lines among
+// the top or bottom two of a page whose text, with digit runs as #, shows up
+// there on at least three pages. Long documents change footers by chapter,
+// so there's no share-of-pages rule. Only the pages being read count, so a
+// single page keeps its header, and pages of four lines or fewer are left
+// alone.
+func stripRunning(pages [][]line) [][]line {
+	if len(pages) < 3 {
+		return pages
+	}
+	edge := make([]map[int]string, len(pages)) // per page: line index -> key
+	seen := map[string]int{}
+	for p, lines := range pages {
+		idx := make([]int, 0, len(lines))
+		for i, l := range lines {
+			if l.upright && strings.TrimSpace(l.text) != "" {
+				idx = append(idx, i)
+			}
+		}
+		edge[p] = map[int]string{}
+		if len(idx) <= 4 {
+			continue // all edge and no body: a slide or a label, not a header
+		}
+		sort.SliceStable(idx, func(a, b int) bool { return lines[idx[a]].y > lines[idx[b]].y })
+		idx = append(idx[:2], idx[len(idx)-2:]...)
+		keys := map[string]bool{}
+		for _, i := range idx {
+			k := runningKey(lines[i].text)
+			edge[p][i] = k
+			if !keys[k] {
+				keys[k] = true
+				seen[k]++
+			}
+		}
+	}
+	out := make([][]line, len(pages))
+	kept := map[string]bool{}
+	for p, lines := range pages {
+		for i, l := range lines {
+			if k, ok := edge[p][i]; ok && seen[k] >= 3 {
+				// The first one stays, so a table header repeated on every
+				// page isn't lost. Page numbers go everywhere.
+				if kept[k] || strings.IndexFunc(k, unicode.IsLetter) < 0 {
+					continue
+				}
+				kept[k] = true
+			}
+			out[p] = append(out[p], l)
+		}
+	}
+	return out
+}
+
+// joinHyphens re-joins words split across lines with a hyphen: "exist-" and
+// "ing best" become "existing" and "best". Whether the hyphen stays is
+// decided by the document's own words: "selfattention" never appears but
+// "self-attention" does, and "sequence" and "aligned" are both words on their
+// own, and "non" is hyphenated elsewhere as in "non-zero". TeX never breaks
+// a word that already has a hyphen, so "stop-the-" and "English-" before
+// "to-German" keep theirs. Otherwise the hyphen goes.
+func joinHyphens(pages [][]line) {
+	vocab, prefix := map[string]int{}, map[string]bool{}
+	for _, p := range pages {
+		for _, l := range p {
+			for _, w := range strings.Fields(l.text) {
+				w = strings.ToLower(strings.TrimFunc(w, notLetter))
+				vocab[w]++
+				if before, _, ok := strings.Cut(w, "-"); ok && !strings.HasSuffix(w, "-") {
+					prefix[before] = true
+				}
+			}
+		}
+	}
+	for _, p := range pages {
+		for i := 0; i+1 < len(p); i++ {
+			cur, next := &p[i], &p[i+1]
+			head, ok := strings.CutSuffix(cur.text, "-")
+			soft := false
+			if !ok {
+				head, soft = strings.CutSuffix(cur.text, "\u00ad")
+			}
+			r, _ := utf8.DecodeLastRuneInString(head)
+			n, _ := utf8.DecodeRuneInString(next.text)
+			if !ok && !soft || !unicode.IsLetter(r) || !unicode.IsLower(n) || next.brk || !next.upright ||
+				cur.cells != nil || next.cells != nil {
+				continue
+			}
+			tok, rest, _ := strings.Cut(next.text, " ")
+			word := head[strings.LastIndexByte(head, ' ')+1:]
+			w, f := strings.ToLower(word), strings.ToLower(strings.TrimFunc(tok, notLetter))
+			// f always appears once, at the start of its own line.
+			compound := vocab[w+"-"+f] > 0 || vocab[w] > 0 && vocab[f] > 1 || prefix[w] ||
+				strings.Contains(w, "-") || strings.Contains(f, "-")
+			hyphen := !soft && vocab[w+f] == 0 && compound
+			if hyphen {
+				head += "-"
+			}
+			cur.text, next.text = head+tok, strings.TrimLeft(rest, " ")
+		}
+	}
+}
+
+func notLetter(r rune) bool { return !unicode.IsLetter(r) && r != '-' }
+
+// runningKey folds a line so "Page 3 of 10" and "Page 12 of 10" match.
+func runningKey(s string) string {
+	var b strings.Builder
+	digit := false
+	for _, r := range strings.ToLower(strings.Join(strings.Fields(s), " ")) {
+		if unicode.IsDigit(r) {
+			if !digit {
+				b.WriteByte('#')
+			}
+			digit = true
+			continue
+		}
+		digit = false
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func isSpace(s string) bool { return strings.TrimSpace(s) == "" }
@@ -472,25 +711,29 @@ func bodySize(pages [][]line) float64 {
 	return body
 }
 
-// headingRun is lines [start, end) of one page that read as a heading: larger
-// than body type, horizontal, no paragraph break inside, short, and followed
-// by smaller text. A long run
-// of large type is a notice or a pull quote, not a heading.
+// headingRun is lines [start, end) of one page that read as a heading:
+// horizontal, no paragraph break inside, short, and followed by body text.
+// Either larger than body type and followed by smaller text, or body-sized,
+// all bold, and followed by text that isn't. A long run of large type is a
+// notice or a pull quote, not a heading.
 type headingRun struct {
 	start, end int
 	size       float64
+	bold       bool // body-sized bold, not large type
 }
 
 func headingRuns(lines []line, body float64) []headingRun {
 	var runs []headingRun
 	for i := 0; i < len(lines); {
 		s := sizeKey(lines[i].size)
-		if s < body*1.15 || !lines[i].upright {
+		big := s >= body*1.15
+		bold := !big && lines[i].bold && math.Abs(s-body) <= 0.5
+		if !lines[i].upright || !big && !bold {
 			i++
 			continue
 		}
 		j, n := i+1, utf8.RuneCountInString(lines[i].text)
-		for j < len(lines) && !lines[j].brk && lines[j].upright && sizeKey(lines[j].size) == s {
+		for j < len(lines) && !lines[j].brk && lines[j].upright && sizeKey(lines[j].size) == s && (big || lines[j].bold) {
 			n += utf8.RuneCountInString(lines[j].text)
 			j++
 		}
@@ -500,20 +743,54 @@ func headingRuns(lines []line, body float64) []headingRun {
 		}
 		// A heading leads into smaller text. Labels inside figures are
 		// followed by more labels, rotated axis text, or nothing.
-		leads := j < len(lines) && lines[j].upright && sizeKey(lines[j].size) < s
-		if leads && n <= 120 && strings.IndexFunc(text, unicode.IsLetter) >= 0 {
-			runs = append(runs, headingRun{i, j, s})
+		next := j < len(lines) && lines[j].upright
+		var leads bool
+		if big {
+			leads = next && sizeKey(lines[j].size) < s && n <= 120
+		} else {
+			// Bold body text is a heading only when it's short and a full
+			// line of plain text follows: bold names over affiliations are
+			// followed by short lines. A trailing period or hyphen means a
+			// sentence that carries on.
+			t := strings.TrimSpace(text)
+			// Wide gaps mean table cells, dot leaders a table of contents,
+			// and a lowercase start on the next line a sentence that wraps.
+			var nt []rune
+			if next {
+				nt = []rune(strings.TrimSpace(lines[j].text))
+			}
+			leads = next && !lines[j].bold && len(nt) >= 40 && !unicode.IsLower(nt[0]) &&
+				n <= 80 && j-i <= 2 && !strings.HasSuffix(t, ".") && !strings.HasSuffix(t, "-") &&
+				!strings.Contains(t, "..") && !strings.Contains(t, ". .") && !danglingWord(t)
+			for _, l := range lines[i:j] {
+				leads = leads && l.cells == nil
+			}
+		}
+		if leads && strings.IndexFunc(text, unicode.IsLetter) >= 0 {
+			runs = append(runs, headingRun{i, j, s, bold})
 		}
 		i = j
 	}
 	return runs
 }
 
+// danglingWord reports whether t ends on a word that can't end a title, so
+// the heading must wrap onto a line that isn't all bold.
+func danglingWord(t string) bool {
+	switch t[strings.LastIndexByte(t, ' ')+1:] {
+	case "a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "under", "with":
+		return true
+	}
+	return false
+}
+
 // headings is the document's body size and heading levels by size: the
-// largest heading size is #, the next ##, the rest ###.
+// largest heading size is #, the next ##, the rest ###. Bold body-sized
+// headings go one level below the smallest sized one, at most ####.
 type headings struct {
 	body   float64
 	levels map[float64]int
+	bold   int
 }
 
 func findHeadings(pages [][]line) headings {
@@ -521,7 +798,7 @@ func findHeadings(pages [][]line) headings {
 	var sizes []float64
 	for _, p := range pages {
 		for _, r := range headingRuns(p, h.body) {
-			if _, ok := h.levels[r.size]; !ok {
+			if _, ok := h.levels[r.size]; !ok && !r.bold {
 				h.levels[r.size] = 0
 				sizes = append(sizes, r.size)
 			}
@@ -531,6 +808,7 @@ func findHeadings(pages [][]line) headings {
 	for i, s := range sizes {
 		h.levels[s] = min(i+1, 3)
 	}
+	h.bold = min(len(sizes)+1, 4)
 	return h
 }
 
@@ -546,6 +824,15 @@ func markdown(lines []line, h headings) string {
 	}
 	runs := headingRuns(lines, h.body)
 	for i := 0; i < len(lines); {
+		for len(runs) > 0 && runs[0].start < i {
+			runs = runs[1:]
+		}
+		if j := tableEnd(lines, i); j > i {
+			flush()
+			blocks = append(blocks, mdTable(lines[i:j]))
+			i = j
+			continue
+		}
 		if len(runs) > 0 && runs[0].start == i {
 			r := runs[0]
 			runs = runs[1:]
@@ -554,7 +841,11 @@ func markdown(lines []line, h headings) string {
 			for _, l := range lines[r.start:r.end] {
 				parts = append(parts, strings.TrimSpace(l.text))
 			}
-			blocks = append(blocks, strings.Repeat("#", h.levels[r.size])+" "+strings.Join(parts, " "))
+			level := h.levels[r.size]
+			if r.bold {
+				level = h.bold
+			}
+			blocks = append(blocks, strings.Repeat("#", level)+" "+strings.Join(parts, " "))
 			i = r.end
 			continue
 		}
@@ -574,6 +865,50 @@ func markdown(lines []line, h headings) string {
 
 // mdLine turns a bullet glyph into a list marker and escapes line starts that
 // Markdown would otherwise read as syntax.
+// tableEnd returns the end of a table starting at lines[i], or i if none: at
+// least two upright rows with the same number of cells, each cell starting
+// within two ems of the one above.
+func tableEnd(lines []line, i int) int {
+	first := lines[i]
+	if first.cells == nil || !first.upright {
+		return i
+	}
+	j := i + 1
+	for ; j < len(lines); j++ {
+		l := lines[j]
+		if !l.upright || len(l.cells) != len(first.cells) {
+			break
+		}
+		aligned := true
+		for k, x := range l.xs {
+			aligned = aligned && math.Abs(x-lines[j-1].xs[k]) <= math.Max(l.size, 1)*2
+		}
+		if !aligned {
+			break
+		}
+	}
+	if j-i < 2 {
+		return i
+	}
+	return j
+}
+
+// mdTable renders rows of cells as a Markdown table, the first row as header.
+func mdTable(rows []line) string {
+	esc := strings.NewReplacer("|", `\|`)
+	var b strings.Builder
+	for r, l := range rows {
+		for _, c := range l.cells {
+			b.WriteString("| " + esc.Replace(c) + " ")
+		}
+		b.WriteString("|\n")
+		if r == 0 {
+			b.WriteString(strings.Repeat("| --- ", len(l.cells)) + "|\n")
+		}
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
 func mdLine(t string) string {
 	for _, bullet := range []string{"•", "◦", "▪", "‣", "●", "∙"} {
 		if rest, ok := strings.CutPrefix(t, bullet); ok {

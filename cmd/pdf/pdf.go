@@ -326,9 +326,11 @@ func extract(r *lpdf.Reader, pages []int) (lines [][]line, pageErrs []error, err
 			return nil, nil, fmt.Errorf("corrupt PDF: page %d missing from page tree", i)
 		}
 		gs, perr := pageGlyphs(page)
-		lines = append(lines, layout(gs))
+		lines = append(lines, layout(columns(gs)))
 		pageErrs = append(pageErrs, perr)
 	}
+	lines = stripRunning(lines)
+	joinHyphens(lines)
 	return lines, pageErrs, nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -284,6 +285,69 @@ func TestMarkdown(t *testing.T) {
 	want = "Big Title\nBody line one\n# not a heading\n\u2022 item\n---\n"
 	if stdout != want {
 		t.Errorf("--text stdout %q, want %q", stdout, want)
+	}
+}
+
+// Same-size bold lines are headings when a full line of plain text follows,
+// and not when a short one does, like a bold name over an affiliation.
+func TestBoldHeadings(t *testing.T) {
+	body := "Plain text that runs long enough to be a paragraph."
+	page := "BT /F1 12 Tf 72 720 Td (Report) Tj ET " +
+		"BT /F2 12 Tf 72 680 Td (Ana Rao) Tj /F1 12 Tf 0 -14 Td (Google) Tj ET " +
+		"BT /F2 12 Tf 72 620 Td (3.2.1 Scaled Attention) Tj /F1 12 Tf 0 -14 Td (" + body + ") Tj " +
+		"/F2 12 Tf 0 -14 Td (Bold but carries on in the) Tj /F1 12 Tf 0 -14 Td (" + body + ") Tj ET"
+	data := writePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [5 0 R] /Count 1 >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>",
+		stream("", page),
+	}, "")
+	stdout, stderr, code := runPdf(t, nil, data)
+	want := "Report\n\nAna Rao\nGoogle\n\n# 3.2.1 Scaled Attention\n\n" + body + "\nBold but carries on in the\n" + body + "\n"
+	if code != 0 || stdout != want {
+		t.Errorf("exit %d stderr %q\nstdout %q\nwant   %q", code, stderr, stdout, want)
+	}
+}
+
+// TestRowOrderedColumns: some generators write two columns a row at a time,
+// left fragment then right. The left column should still read first.
+func TestRowOrderedColumns(t *testing.T) {
+	var page strings.Builder
+	var want []string
+	for i := 1; i <= 6; i++ {
+		y := 720 - 14*i
+		fmt.Fprintf(&page, "BT /F1 12 Tf 72 %d Td (Left %d) Tj ET BT /F1 12 Tf 320 %d Td (Right %d) Tj ET ", y, i, y, i)
+		want = append(want, fmt.Sprintf("Left %d", i))
+	}
+	for i := 1; i <= 6; i++ {
+		want = append(want, fmt.Sprintf("Right %d", i))
+	}
+	stdout, stderr, code := runPdf(t, []string{"--text"}, assemblePDF("", "", []string{page.String()}))
+	if code != 0 || stdout != strings.Join(want, "\n")+"\n" {
+		t.Errorf("exit %d stderr %q\nstdout %q", code, stderr, stdout)
+	}
+}
+
+// TestTables: rows whose cells line up past wide gaps become a Markdown
+// table. A lone gapped line stays text, and --text keeps plain lines.
+func TestTables(t *testing.T) {
+	row := func(y int, a, b, c string) string {
+		return fmt.Sprintf("BT /F1 12 Tf 72 %d Td (%s) Tj ET BT /F1 12 Tf 200 %d Td (%s) Tj ET BT /F1 12 Tf 300 %d Td (%s) Tj ET ", y, a, y, b, y, c)
+	}
+	page := row(720, "model", "err", "a|b") + row(706, "VGG", "7.3", "x") + row(692, "ResNet", "3.5", "y") +
+		"BT /F1 12 Tf 72 640 Td (Prose after the table.) Tj ET " + row(600, "Lone", "row", "here")
+	data := assemblePDF("", "", []string{page})
+	stdout, stderr, code := runPdf(t, nil, data)
+	want := "| model | err | a\\|b |\n| --- | --- | --- |\n| VGG | 7.3 | x |\n| ResNet | 3.5 | y |\n\n" +
+		"Prose after the table.\n\nLone row here\n"
+	if code != 0 || stdout != want {
+		t.Errorf("exit %d stderr %q\nstdout %q\nwant   %q", code, stderr, stdout, want)
+	}
+	stdout, _, _ = runPdf(t, []string{"--text"}, data)
+	if !strings.HasPrefix(stdout, "model err a|b\nVGG 7.3 x\n") {
+		t.Errorf("--text stdout %q", stdout)
 	}
 }
 
@@ -704,5 +768,66 @@ func TestWriteFixtures(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// Repeated edge lines go, page numbers everywhere and headers after their
+// first copy. Body text that repeats in the middle of a page stays.
+func TestStripRunning(t *testing.T) {
+	page := func(n string) []line {
+		w := map[string]string{"1": "one", "2": "two", "3": "three"}[n]
+		ls := []line{{text: "Journal of Things"}, {text: "intro " + w}, {text: "Same body line"}, {text: "Same body line"}, {text: "end " + w}, {text: n}}
+		for i := range ls {
+			ls[i].upright, ls[i].y = true, float64(700-i*20)
+		}
+		return ls
+	}
+	got := stripRunning([][]line{page("1"), page("2"), page("3")})
+	var texts []string
+	for _, p := range got {
+		var ts []string
+		for _, l := range p {
+			ts = append(ts, l.text)
+		}
+		texts = append(texts, strings.Join(ts, "|"))
+	}
+	want := []string{
+		"Journal of Things|intro one|Same body line|Same body line|end one",
+		"intro two|Same body line|Same body line|end two",
+		"intro three|Same body line|Same body line|end three",
+	}
+	if !reflect.DeepEqual(texts, want) {
+		t.Errorf("got %q\nwant %q", texts, want)
+	}
+	// Two pages aren't enough to call anything a header.
+	if got := stripRunning([][]line{page("1"), page("2")}); len(got[1]) != 6 {
+		t.Errorf("two pages: kept %d lines, want 6", len(got[1]))
+	}
+}
+
+func TestJoinHyphens(t *testing.T) {
+	texts := []string{
+		"we improve on the exist-", "ing best result, by a non-", "trivial margin with self-",
+		"attention, self-attention and the English-", "to-German task. A stop-the-", "world pause.",
+		"Next para-", "graph",
+	}
+	p := make([]line, len(texts))
+	for i, s := range texts {
+		p[i] = line{text: s, upright: true}
+	}
+	p[len(p)-1].brk = true // a paragraph break stops the join
+	p = append(p, line{text: "non-zero ends here", upright: true})
+	joinHyphens([][]line{p})
+	var got []string
+	for _, l := range p {
+		got = append(got, l.text)
+	}
+	want := []string{
+		"we improve on the existing", "best result, by a non-trivial", "margin with self-attention,",
+		"self-attention and the English-to-German", "task. A stop-the-world", "pause.",
+		"Next para-", "graph", "non-zero ends here",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %q\nwant %q", got, want)
 	}
 }
