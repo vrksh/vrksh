@@ -1218,6 +1218,7 @@ Input: positional argument or stdin. Empty input exits 0 with no output.
 
 `text` is the anchor text (Markdown or HTML) or the URL itself for bare URLs.
 `line` is the 1-based line number in the input.
+Terminal control characters (ESC, BEL, C1, bidi overrides) are dropped from `text` and `url`, so a hostile page can't smuggle OSC 52 or OSC 8 sequences through `--bare`.
 
 ### Supported input formats (auto-detected)
 
