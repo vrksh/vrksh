@@ -58,6 +58,7 @@ func init() {
 			{Name: "pages", Shorthand: "p", Usage: "pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)"},
 			{Name: "text", Shorthand: "t", Usage: "plain text instead of Markdown"},
 			{Name: "json", Shorthand: "j", Usage: `one {"page":N,"text":"..."} per page, then {"_vrk":"pdf","count":N}`},
+			{Name: "as-printed", Usage: "keep running headers, footers, page numbers and end-of-line hyphens as printed"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
 	})
@@ -69,10 +70,11 @@ func Run() int {
 	fs.SetOutput(io.Discard)
 
 	var pagesFlag string
-	var textFlag, jsonFlag, quietFlag bool
+	var textFlag, jsonFlag, asPrinted, quietFlag bool
 	fs.StringVarP(&pagesFlag, "pages", "p", "", "pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)")
 	fs.BoolVarP(&textFlag, "text", "t", false, "plain text instead of Markdown")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `one {"page":N,"text":"..."} per page, then {"_vrk":"pdf","count":N}`)
+	fs.BoolVar(&asPrinted, "as-printed", false, "keep running headers, footers, page numbers and end-of-line hyphens as printed")
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -157,7 +159,7 @@ func Run() int {
 		return fail(1, "pdf: page %d does not exist (PDF has %d pages)", bad, n)
 	}
 
-	lines, pageErrs := extract(all, pages)
+	lines, pageErrs := extract(all, pages, !asPrinted)
 
 	texts := make([]string, len(lines))
 	var h headings
@@ -320,15 +322,18 @@ func open(data []byte) (pages []lpdf.Page, broken int, err error) {
 
 // extract lays out each selected page (1-indexed) into lines. A page whose
 // content stream breaks partway keeps the text read before the break, and its
-// error comes back in pageErrs.
-func extract(all []lpdf.Page, pages []int) (lines [][]line, pageErrs []error) {
+// error comes back in pageErrs. clean drops running headers, footers and
+// page numbers and re-joins hyphenated words.
+func extract(all []lpdf.Page, pages []int, clean bool) (lines [][]line, pageErrs []error) {
 	for _, i := range pages {
 		gs, perr := pageGlyphs(all[i-1])
 		lines = append(lines, layout(columns(gs)))
 		pageErrs = append(pageErrs, perr)
 	}
-	lines = stripRunning(lines)
-	joinHyphens(lines)
+	if clean {
+		lines = stripRunning(lines)
+		joinHyphens(lines)
+	}
 	return lines, pageErrs
 }
 
@@ -370,6 +375,7 @@ func Flags() *pflag.FlagSet {
 	fs.StringP("pages", "p", "", "pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)")
 	fs.BoolP("text", "t", false, "plain text instead of Markdown")
 	fs.BoolP("json", "j", false, `one {"page":N,"text":"..."} per page, then {"_vrk":"pdf","count":N}`)
+	fs.Bool("as-printed", false, "keep running headers, footers, page numbers and end-of-line hyphens as printed")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs
 }
@@ -382,6 +388,8 @@ func printUsage(fs *pflag.FlagSet) int {
 		"PDF text extractor. Writes the text layer as Markdown (headings guessed from",
 		"font size), or plain text with --text. Pages are separated by form feeds (\\f).",
 		"The argument is a file path, not PDF content. No OCR: scanned PDFs exit 1.",
+		"Running headers, footers and page numbers are dropped and words hyphenated",
+		"across lines are re-joined; --as-printed keeps them.",
 		"",
 		"flags:",
 	}

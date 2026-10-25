@@ -189,6 +189,22 @@ assert_exit "--quiet error" 1
 assert_eq "--quiet: stderr empty" "" "$stderr"
 
 echo ""
+# --- cleanup and --as-printed ---
+
+run /dev/null --text "$FIX/running.pdf"
+assert_exit "running headers" 0
+assert_eq "default: header kept once" "1" "$(grep -c 'Journal of Things' "$TMP/out")"
+assert_contains "default: hyphen joined" "the existing" "$stdout"
+
+run /dev/null --text --as-printed "$FIX/running.pdf"
+assert_exit "--as-printed" 0
+assert_eq "--as-printed: header on every page" "3" "$(grep -c 'Journal of Things' "$TMP/out")"
+assert_contains "--as-printed: hyphen kept" "the exist-" "$stdout"
+assert_eq "--as-printed: page numbers kept" "3" "$(grep -cE '^[0-9]+$' "$TMP/out")"
+
+run /dev/null --json --as-printed "$FIX/running.pdf"
+assert_contains "--as-printed --json: page number in text" 'end one\n\n1"' "$stdout"
+
 echo "---"
 echo "Results: $PASS passed, $FAIL failed"
 echo ""

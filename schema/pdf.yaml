@@ -31,6 +31,9 @@ flags:
     short: "-j"
     type: bool
     description: One record per page, then a metadata trailer
+  - flag: --as-printed
+    type: bool
+    description: Keep running headers, footers, page numbers and end-of-line hyphens as printed
   - flag: --quiet
     short: "-q"
     type: bool

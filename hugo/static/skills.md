@@ -306,12 +306,13 @@ echo 'hello world&foo=bar' | vrk pct --encode
 
 ## pdf - PDF text extractor - Markdown, --text, JSONL per page
 
-| Flag      | Short | Description                                                |
-|-----------|-------|------------------------------------------------------------|
-| `--text`  | -t    | Plain text instead of Markdown                             |
-| `--pages` | -p    | Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed) |
-| `--json`  | -j    | One record per page, then a metadata trailer               |
-| `--quiet` | -q    | Suppress stderr output                                     |
+| Flag           | Short | Description                                                                    |
+|----------------|-------|--------------------------------------------------------------------------------|
+| `--text`       | -t    | Plain text instead of Markdown                                                 |
+| `--pages`      | -p    | Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)                     |
+| `--json`       | -j    | One record per page, then a metadata trailer                                   |
+| `--as-printed` |       | Keep running headers, footers, page numbers and end-of-line hyphens as printed |
+| `--quiet`      | -q    | Suppress stderr output                                                         |
 
 Exit 0: Success, including empty stdin
 Exit 1: File not found, not a PDF, encrypted, corrupt, page out of range, or no extractable text

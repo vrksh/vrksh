@@ -53,12 +53,13 @@ vrk pdf --pages 1-3 report.pdf | vrk tok
 
 ## Flags
 
-| Flag      | Short | Type   | Description                                                |
-|-----------|-------|--------|------------------------------------------------------------|
-| `--text`  | -t    | bool   | Plain text instead of Markdown                             |
-| `--pages` | -p    | string | Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed) |
-| `--json`  | -j    | bool   | One record per page, then a metadata trailer               |
-| `--quiet` | -q    | bool   | Suppress stderr output                                     |
+| Flag           | Short | Type   | Description                                                                    |
+|----------------|-------|--------|--------------------------------------------------------------------------------|
+| `--text`       | -t    | bool   | Plain text instead of Markdown                                                 |
+| `--pages`      | -p    | string | Pages: N, N-M, N- or a comma list like 1,3,5-7 (1-indexed)                     |
+| `--json`       | -j    | bool   | One record per page, then a metadata trailer                                   |
+| `--as-printed` |       | bool   | Keep running headers, footers, page numbers and end-of-line hyphens as printed |
+| `--quiet`      | -q    | bool   | Suppress stderr output                                                         |
 
 
 <!-- notes - edit in notes/pdf.notes.md -->
@@ -81,6 +82,8 @@ Rows whose cells are split by wide gaps and line up with the row above become a 
 Running headers, footers and page numbers are dropped: a line near the top or bottom of a page that repeats on three or more of the pages you extract, ignoring digits, keeps only its first copy, and bare page numbers go everywhere. Only extracted pages count, so `--pages 5` keeps that page's header.
 
 A word split across lines, like `trans-` and `former`, is joined back into `transformer`. The hyphen stays when the document spells the compound with one elsewhere, as in `self-attention`.
+
+`--as-printed` turns off both: headers, footers, page numbers and hyphenated line breaks come through as they are on the page. Use it when you need the printed page numbers, say for citations, or when a real line got dropped.
 
 Most two-column papers already read in order. When a page is written row by row across two columns and no text crosses the gutter, the left column comes out first.
 

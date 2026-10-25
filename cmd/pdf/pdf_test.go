@@ -737,7 +737,7 @@ func FuzzPdf(f *testing.F) {
 			}
 			n := len(all)
 			pages, _ := selectPages([]pageRange{{start: 1, end: min(n, 20)}}, n)
-			lines, _ := extract(all, pages)
+			lines, _ := extract(all, pages, true)
 			h := findHeadings(lines)
 			for _, ls := range lines {
 				_ = markdown(ls, h)
@@ -769,6 +769,7 @@ func TestWriteFixtures(t *testing.T) {
 		"blank.pdf":     buildPDF("", ""),
 		"encrypted.pdf": buildEncryptedPDF("secret"),
 		"kerned.pdf":    assemblePDF("", "", []string{kernedPage}),
+		"running.pdf":   buildRunningPDF(),
 	}
 	for name, data := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
@@ -913,4 +914,29 @@ func TestManyPages(t *testing.T) {
 		t.Errorf("exit %d stderr %q tail %q", code, stderr, stdout[max(0, len(stdout)-20):])
 	}
 	t.Logf("2000 pages in %v", time.Since(start))
+}
+
+// buildRunningPDF returns three pages with a running header, a page number
+// and a word hyphenated across lines.
+func buildRunningPDF() []byte {
+	var pages []string
+	for n, w := range []string{"one", "two", "three"} {
+		pages = append(pages, "BT /F1 12 Tf 72 720 Td (Journal of Things) Tj 0 -40 Td (intro "+w+") Tj "+
+			"0 -14 Td (the exist-) Tj 0 -14 Td (ing "+w+") Tj 0 -14 Td (end "+w+") Tj "+
+			fmt.Sprintf("0 -40 Td (%d) Tj ET", n+1))
+	}
+	return assemblePDF("", "", pages)
+}
+
+func TestAsPrinted(t *testing.T) {
+	data := buildRunningPDF()
+	out, errOut, code := runPdf(t, []string{"--text"}, data)
+	if code != 0 || strings.Count(out, "Journal") != 1 || strings.Contains(out, "\n1\n") || !strings.Contains(out, "existing") {
+		t.Fatalf("default: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, errOut, code = runPdf(t, []string{"--text", "--as-printed"}, data)
+	want := "Journal of Things\n\nintro one\nthe exist-\ning one\nend one\n\n1\n\fJournal of Things\n"
+	if code != 0 || !strings.HasPrefix(out, want) {
+		t.Errorf("--as-printed: exit %d stdout %q stderr %q, want prefix %q", code, out, errOut, want)
+	}
 }

@@ -17,6 +17,8 @@ Running headers, footers and page numbers are dropped: a line near the top or bo
 
 A word split across lines, like `trans-` and `former`, is joined back into `transformer`. The hyphen stays when the document spells the compound with one elsewhere, as in `self-attention`.
 
+`--as-printed` turns off both: headers, footers, page numbers and hyphenated line breaks come through as they are on the page. Use it when you need the printed page numbers, say for citations, or when a real line got dropped.
+
 Most two-column papers already read in order. When a page is written row by row across two columns and no text crosses the gutter, the left column comes out first.
 
 Without `--pages` you get every page, with a form feed (`\f`) on its own line between pages. A PDF with three pages has two form feeds, even if a page is empty.

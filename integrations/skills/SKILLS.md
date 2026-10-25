@@ -2455,7 +2455,7 @@ echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set last_result
 
 ## pdf - PDF Text Extractor
 
-Extracts the text layer of a PDF as Markdown by default: bigger or bold lines become `#` headings, bullet glyphs become `- ` items, aligned rows become tables, paragraphs are split by blank lines. Running headers, footers and page numbers are dropped, and words hyphenated across lines are joined. `--text` gives plain text instead. Pages are separated by form feeds (`\f`).
+Extracts the text layer of a PDF as Markdown by default: bigger or bold lines become `#` headings, bullet glyphs become `- ` items, aligned rows become tables, paragraphs are split by blank lines. Running headers, footers and page numbers are dropped, and words hyphenated across lines are joined (`--as-printed` turns both off). `--text` gives plain text instead. Pages are separated by form feeds (`\f`).
 With `--json`, one record per page: `{"page":N,"text":"..."}`, then `{"_vrk":"pdf","count":N}`.
 Input: a file path as the positional argument, or PDF bytes on stdin. Empty stdin exits 0 with no output.
 
@@ -2466,6 +2466,7 @@ Input: a file path as the positional argument, or PDF bytes on stdin. Empty stdi
 | `--text` | `-t` | Plain text instead of Markdown, `\f` straight after each page |
 | `--pages` | `-p` | Pages: `N`, `N-M`, `N-` (to the end), or a comma list like `1,3,5-7`. 1-indexed |
 | `--json` | `-j` | One `{"page":N,"text":"..."}` per page, then `{"_vrk":"pdf","count":N}` |
+| `--as-printed` | | Keep running headers, footers, page numbers and end-of-line hyphens. Use it to cite printed page numbers, or when the cleanup drops a line it shouldn't. Works with `--text` and `--json` |
 | `--quiet` | `-q` | Suppress stderr output |
 
 ### --json output shapes
@@ -2540,7 +2541,7 @@ vrk pdf scan.pdf | vrk prompt --system 'Summarise.' || echo "no text layer, need
 - **Headings are guessed from font size and weight** - a run of lines noticeably bigger than the body text, followed by smaller text, becomes a heading. The largest size is `#`, the next `##`, the rest `###`. A short bold line at body size (like `3.2.1 Scaled Attention`) followed by a full line of plain text is one level below the smallest sized heading. Big equations can turn into headings; use `--text` if that matters.
 - **Tables are guessed from wide gaps** - two or more rows whose cells are split by gaps wider than two ems, with the same number of cells starting at the same x, become a Markdown table with the first row as header. A row with a merged or empty cell splits the table, cells spaced like words stay one cell, and aligned code comments can come out as a two-column table. `--text` keeps them as plain lines.
 - **Running headers and footers are dropped** - a line among the top or bottom two of a page that repeats (digits ignored) on three or more of the extracted pages is removed, except its first copy. Bare page numbers are removed everywhere. Only extracted pages count, so `--pages 5` keeps that page's header.
-- **Hyphenated line breaks are joined** - `trans-` at a line end and `former` on the next becomes `transformer`. The hyphen stays when the document uses the compound elsewhere (`self-attention`) or either half already has one. Soft hyphens always join.
+- **Hyphenated line breaks are joined** - `trans-` at a line end and `former` on the next becomes `transformer`. The hyphen stays when the document uses the compound elsewhere (`self-attention`) or either half already has one. Soft hyphens always join. `--as-printed` leaves every line break as it is.
 - **Separators differ by mode** - Markdown puts a blank line before each `\f` (`page\n\n\f\n`); `--text` puts `\f` right after the page. `--json` records hold Markdown unless you add `--text`.
 - **A broken page does not stop the rest** - the page warns on stderr (`pdf: page N: ...`) and keeps whatever text was read before the error; with `--json` its record has an `error` field. Only when no page has text does it exit 1. A page that draws more than 1,000,000 glyphs or runs more than 10,000 Form XObjects stops there with the error `exceeds the per-page glyph or form budget`, so a small hostile file can't hang the pipeline.
 - **Text outside the page box is dropped** - content past the CropBox (or MediaBox) does not come out. Form XObjects are followed, up to 8 levels deep.
