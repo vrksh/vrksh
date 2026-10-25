@@ -322,6 +322,9 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 		}
 		return fmt.Errorf("sql: %s: line %d is not valid UTF-8; convert it first, e.g. iconv -f latin1 -t utf-8", t.source, bytes.Count(data[:i], []byte("\n"))+1)
 	}
+	if first, _, _ := bytes.Cut(bytes.TrimSpace(data), []byte("\n")); len(first) > 0 && (first[0] == '{' || first[0] == '[') && json.Valid(first) {
+		return fmt.Errorf("sql: %s is JSON, not CSV; sql reads CSV and TSV only", t.source)
+	}
 	// Old Mac line endings: encoding/csv only splits on \n.
 	if bytes.IndexByte(data, '\n') < 0 {
 		data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))

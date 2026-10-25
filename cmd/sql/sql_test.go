@@ -926,3 +926,17 @@ func TestPaddedNumbers(t *testing.T) {
 		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
 	}
 }
+
+func TestJSONInputRejected(t *testing.T) {
+	for _, in := range []string{"{\"a\":1}\n{\"a\":2}\n", "[{\"a\":1}]\n"} {
+		out, errOut, code := runSql(t, []string{"SELECT * FROM stdin"}, in)
+		if code != 1 || out != "" || !strings.Contains(errOut, "is JSON, not CSV") {
+			t.Errorf("%q: exit %d stdout %q stderr %q", in, code, out, errOut)
+		}
+	}
+	// A CSV cell that happens to be a JSON object is still CSV.
+	out, _, code := runSql(t, []string{"SELECT count(*) FROM stdin"}, "payload\n\"{\"\"a\"\":1}\"\n")
+	if code != 0 || out != "count(*)\n1\n" {
+		t.Errorf("exit %d stdout %q", code, out)
+	}
+}

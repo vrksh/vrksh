@@ -229,11 +229,13 @@ func mcpMaps() (
 		"mask":     mask.Flags,
 		"moniker":  moniker.Flags,
 		"pct":      pct.Flags,
+		"pdf":      pdf.Flags,
 		"plain":    plain.Flags,
 		"prompt":   prompt.Flags,
 		"recase":   recase.Flags,
 		"sip":      sip.Flags,
 		"slug":     slug.Flags,
+		"sql":      sql.Flags,
 		"sse":      sse.Flags,
 		"throttle": throttle.Flags,
 		"tok":      tok.Flags,
@@ -255,6 +257,8 @@ func mcpMaps() (
 		// Optional stdin — subcommand-dependent or optional buffering
 		"coax": false, // stdin is optional buffering for subprocess
 		"kv":   false, // set reads stdin only when no positional value
+		"pdf":  false, // a file path works instead of PDF bytes on stdin
+		"sql":  false, // reads stdin only when the query names it
 
 		// Required — stdin or positional args needed
 		"jwt":      true, // single token input
