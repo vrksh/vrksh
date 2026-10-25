@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 
@@ -89,6 +90,8 @@ var tools = map[string]func() int{
 }
 
 func main() {
+	// A recursion bug in a parser then dies at 64 MB instead of after eating 1 GB.
+	debug.SetMaxStack(64 << 20)
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "--manifest":

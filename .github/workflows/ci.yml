@@ -11,6 +11,16 @@ jobs:
           go-version-file: go.mod
       - run: make test
 
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # binary mode: source mode switches toolchains and hides stdlib vulns in the shipped build
+      - run: make build && go run golang.org/x/vuln/cmd/govulncheck@latest -mode binary ./vrk
+
   cross-compile:
     runs-on: ubuntu-latest
     steps:

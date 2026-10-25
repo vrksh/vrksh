@@ -7,7 +7,7 @@ export CGO_ENABLED=0
 VERSION ?= $(or $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//'),dev)
 
 build:
-	go build -ldflags "-X main.version=$(VERSION)" -o vrk .
+	go build -trimpath -ldflags "-X main.version=$(VERSION)" -o vrk .
 
 # Run all tests. Use before every commit.
 test:
