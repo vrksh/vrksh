@@ -483,3 +483,35 @@ func TestOutputFieldsStableShape(t *testing.T) {
 		}
 	}
 }
+
+// TestInvalidURLErrorHidesCredentials: urlinfo promises never to print
+// credentials, error messages included.
+func TestInvalidURLErrorHidesCredentials(t *testing.T) {
+	for _, in := range []string{"http://u:s3cretPW@ho st/%zz", "http://b:s3cretPW@h:x/"} {
+		_, stderr, code := runURLInfo(t, []string{in}, "")
+		if code != 1 {
+			t.Errorf("%s: exit %d, want 1", in, code)
+		}
+		if strings.Contains(stderr, "s3cretPW") || !strings.Contains(stderr, "***@") {
+			t.Errorf("%s: stderr %q", in, stderr)
+		}
+	}
+	_, stderr, _ := runURLInfo(t, nil, "http://a:pw1@h/\nhttp://b:s3cretPW@h:x/\n")
+	if strings.Contains(stderr, "s3cretPW") {
+		t.Errorf("stdin: stderr %q", stderr)
+	}
+}
+
+func TestRedactUserinfo(t *testing.T) {
+	cases := map[string]string{
+		"http://u:p@h/x@y":  "http://***@h/x@y",
+		"http://a@b:p@h:x/": "http://***@h:x/",
+		"http://h/%zz":      "http://h/%zz",
+		"not a url":         "not a url",
+	}
+	for in, want := range cases {
+		if got := redactUserinfo(in); got != want {
+			t.Errorf("redactUserinfo(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -2286,7 +2286,7 @@ cat page.html | vrk links --bare | vrk urlinfo --field host
 
 ### Gotchas
 
-- **Password is never output** — inspect the raw string directly if you need credential validation.
+- **Password is never output**, error messages included (an invalid URL is echoed with `***@` in place of its userinfo). Inspect the raw string directly if you need credential validation.
 - **`--field port` returns empty string when port is not explicit in the URL** — `https://example.com` has no port in the string even though HTTPS implies 443.
 - **`urlinfo` accepts any string `url.Parse` accepts** — Go's parser is lenient; a string with no scheme parses without error but produces an empty scheme field. Exit 1 only when both scheme and host are empty.
 - **`--field query.<key>` returns empty string if the key is absent** — not an error.
