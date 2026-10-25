@@ -238,6 +238,55 @@ assert_contains "--timeout: message" "timed out after 200ms" "$stderr"
 got="$("$VRK" sql --query 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT x FROM c' < /dev/null | head -n 3 | tr '\n' ' ' || true)"
 assert_eq "runaway query streams into head" "x 1 2 " "$got"
 
+# modernc only checks the context on the first step; this hangs on the second.
+run /dev/null --timeout 300ms --query 'SELECT 1 UNION ALL SELECT (WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c)'
+assert_exit "--timeout stops a query after its first row" 1
+assert_contains "--timeout after first row: message" "timed out after 300ms" "$stderr"
+
+run /dev/null --query 'SELECT length(zeroblob(100000000))'
+assert_exit "100 MB value refused" 1
+assert_contains "100 MB value: message" "too big" "$stderr"
+
+# --- limits and blocked statements ---
+
+run /dev/null --query 'PRAGMA temp_store = FILE'
+assert_exit "PRAGMA blocked" 1
+assert_contains "PRAGMA: message" "PRAGMA is not allowed" "$stderr"
+
+run /dev/null "SELECT name FROM pragma_table_info('users') LIMIT 1" "$U"
+assert_exit "pragma_table_info still works" 0
+assert_eq "pragma_table_info: first column" "name
+id" "$stdout"
+
+run /dev/null 'SELECT 1 FROM zero' /dev/zero
+assert_exit "/dev/zero refused" 1
+assert_contains "/dev/zero: message" "not a regular file" "$stderr"
+
+printf 'id,note\n1,"never closed\n2,b\n3,c\n' > "$TMP/unterm.csv"
+run "$TMP/unterm.csv" 'SELECT count(*) FROM stdin' -
+assert_exit "unclosed quote" 1
+assert_eq "unclosed quote: stdout empty" "" "$stdout"
+
+printf 'amt\n12345678901234567890.5\n0.1\n' > "$TMP/big.csv"
+run "$TMP/big.csv" 'SELECT amt, typeof(amt) AS t FROM stdin' -
+assert_exit "big decimal" 0
+assert_eq "big decimal stays TEXT, digits intact" "amt,t
+12345678901234567890.5,text
+0.1,text" "$stdout"
+
+# A 2000-column header over 20000 one-field rows used to pad every row to
+# 2000 cells and take minutes. Short rows now stay short.
+{
+  seq -f 'c%g' 1 2000 | paste -sd, -
+  seq 20000 | sed 's/.*/1/'
+} > "$TMP/wide.csv"
+code=0
+timeout 10 "$VRK" sql 'SELECT count(*), count(c2000) FROM wide' "$TMP/wide.csv" > "$TMP/out" 2> "$TMP/err" || code=$?
+stderr="$(cat "$TMP/err")"
+assert_exit "wide header, short rows, under 10s" 0
+assert_eq "wide header: missing cells are NULL" "count(*),count(c2000)
+20000,0" "$(cat "$TMP/out")"
+
 echo "---"
 echo "Results: $PASS passed, $FAIL failed"
 echo ""

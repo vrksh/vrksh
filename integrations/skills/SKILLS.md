@@ -2571,7 +2571,7 @@ Input: the query is the first positional argument (or `--query`), the rest are C
 | `--delimiter` | `-d` | Input field separator: one character, or `\t` / `tab`. Default `,`, or tab for `.tsv` files |
 | `--json` | `-j` | One JSON object per row (keys in column order), then `{"_vrk":"sql","count":N}` |
 | `--quiet` | `-q` | Suppress stderr output |
-| `--timeout` | | Stop and exit 1 (`sql: query timed out after 30s`) if loading and the query take longer. Go duration: `500ms`, `30s`, `2m`. Default none |
+| `--timeout` | | Stop and exit 1 (`sql: query timed out after 30s`) if loading and the query take longer. Go duration: `500ms`, `30s`, `2m`. Default `60s`, `0` for no limit |
 
 ### Type inference
 
@@ -2581,6 +2581,7 @@ Input: the query is the first positional argument (or `--query`), the rest are C
 | Decimals that all have N places, like `19.90` and `5.00` | `REAL(N)` - prints with N decimals |
 | Other mixes of integers and decimals, like `1.5` and `2` | `REAL` |
 | Anything else, including `007`, `1e3`, `" 30"` or an all-empty column | `TEXT` |
+| A decimal a float64 can't hold exactly, like `12345678901234567890.5` | `TEXT` - digits kept as written |
 
 Empty cells are NULL in every column. In INTEGER and REAL columns, `N/A`, `NA`, `null`, `none`, `nan` and `-` (any case) are NULL too, and don't make the column TEXT. Other text in a mostly-numeric column makes it TEXT and prints a warning naming the column and row (not under `--json`).
 
@@ -2598,7 +2599,7 @@ Empty cells are NULL in every column. In INTEGER and REAL columns, `N/A`, `NA`, 
 | Code | Meaning |
 |------|---------|
 | 0 | Success, including empty stdin when the query reads `stdin` |
-| 1 | SQL error (syntax, no such table or column, runtime), file not found, CSV parse error, empty file, gzip file |
+| 1 | SQL error (syntax, no such table or column, runtime), file not found, CSV parse error, empty file, gzip file, `PRAGMA`, timeout, a size limit hit |
 | 2 | Usage error - no query, a table but no files given, duplicate or invalid table name, `-` or `stdin` with nothing piped, bad `--delimiter`, unknown flag |
 
 ### Examples
@@ -2650,16 +2651,20 @@ vrk sql --no-header 'SELECT body FROM tickets' tickets.csv | vrk tok
 - **`stdin` is found by word match** - any `stdin` in the query, even inside a string literal, makes `vrk sql` read stdin when it is piped. Pass `-` to be explicit. Empty stdin drops the table: if the query needs it, the result is no output and exit 0, even for `count(*)`. A file called `stdin.csv` clashes with it.
 - **`007` stays text** - leading zeros keep a column TEXT, so ZIP codes and IDs aren't mangled. Cast if you want numbers: `CAST(zip AS INTEGER)`.
 - **No such table without files is exit 2** - `vrk sql 'SELECT * FROM t'` means you forgot the file. With files given it is exit 1 with SQLite's message.
-- **ATTACH and VACUUM INTO are blocked** - they exit 1 with `too many attached databases - max 0`, so a query can't read or write other files.
+- **ATTACH, VACUUM INTO and PRAGMA are blocked** - ATTACH and VACUUM INTO exit 1 with `too many attached databases - max 0`, and any statement with the word `PRAGMA` exits 1 with `PRAGMA is not allowed`, so a query can't read or write other files. Temp tables stay in memory. The table-valued forms still work: `SELECT name FROM pragma_table_info('users')`.
 - **Multiple statements run, last result is printed** - `CREATE TABLE x AS SELECT ...; SELECT * FROM x` works. Statements like `DELETE` print nothing.
 - **JSONL in works** - when the first line is a JSON object (or the input is a JSON array), keys become columns in first-seen order. A missing key or `null` is NULL, `true`/`false` are 1/0, nested objects and arrays are JSON text (`json_extract(tags, '$[0]')`). Records with a `_vrk` key (vrk trailers) are skipped, so `vrk pdf --json | vrk sql ...` just works. A bad line exits 1 and names it. Input with no records (only a trailer, from an upstream run that matched nothing) is treated like empty stdin: no output, exit 0.
 - **Input must be UTF-8** - a latin1 file exits 1 with the line number; convert it with `iconv -f latin1 -t utf-8` first. Old Mac `\r`-only line endings work.
 - **Numbers may be padded** - ` 42` and `42 ` load as INTEGER 42. Floats print without exponents unless they are tiny or huge (`1e-09`, `1e+300`).
-- **Short rows are padded with NULL** - a row with more non-empty fields than the header exits 1 and names the line. Trailing empty fields (a trailing comma) are dropped. Stray quotes inside unquoted fields (`5" screen`) are kept as-is. A stray quote inside a quoted field (`"x"y`) exits 1 with its line number instead of swallowing the lines after it; double quotes inside a quoted field (`""`).
+- **Missing cells in short rows are NULL** - a row with more non-empty fields than the header exits 1 and names the line. Trailing empty fields (a trailing comma) are dropped. Stray quotes inside unquoted fields (`5" screen`) are kept as-is. A stray quote inside a quoted field (`"x"y`), or a quote that is never closed, exits 1 with its line number instead of swallowing the lines after it; double quotes inside a quoted field (`""`). Quoted fields that span lines on purpose still load.
 - **N/A becomes NULL in number columns** - `SELECT *` prints it as an empty cell. In TEXT columns it stays `N/A`.
 - **Mixed decimal places lose trailing zeros** - a column with `1.50` and `2.125` is plain REAL, so `1.50` prints as `1.5`.
 - **Gzip files exit 1** - decompress first: `gunzip -c f.csv.gz | vrk sql 'SELECT ... FROM stdin' -`.
-- **Memory is about 15-20x the file size** - every row is parsed and loaded into SQLite in memory. A 14 MB CSV with 500k rows peaks around 240 MB.
+- **Memory is about 15x the file size** - the file is held in memory and every row is loaded into an in-memory SQLite table. A 20 MB CSV with 10M short rows peaks around 275 MB.
+- **Size limits exit 1** - input over 1 GiB per file or stdin, more than 50M cells (rows times header columns), a single value over 64 MiB (`string or blob too big`), or a result over 1 GiB (`add a LIMIT or select fewer columns`). Filter big inputs before they reach `vrk sql`.
+- **Queries stop after 60s by default** - `--timeout 0` turns that off, `--timeout 5m` raises it.
+- **Output is held back up to 1 MiB, then streamed.** Below that, stdout is empty on error. A bigger result that fails partway leaves the rows already written; under `--json` the missing `_vrk` trailer marks it incomplete. A runaway query (a recursive CTE with no stop) streams until the timeout, so pipe it into `head` or set `--timeout`.
+- **Output is raw** - cells starting with `=`, `+`, `-` or `@` are not neutralised for spreadsheets, and control characters are not stripped. Don't open untrusted results in Excel as-is, and use `--json` when the result goes to a terminal or an LLM.
 
 ---
 
@@ -2668,7 +2673,6 @@ vrk sql --no-header 'SELECT body FROM tickets' tickets.csv | vrk tok
 These are not pipeline tools — they support discovery and integration.
 
 ---
-- **Output is held back up to 1 MiB, then streamed.** Below that, stdout is empty on error. A bigger result that fails partway leaves the rows already written; under `--json` the missing `_vrk` trailer marks it incomplete. A runaway query (a recursive CTE with no stop) streams until killed, so pipe it into `head` or set `--timeout`.
 
 ## mcp — MCP Server (Discovery Only)
 

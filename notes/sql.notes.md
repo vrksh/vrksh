@@ -156,16 +156,29 @@ $ echo $?
 1
 ```
 
-ATTACH is blocked, so a query can't open other database files:
+ATTACH and VACUUM INTO are blocked, so a query can't open or write other database files. PRAGMA is rejected outright, and temp tables stay in memory:
 
 ```bash
 $ vrk sql "ATTACH DATABASE 'other.db' AS o"
 error: sql: SQL logic error: too many attached databases - max 0 (1)
+$ vrk sql 'PRAGMA temp_store = FILE'
+error: sql: PRAGMA is not allowed
 ```
 
-A query that never ends, like a recursive CTE with no stop condition, can be cut off with `--timeout`:
+A query that never ends, like a recursive CTE with no stop condition, stops after 60 seconds. `--timeout` changes that, and `--timeout 0` turns it off:
 
 ```bash
 $ vrk sql --timeout 200ms --query 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c'
 error: sql: query timed out after 200ms
 ```
+
+A quote that is never closed exits 1 instead of quietly folding the rest of the file into one cell:
+
+```bash
+$ printf 'id,note\n1,"never closed\n2,b\n' | vrk sql 'SELECT count(*) FROM stdin'
+error: sql: CSV parse error in stdin: line 2: stray or unclosed quote in a quoted field; quotes inside one must be doubled ("")
+```
+
+There are size limits too: 1 GiB of input per file, 50 million cells (rows times header columns), 64 MiB for one value and 1 GiB of result. Each one exits 1 and says which it hit.
+
+Output is raw. Cells that start with `=`, `+`, `-` or `@` aren't neutralised for spreadsheets, and control characters pass through, so use `--json` when the result is going to a terminal or an LLM.

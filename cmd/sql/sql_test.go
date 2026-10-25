@@ -170,6 +170,9 @@ func TestInferType(t *testing.T) {
 		{[]string{"n/a", "-"}, "TEXT", -1},
 		{[]string{"5", "abc", "7"}, "TEXT", 1},
 		{[]string{"abc", "def", "5"}, "TEXT", -1},
+		{[]string{"12345678901234567890.5", "0.1"}, "TEXT", -1},
+		{[]string{"3.14159265358979323846"}, "TEXT", -1},
+		{[]string{"0.30000000000000004", "0.1"}, "REAL", -1},
 	}
 	for _, c := range cases {
 		if got, junk := inferType(c.vals); got != c.want || junk != c.junk {
@@ -1028,5 +1031,156 @@ func TestTimeout(t *testing.T) {
 		if code != 2 {
 			t.Errorf("--timeout %s: exit %d, want 2", bad, code)
 		}
+	}
+}
+
+// runWithin fails the test if runSql takes longer than limit.
+func runWithin(t *testing.T, limit time.Duration, args []string, stdin string) (out, errOut string, code int) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		out, errOut, code = runSql(t, args, stdin)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(limit):
+		t.Fatalf("%v did not return within %s", args, limit)
+	}
+	return out, errOut, code
+}
+
+func TestTimeoutAfterFirstRow(t *testing.T) {
+	// The first row comes back at once; the hang is in the second step, which
+	// modernc's own context handling doesn't watch.
+	const q = "SELECT 1 UNION ALL SELECT (WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c)"
+	out, errOut, code := runWithin(t, 5*time.Second, []string{"--timeout", "200ms", "--query", q}, "")
+	if code != 1 || out != "" || !strings.Contains(errOut, "timed out") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestDefaultTimeout(t *testing.T) {
+	orig := defaultTimeout
+	defaultTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { defaultTimeout = orig })
+	const runaway = "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c"
+	out, errOut, code := runWithin(t, 5*time.Second, []string{"--query", runaway}, "")
+	if code != 1 || out != "" || !strings.Contains(errOut, "timed out after 200ms") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	// --timeout 0 turns it off.
+	out, _, code = runSql(t, []string{"--timeout", "0", "SELECT 1 AS n"}, "")
+	if code != 0 || out != "n\n1\n" {
+		t.Errorf("--timeout 0: exit %d stdout %q", code, out)
+	}
+}
+
+func TestValueLengthLimit(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT zeroblob(100000000) AS b"}, "")
+	if code != 1 || out != "" || !strings.Contains(errOut, "too big") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestOutputCap(t *testing.T) {
+	orig := maxOutput
+	maxOutput = 1 << 10
+	t.Cleanup(func() { maxOutput = orig })
+	const q = "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c LIMIT 100000) SELECT x FROM c"
+	out, errOut, code := runSql(t, []string{q}, "")
+	if code != 1 || out != "" || !strings.Contains(errOut, "add a LIMIT") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, errOut, code = runSql(t, []string{"--json", q}, "")
+	if code != 1 || errOut != "" || !strings.Contains(out, "add a LIMIT") || strings.Contains(out, `"x":1`) {
+		t.Errorf("--json: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func wideHeader(n int) []string {
+	cols := make([]string, n)
+	for i := range cols {
+		cols[i] = fmt.Sprintf("c%d", i)
+	}
+	return cols
+}
+
+func TestCellBudget(t *testing.T) {
+	orig := maxCells
+	maxCells = 1000
+	t.Cleanup(func() { maxCells = orig })
+	cols := wideHeader(100)
+	csvIn := strings.Join(cols, ",") + "\n" + strings.Repeat("1\n", 20)
+	out, errOut, code := runSql(t, []string{"SELECT count(*) FROM stdin", "-"}, csvIn)
+	if code != 1 || out != "" || !strings.Contains(errOut, "cells") {
+		t.Errorf("csv: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	jsonIn := `{"` + strings.Join(cols, `":1,"`) + `":1}` + "\n" + strings.Repeat("{}\n", 20)
+	out, errOut, code = runSql(t, []string{"SELECT count(*) FROM stdin", "-"}, jsonIn)
+	if code != 1 || out != "" || !strings.Contains(errOut, "cells") {
+		t.Errorf("jsonl: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestRaggedRowsLoadAsNull(t *testing.T) {
+	cols := wideHeader(100)
+	csvIn := strings.Join(cols, ",") + "\n" + strings.Repeat("1\n", 20)
+	out, errOut, code := runSql(t, []string{"SELECT count(*) AS n, count(c99) AS m, sum(c0) AS s FROM stdin", "-"}, csvIn)
+	if code != 0 || out != "n,m,s\n20,0,20\n" {
+		t.Errorf("csv: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	jsonIn := `{"` + strings.Join(cols, `":1,"`) + `":1}` + "\n" + strings.Repeat("{}\n", 20) + `{"c5":2}` + "\n"
+	out, errOut, code = runSql(t, []string{"SELECT count(*) AS n, count(c99) AS m, sum(c5) AS s FROM stdin", "-"}, jsonIn)
+	if code != 0 || out != "n,m,s\n22,1,3\n" {
+		t.Errorf("jsonl: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestUnterminatedQuoteFails(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT count(*) AS n FROM stdin", "-"}, "id,name,flag\n1,\"start,0\n2,evil,1\n")
+	if code != 1 || out != "" || !strings.Contains(errOut, "CSV parse error") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestPragmaBlocked(t *testing.T) {
+	dir := t.TempDir()
+	out, errOut, code := runSql(t, []string{"PRAGMA temp_store_directory='" + dir + "'; SELECT 1", usersFile(t)}, "")
+	if code != 1 || out != "" || !strings.Contains(errOut, "PRAGMA is not allowed") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, errOut, code = runSql(t, []string{"SELECT name FROM pragma_table_info('users')", usersFile(t)}, "")
+	if code != 0 || out != "name\nid\nname\nage\ncity\n" {
+		t.Errorf("pragma_table_info: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestInputCap(t *testing.T) {
+	orig := maxInput
+	maxInput = 16
+	t.Cleanup(func() { maxInput = orig })
+	f := writeCSV(t, t.TempDir(), "big.csv", "a\n"+strings.Repeat("1\n", 50))
+	out, errOut, code := runSql(t, []string{"SELECT 1 FROM big", f}, "")
+	if code != 1 || out != "" || !strings.Contains(errOut, "limit") {
+		t.Errorf("file: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, errOut, code = runSql(t, []string{"SELECT 1 FROM stdin", "-"}, "a\n"+strings.Repeat("1\n", 50))
+	if code != 1 || out != "" || !strings.Contains(errOut, "limit") {
+		t.Errorf("stdin: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestDeviceRefused(t *testing.T) {
+	out, errOut, code := runWithin(t, 5*time.Second, []string{"SELECT 1 FROM zero", "/dev/zero"}, "")
+	if code != 1 || out != "" || !strings.Contains(errOut, "not a regular file") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestBigDecimalStaysText(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT amt, typeof(amt) AS t FROM stdin", "-"}, "amt\n12345678901234567890.5\n0.1\n")
+	if code != 0 || out != "amt,t\n12345678901234567890.5,text\n0.1,text\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
 	}
 }

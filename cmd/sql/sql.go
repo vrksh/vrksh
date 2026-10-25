@@ -7,8 +7,9 @@
 // number (NULL markers like N/A load as NULL), TEXT otherwise, so "007" stays
 // "007". A REAL column whose values all have the same number of decimals is
 // declared REAL(n), and its values print with n decimals, so 19.90 stays
-// 19.90. ATTACH is blocked (limit set to 0), which also blocks VACUUM INTO, so
-// a query can't touch the filesystem.
+// 19.90. ATTACH is blocked (limit set to 0), which also blocks VACUUM INTO,
+// PRAGMA is rejected and temp tables stay in memory, so a query can't touch
+// the filesystem.
 package sql
 
 import (
@@ -27,6 +28,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -42,11 +44,25 @@ var isTerminal = shared.IsTerminal
 // readAll is a var so tests can inject I/O errors.
 var readAll = io.ReadAll
 
+// Resource limits, vars so tests can lower them. Every row counts the full
+// header width toward maxCells, a single value can't pass maxValue bytes,
+// and the cell data of a result can't pass maxOutput bytes.
+var (
+	defaultTimeout       = 60 * time.Second
+	maxInput       int64 = 1 << 30
+	maxCells             = 50_000_000
+	maxValue             = 64 << 20
+	maxOutput            = 1 << 30
+)
+
 var (
 	stdinRe = regexp.MustCompile(`(?i)\bstdin\b`)
-	intRe   = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
-	realRe  = regexp.MustCompile(`^-?(0|[1-9][0-9]*)\.[0-9]+$`)
-	nameRe  = regexp.MustCompile(`[^\p{L}\p{N}_]`)
+	// pragmaRe catches PRAGMA statements (temp_store_directory writes files)
+	// but not read-only table functions like pragma_table_info().
+	pragmaRe = regexp.MustCompile(`(?i)\bpragma\b`)
+	intRe    = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
+	realRe   = regexp.MustCompile(`^-?(0|[1-9][0-9]*)\.[0-9]+$`)
+	nameRe   = regexp.MustCompile(`[^\p{L}\p{N}_]`)
 	// looseNumRe matches digit strings intRe and realRe turn down on purpose:
 	// leading zeros and integers past int64. Those are codes, not numbers.
 	looseNumRe = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
@@ -77,7 +93,7 @@ func init() {
 			{Name: "no-header", Usage: "omit the header row from CSV output"},
 			{Name: "delimiter", Shorthand: "d", Usage: `input field separator, one character or \t (default "," or tab for .tsv)`},
 			{Name: "json", Shorthand: "j", Usage: `one JSON object per row, then {"_vrk":"sql","count":N}`},
-			{Name: "timeout", Usage: "stop and exit 1 if loading and the query take longer, e.g. 30s (default none)"},
+			{Name: "timeout", Usage: "stop and exit 1 if loading and the query take longer (default 60s, 0 for no limit)"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
 	})
@@ -96,7 +112,7 @@ func Run() int {
 	fs.StringVarP(&delimFlag, "delimiter", "d", "", `input field separator, one character or \t (default "," or tab for .tsv)`)
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `one JSON object per row, then {"_vrk":"sql","count":N}`)
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
-	fs.DurationVar(&timeout, "timeout", 0, "stop and exit 1 if loading and the query take longer, e.g. 30s (default none)")
+	fs.DurationVar(&timeout, "timeout", defaultTimeout, "stop and exit 1 if loading and the query take longer, 0 for no limit")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -107,7 +123,17 @@ func Run() int {
 
 	defer shared.SilenceStderr(quietFlag)()
 
+	// The query goroutine and the timeout can both want to report; only the
+	// first one does.
+	var failOnce sync.Mutex
+	failed := false
 	fail := func(code int, format string, args ...any) int {
+		failOnce.Lock()
+		defer failOnce.Unlock()
+		if failed {
+			return code
+		}
+		failed = true
 		msg := fmt.Sprintf(format, args...)
 		if jsonFlag {
 			return shared.PrintJSONError(map[string]any{"error": msg, "code": code})
@@ -211,8 +237,11 @@ func Run() int {
 			ttyStdin = true
 		} else {
 			var err error
-			if data, err = readAll(os.Stdin); err != nil {
+			if data, err = readAll(io.LimitReader(os.Stdin, maxInput+1)); err != nil {
 				return fail(1, "sql: reading stdin: %v", err)
+			}
+			if int64(len(data)) > maxInput {
+				return fail(1, "sql: stdin exceeds %d MiB input limit", maxInput>>20)
 			}
 		}
 		if len(data) == 0 && !ttyStdin {
@@ -225,20 +254,114 @@ func Run() int {
 		}
 	}
 
-	// ponytail: whole files are read into memory before loading; stream rows
-	// from csv.Reader if CSVs bigger than RAM show up.
+	// ponytail: whole files are read into memory before loading, up to
+	// maxInput; stream rows from csv.Reader if bigger CSVs show up.
 	for i := range tables {
 		if tables[i].stdin {
 			continue
 		}
-		data, err := os.ReadFile(tables[i].source)
+		// Pipes are allowed: <(...) process substitution is a documented use.
+		data, err := shared.ReadFileLimited(tables[i].source, maxInput, true)
 		if errors.Is(err, os.ErrNotExist) {
 			return fail(1, "sql: file not found: %s", tables[i].source)
 		}
 		if err != nil {
-			return fail(1, "sql: reading %s: %v", tables[i].source, err)
+			return fail(1, "sql: reading %v", err)
 		}
 		tables[i].data = data
+	}
+	if pragmaRe.MatchString(query) {
+		return fail(1, "sql: PRAGMA is not allowed")
+	}
+
+	// work loads the tables and runs the query. Connections close inside it,
+	// since closing one under a stuck query would block.
+	work := func(ctx context.Context) int {
+		timedOut := func() bool { return errors.Is(ctx.Err(), context.DeadlineExceeded) }
+		db, err := dbsql.Open("sqlite", ":memory:")
+		if err != nil {
+			return fail(1, "sql: opening database: %v", err)
+		}
+		defer func() { _ = db.Close() }()
+		// Each connection is its own :memory: database, so everything runs on one.
+		db.SetMaxOpenConns(1)
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return fail(1, "sql: opening database: %v", err)
+		}
+		defer func() { _ = conn.Close() }()
+		if _, err := sqlite.Limit(conn, sqlite3.SQLITE_LIMIT_ATTACHED, 0); err != nil {
+			return fail(1, "sql: opening database: %v", err)
+		}
+		// One value can't be bigger than maxValue (hex(randomblob(1e9)) would
+		// be 2 GB), and temp tables and sorts spill to RAM, not to disk.
+		if _, err := sqlite.Limit(conn, sqlite3.SQLITE_LIMIT_LENGTH, maxValue); err != nil {
+			return fail(1, "sql: opening database: %v", err)
+		}
+		if _, err := conn.ExecContext(ctx, "PRAGMA temp_store = MEMORY"); err != nil {
+			return fail(1, "sql: opening database: %v", err)
+		}
+
+		renamed := map[string]string{} // original header -> column name, where they differ
+		loaded := tables[:0]
+		for _, t := range tables {
+			err := load(ctx, conn, t, !jsonFlag, renamed)
+			if errors.Is(err, errNoRecords) {
+				empty[strings.ToLower(t.name)] = true
+				continue
+			}
+			if err != nil && timedOut() {
+				return fail(1, "sql: query timed out after %s", timeout)
+			}
+			if err != nil {
+				return fail(1, "%v", err)
+			}
+			loaded = append(loaded, t)
+		}
+		tables = loaded
+		// SQLite reads a double-quoted name that isn't a column as a string, so
+		// "First Name" would quietly select the text First Name on every row.
+		// An AS "First Name" alias is fine.
+		for _, m := range dqRe.FindAllStringSubmatchIndex(query, -1) {
+			name := strings.ReplaceAll(query[m[2]:m[3]], `""`, `"`)
+			if col, ok := renamed[name]; ok && !asRe.MatchString(query[:m[0]]) {
+				return fail(1, "sql: no column %s: headers are sanitized, use %s", query[m[0]:m[1]], col)
+			}
+		}
+
+		out := &spillWriter{out: os.Stdout}
+		err = runQuery(ctx, conn, query, jsonFlag, noHeader, out)
+		if err == nil {
+			err = out.Flush()
+		}
+		if out.err != nil {
+			return shared.Errorf("sql: writing output: %v", out.err)
+		}
+		if err != nil {
+			if timedOut() {
+				return fail(1, "sql: query timed out after %s", timeout)
+			}
+			if m := noTableRe.FindStringSubmatch(err.Error()); m != nil {
+				switch {
+				case ttyStdin && strings.EqualFold(m[1], "stdin"):
+					return fail(2, "sql: query references stdin but nothing is piped")
+				case empty[strings.ToLower(m[1])]:
+					return 0
+				case len(tables) == 0 && len(empty) == 0:
+					return fail(2, "sql: no input files; provide CSV file paths as arguments")
+				}
+				names := make([]string, len(tables))
+				for i, t := range tables {
+					names[i] = t.name
+				}
+				if len(names) == 0 {
+					names = []string{"none loaded"}
+				}
+				return fail(1, "sql: no such table: %s (tables: %s)", m[1], strings.Join(names, ", "))
+			}
+			return fail(1, "sql: %v", err)
+		}
+		return 0
 	}
 
 	ctx := context.Background()
@@ -247,83 +370,18 @@ func Run() int {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	timedOut := func() bool { return errors.Is(ctx.Err(), context.DeadlineExceeded) }
-	db, err := dbsql.Open("sqlite", ":memory:")
-	if err != nil {
-		return fail(1, "sql: opening database: %v", err)
+	// modernc only watches ctx during a statement's first step, so a query that
+	// hangs after its first row would never notice the deadline. Run the work
+	// in a goroutine and stop waiting for it when ctx is done.
+	// ponytail: a timed-out query goroutine is abandoned; process exit frees the in-memory DB.
+	done := make(chan int, 1)
+	go func() { done <- work(ctx) }()
+	select {
+	case code := <-done:
+		return code
+	case <-ctx.Done():
+		return fail(1, "sql: query timed out after %s", timeout)
 	}
-	defer func() { _ = db.Close() }()
-	// Each connection is its own :memory: database, so everything runs on one.
-	db.SetMaxOpenConns(1)
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return fail(1, "sql: opening database: %v", err)
-	}
-	defer func() { _ = conn.Close() }()
-	if _, err := sqlite.Limit(conn, sqlite3.SQLITE_LIMIT_ATTACHED, 0); err != nil {
-		return fail(1, "sql: opening database: %v", err)
-	}
-
-	renamed := map[string]string{} // original header -> column name, where they differ
-	loaded := tables[:0]
-	for _, t := range tables {
-		err := load(ctx, conn, t, !jsonFlag, renamed)
-		if errors.Is(err, errNoRecords) {
-			empty[strings.ToLower(t.name)] = true
-			continue
-		}
-		if err != nil && timedOut() {
-			return fail(1, "sql: query timed out after %s", timeout)
-		}
-		if err != nil {
-			return fail(1, "%v", err)
-		}
-		loaded = append(loaded, t)
-	}
-	tables = loaded
-	// SQLite reads a double-quoted name that isn't a column as a string, so
-	// "First Name" would quietly select the text First Name on every row.
-	// An AS "First Name" alias is fine.
-	for _, m := range dqRe.FindAllStringSubmatchIndex(query, -1) {
-		name := strings.ReplaceAll(query[m[2]:m[3]], `""`, `"`)
-		if col, ok := renamed[name]; ok && !asRe.MatchString(query[:m[0]]) {
-			return fail(1, "sql: no column %s: headers are sanitized, use %s", query[m[0]:m[1]], col)
-		}
-	}
-
-	out := &spillWriter{out: os.Stdout}
-	err = runQuery(ctx, conn, query, jsonFlag, noHeader, out)
-	if err == nil {
-		err = out.Flush()
-	}
-	if out.err != nil {
-		return shared.Errorf("sql: writing output: %v", out.err)
-	}
-	if err != nil {
-		if timedOut() {
-			return fail(1, "sql: query timed out after %s", timeout)
-		}
-		if m := noTableRe.FindStringSubmatch(err.Error()); m != nil {
-			switch {
-			case ttyStdin && strings.EqualFold(m[1], "stdin"):
-				return fail(2, "sql: query references stdin but nothing is piped")
-			case empty[strings.ToLower(m[1])]:
-				return 0
-			case len(tables) == 0 && len(empty) == 0:
-				return fail(2, "sql: no input files; provide CSV file paths as arguments")
-			}
-			names := make([]string, len(tables))
-			for i, t := range tables {
-				names[i] = t.name
-			}
-			if len(names) == 0 {
-				names = []string{"none loaded"}
-			}
-			return fail(1, "sql: no such table: %s (tables: %s)", m[1], strings.Join(names, ", "))
-		}
-		return fail(1, "sql: %v", err)
-	}
-	return 0
 }
 
 // maxBuffered is how much output is held back before streaming starts.
@@ -393,13 +451,13 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 	}
 	var (
 		header []string
-		rows   [][]string
+		scan   scanFunc
 		err    error
 	)
 	if isJSON(data) {
-		header, rows, err = readJSON(data, t.source)
+		header, scan, err = readJSON(data, t.source)
 	} else {
-		header, rows, err = readCSV(data, t)
+		header, scan, err = readCSV(data, t)
 	}
 	if err != nil {
 		return err
@@ -411,17 +469,28 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 		}
 	}
 
+	// Rows are never held in memory: one pass infers the column types, a
+	// second inserts. A short row stops at its last field, so a 2000-column
+	// header over rows of "1" costs one cell per row, not 2000.
+	stats := make([]colStats, len(cols))
+	for c := range stats {
+		stats[c] = newColStats()
+	}
+	n := 0
+	_ = scan(func(row []string) error {
+		for c, v := range row {
+			stats[c].add(n, v)
+		}
+		n++
+		return nil
+	})
 	types := make([]string, len(cols))
 	defs := make([]string, len(cols))
-	for c := range cols {
-		vals := make([]string, len(rows))
-		for r := range rows {
-			vals[r] = rows[r][c]
-		}
+	for c, s := range stats {
 		var junk int
-		types[c], junk = inferType(vals)
+		types[c], junk = s.result()
 		if warn && junk >= 0 {
-			shared.Warn("sql: %s: column %s is TEXT: row %d has %q; use CAST(%s AS REAL) to compare it as a number", t.source, cols[c], junk+1, vals[junk], cols[c])
+			shared.Warn("sql: %s: column %s is TEXT: row %d has %q; use CAST(%s AS REAL) to compare it as a number", t.source, cols[c], junk+1, s.junkVal, cols[c])
 		}
 		defs[c] = quote(cols[c]) + " " + types[c]
 	}
@@ -434,14 +503,32 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s (%s)", quote(t.name), strings.Join(defs, ", "))); err != nil {
 		return fmt.Errorf("sql: loading %s: %v", t.source, err)
 	}
-	marks := strings.TrimSuffix(strings.Repeat("?, ", len(cols)), ", ")
-	ins, err := tx.PrepareContext(ctx, fmt.Sprintf("INSERT INTO %s VALUES (%s)", quote(t.name), marks))
-	if err != nil {
-		return fmt.Errorf("sql: loading %s: %v", t.source, err)
-	}
-	defer func() { _ = ins.Close() }()
+	// One INSERT per row width, naming only the columns the row has, so the
+	// missing cells are NULL without binding them.
+	stmts := map[int]*dbsql.Stmt{}
+	defer func() {
+		for _, s := range stmts {
+			_ = s.Close()
+		}
+	}()
 	args := make([]any, len(cols))
-	for _, row := range rows {
+	err = scan(func(row []string) error {
+		ins := stmts[len(row)]
+		if ins == nil {
+			q := "INSERT INTO " + quote(t.name) + " DEFAULT VALUES"
+			if len(row) > 0 {
+				names := make([]string, len(row))
+				for c := range row {
+					names[c] = quote(cols[c])
+				}
+				q = fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", quote(t.name), strings.Join(names, ", "), strings.TrimSuffix(strings.Repeat("?, ", len(row)), ", "))
+			}
+			var err error
+			if ins, err = tx.PrepareContext(ctx, q); err != nil {
+				return err
+			}
+			stmts[len(row)] = ins
+		}
 		for c, v := range row {
 			// Empty cells are NULL, and so are N/A and friends in numeric
 			// columns. Column affinity converts the rest.
@@ -454,9 +541,11 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 				args[c] = v
 			}
 		}
-		if _, err := ins.ExecContext(ctx, args...); err != nil {
-			return fmt.Errorf("sql: loading %s: %v", t.source, err)
-		}
+		_, err := ins.ExecContext(ctx, args[:len(row)]...)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("sql: loading %s: %v", t.source, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("sql: loading %s: %v", t.source, err)
@@ -511,13 +600,29 @@ func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHe
 		ptrs[i] = &vals[i]
 	}
 	cells := make([]string, len(cols))
-	count := 0
+	count, size := 0, 0
 	for rows.Next() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := rows.Scan(ptrs...); err != nil {
 			return err
 		}
 		if out.err != nil {
 			return out.err
+		}
+		for _, v := range vals {
+			switch x := v.(type) {
+			case string:
+				size += len(x)
+			case []byte:
+				size += len(x)
+			default:
+				size += 8
+			}
+		}
+		if size > maxOutput {
+			return fmt.Errorf("result is over %d MiB; add a LIMIT or select fewer columns", maxOutput>>20)
 		}
 		count++
 		if jsonOut {
@@ -572,72 +677,95 @@ func formatFloat(x float64, scale int) string {
 	return strconv.FormatFloat(x, 'g', -1, 64)
 }
 
-// readCSV parses delimited data into a header and rows the same width.
-func readCSV(data []byte, t table) (header []string, rows [][]string, err error) {
+// scanFunc calls each for every data row, in order, stopping at its first
+// error. Rows are no wider than the header and may be shorter. The row slice
+// is only valid during the call.
+type scanFunc func(each func(row []string) error) error
+
+// readCSV checks delimited data, returning its header and a scan over its
+// rows. Every scan parses data again, so no rows are kept.
+func readCSV(data []byte, t table) (header []string, scan scanFunc, err error) {
 	// Old Mac line endings: encoding/csv only splits on \n.
 	if bytes.IndexByte(data, '\n') < 0 {
 		data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
 	}
-	header, rows, err = scanCSV(data, t, false)
+	lazy := false
+	header, err = scanCSV(data, t, false, nil)
 	var pe *csv.ParseError
-	if !errors.As(err, &pe) || !errors.Is(pe.Err, csv.ErrQuote) && !errors.Is(pe.Err, csv.ErrBareQuote) {
-		return header, rows, err
+	if errors.As(err, &pe) && (errors.Is(pe.Err, csv.ErrQuote) || errors.Is(pe.Err, csv.ErrBareQuote)) {
+		// A stray quote like 5" screen is common and lazy parsing keeps it.
+		// But in "x"y, or a quote that is never closed, the lazy parser runs
+		// on to the next quote or EOF, swallowing whole lines into one field.
+		// Good multi-line fields parse strictly, so after a strict failure any
+		// field that spans lines is that: fail rather than load the wrong rows.
+		swallowed := fmt.Errorf("sql: CSV parse error in %s: line %d: stray or unclosed quote in a quoted field; quotes inside one must be doubled (\"\")", t.source, pe.StartLine)
+		spans := func(rec []string) error {
+			for _, f := range rec {
+				if strings.Contains(f, "\n") {
+					return swallowed
+				}
+			}
+			return nil
+		}
+		lazy = true
+		header, err = scanCSV(data, t, true, spans)
+		if err == nil {
+			err = spans(header)
+		}
 	}
-	// A stray quote like 5" screen is common and lazy parsing keeps it. But
-	// in "x"y the lazy parser runs on to the next quote, swallowing whole
-	// lines into one field. A field that kept a stray quote and spans lines
-	// is that, so fail rather than load the wrong rows.
-	header, rows, err = scanCSV(data, t, true)
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, rec := range append([][]string{header}, rows...) {
-		for _, f := range rec {
-			if strings.Contains(f, "\n") && strings.Contains(f, `"`) {
-				return nil, nil, fmt.Errorf("sql: CSV parse error in %s: line %d: stray quote in a quoted field; quotes inside one must be doubled (\"\")", t.source, pe.StartLine)
-			}
-		}
-	}
-	return header, rows, nil
+	return header, func(each func([]string) error) error {
+		_, err := scanCSV(data, t, lazy, each)
+		return err
+	}, nil
 }
 
 // scanCSV is one pass of encoding/csv over data, strict or lazy about quotes.
-func scanCSV(data []byte, t table, lazy bool) (header []string, rows [][]string, err error) {
+// each, if set, gets every row after the header.
+func scanCSV(data []byte, t table, lazy bool, each func([]string) error) (header []string, err error) {
 	r := csv.NewReader(bytes.NewReader(data))
 	r.Comma = t.comma
 	r.LazyQuotes = lazy
 	r.FieldsPerRecord = -1
+	r.ReuseRecord = true
 	parseErr := func(format string, args ...any) error {
 		return fmt.Errorf("sql: CSV parse error in %s: "+format, append([]any{t.source}, args...)...)
 	}
 	header, err = r.Read()
 	if errors.Is(err, io.EOF) {
-		return nil, nil, parseErr("empty file, no header row")
+		return nil, parseErr("empty file, no header row")
 	}
 	if err != nil {
-		return nil, nil, parseErr("%w", err)
+		return nil, parseErr("%w", err)
 	}
-	for {
+	header = slices.Clone(header) // ReuseRecord would overwrite it
+	for n := 1; ; n++ {
 		rec, err := r.Read()
 		if errors.Is(err, io.EOF) {
-			return header, rows, nil
+			return header, nil
 		}
 		if err != nil {
-			return nil, nil, parseErr("%w", err)
+			return nil, parseErr("%w", err)
 		}
-		// Short rows are padded with NULLs; a long row is only an error when
-		// the extra fields hold something (a trailing comma is fine).
+		// Short rows load the missing cells as NULL; a long row is only an
+		// error when the extra fields hold something (a trailing comma is fine).
 		for len(rec) > len(header) && rec[len(rec)-1] == "" {
 			rec = rec[:len(rec)-1]
 		}
 		if len(rec) > len(header) {
 			line, _ := r.FieldPos(0)
-			return nil, nil, parseErr("line %d: %d fields, header has %d", line, len(rec), len(header))
+			return nil, parseErr("line %d: %d fields, header has %d", line, len(rec), len(header))
 		}
-		for len(rec) < len(header) {
-			rec = append(rec, "")
+		if err := checkCells(t.source, n, len(header)); err != nil {
+			return nil, err
 		}
-		rows = append(rows, rec)
+		if each != nil {
+			if err := each(rec); err != nil {
+				return nil, err
+			}
+		}
 	}
 }
 
@@ -653,11 +781,49 @@ func isJSON(data []byte) bool {
 // errNoRecords is JSONL with nothing to load: only vrk trailers or {}.
 var errNoRecords = errors.New("sql: no records")
 
-// readJSON turns JSONL or a JSON array of objects into rows. Columns are the
-// keys in the order first seen; a missing key or null is NULL, true/false are
-// 1/0, and nested objects and arrays stay JSON text for json_extract.
-// Records with a "_vrk" key are vrk metadata trailers and are skipped.
-func readJSON(data []byte, source string) (header []string, rows [][]string, err error) {
+// readJSON reads JSONL or a JSON array of objects, returning its columns and
+// a scan over its rows. Columns are the keys in the order first seen; a
+// missing key or null is NULL, true/false are 1/0, and nested objects and
+// arrays stay JSON text for json_extract. Records with a "_vrk" key are vrk
+// metadata trailers and are skipped.
+func readJSON(data []byte, source string) (header []string, scan scanFunc, err error) {
+	index := map[string]int{}
+	n := 0
+	err = scanJSON(data, source, func(keys, _ []string) error {
+		for _, key := range keys {
+			if _, ok := index[key]; !ok {
+				index[key] = len(header)
+				header = append(header, key)
+			}
+		}
+		n++
+		return checkCells(source, n, len(header))
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(header) == 0 {
+		return nil, nil, errNoRecords
+	}
+	return header, func(each func([]string) error) error {
+		return scanJSON(data, source, func(keys, vals []string) error {
+			// The row is only as wide as its last key's column; the rest is NULL.
+			width := 0
+			for _, key := range keys {
+				width = max(width, index[key]+1)
+			}
+			row := make([]string, width)
+			for i, key := range keys {
+				row[index[key]] = vals[i]
+			}
+			return each(row)
+		})
+	}, nil
+}
+
+// scanJSON decodes data and calls each with every record's keys and cell
+// values, in file order.
+func scanJSON(data []byte, source string, each func(keys, vals []string) error) error {
 	d := json.NewDecoder(bytes.NewReader(data))
 	d.UseNumber()
 	fail := func(err error) error {
@@ -669,59 +835,40 @@ func readJSON(data []byte, source string) (header []string, rows [][]string, err
 	}
 	if bytes.HasPrefix(bytes.TrimSpace(data), []byte("[")) {
 		if _, err := d.Token(); err != nil {
-			return nil, nil, fail(err)
+			return fail(err)
 		}
 	}
-	index := map[string]int{}
 	for d.More() {
 		// Walk tokens, not a map, so columns keep the file's key order.
 		if t, err := d.Token(); err != nil {
-			return nil, nil, fail(err)
+			return fail(err)
 		} else if t != json.Delim('{') {
-			return nil, nil, fail(fmt.Errorf("want an object, got %v", t))
+			return fail(fmt.Errorf("want an object, got %v", t))
 		}
 		var keys, vals []string
 		for d.More() {
 			t, err := d.Token()
 			if err != nil {
-				return nil, nil, fail(err)
+				return fail(err)
 			}
 			key, _ := t.(string)
 			var raw json.RawMessage
 			if err := d.Decode(&raw); err != nil {
-				return nil, nil, fail(err)
+				return fail(err)
 			}
 			keys, vals = append(keys, key), append(vals, jsonCell(raw))
 		}
 		if _, err := d.Token(); err != nil { // closing }
-			return nil, nil, fail(err)
+			return fail(err)
 		}
 		if slices.Contains(keys, "_vrk") {
 			continue
 		}
-		row := make([]string, len(header))
-		for i, key := range keys {
-			c, ok := index[key]
-			if !ok {
-				c = len(header)
-				index[key] = c
-				header = append(header, key)
-				row = append(row, "")
-			}
-			row[c] = vals[i]
-		}
-		rows = append(rows, row)
-	}
-	if len(header) == 0 {
-		return nil, nil, errNoRecords
-	}
-	// Rows read before a later key appeared are short; pad them.
-	for i := range rows {
-		for len(rows[i]) < len(header) {
-			rows[i] = append(rows[i], "")
+		if err := each(keys, vals); err != nil {
+			return err
 		}
 	}
-	return header, rows, nil
+	return nil
 }
 
 func jsonCell(raw json.RawMessage) string {
@@ -825,47 +972,82 @@ func dedupe(names []string) []string {
 // junk is the index of the first value that pushed a mostly-numeric column to
 // TEXT, worth a warning, or -1.
 func inferType(vals []string) (typ string, junk int) {
-	nums, others, junk := 0, 0, -1
-	isInt, scale := true, -2 // scale -2: nothing seen yet, -1: mixed
+	s := newColStats()
 	for i, v := range vals {
-		// Padded exports (" 42") are still numbers.
-		v = strings.TrimSpace(v)
-		if v == "" || nullMarkers[strings.ToLower(v)] {
-			continue
-		}
-		places := 0
-		switch {
-		case intRe.MatchString(v) && fitsInt64(v):
-		case realRe.MatchString(v):
-			isInt = false
-			places = len(v) - strings.IndexByte(v, '.') - 1
-		default:
-			others++
-			if junk < 0 && !looseNumRe.MatchString(v) {
-				junk = i
-			}
-			continue
-		}
-		nums++
-		if scale == -2 {
-			scale = places
-		} else if scale != places {
-			scale = -1
-		}
+		s.add(i, v)
 	}
+	return s.result()
+}
+
+// colStats is inferType's state for one column, fed a value at a time so
+// load can infer every column in one pass over the rows.
+type colStats struct {
+	nums, others int
+	junk         int // row of the first value worth a warning, or -1
+	junkVal      string
+	isInt        bool
+	scale        int // -2: nothing seen yet, -1: mixed
+}
+
+func newColStats() colStats { return colStats{junk: -1, isInt: true, scale: -2} }
+
+func (s *colStats) add(i int, v string) {
+	// Padded exports (" 42") are still numbers.
+	v = strings.TrimSpace(v)
+	if v == "" || nullMarkers[strings.ToLower(v)] {
+		return
+	}
+	places := 0
 	switch {
-	case others > 0 || nums == 0:
-		if nums <= others {
-			junk = -1
+	case intRe.MatchString(v) && fitsInt64(v):
+	case realRe.MatchString(v) && roundTrips(v):
+		s.isInt = false
+		places = len(v) - strings.IndexByte(v, '.') - 1
+	default:
+		s.others++
+		if s.junk < 0 && !looseNumRe.MatchString(v) {
+			s.junk, s.junkVal = i, v
 		}
-		return "TEXT", junk
-	case isInt:
+		return
+	}
+	s.nums++
+	if s.scale == -2 {
+		s.scale = places
+	} else if s.scale != places {
+		s.scale = -1
+	}
+}
+
+func (s *colStats) result() (typ string, junk int) {
+	switch {
+	case s.others > 0 || s.nums == 0:
+		if s.nums <= s.others {
+			return "TEXT", -1
+		}
+		return "TEXT", s.junk
+	case s.isInt:
 		return "INTEGER", -1
-	case scale > 0:
-		return "REAL(" + strconv.Itoa(scale) + ")", -1
+	case s.scale > 0:
+		return "REAL(" + strconv.Itoa(s.scale) + ")", -1
 	default:
 		return "REAL", -1
 	}
+}
+
+// roundTrips reports whether decimal v survives a float64 unchanged. realRe
+// rules out leading zeros, so v is already in the form FormatFloat prints.
+func roundTrips(v string) bool {
+	f, err := strconv.ParseFloat(v, 64)
+	places := len(v) - strings.IndexByte(v, '.') - 1
+	return err == nil && strconv.FormatFloat(f, 'f', places, 64) == v
+}
+
+// checkCells fails once rows rows of width cols pass maxCells.
+func checkCells(source string, rows, cols int) error {
+	if rows*cols > maxCells {
+		return fmt.Errorf("sql: %s: more than %d cells; filter it first", source, maxCells)
+	}
+	return nil
 }
 
 func fitsInt64(v string) bool {
@@ -894,6 +1076,7 @@ func Flags() *pflag.FlagSet {
 	fs.Bool("no-header", false, "omit the header row from CSV output")
 	fs.StringP("delimiter", "d", "", `input field separator, one character or \t (default "," or tab for .tsv)`)
 	fs.BoolP("json", "j", false, `one JSON object per row, then {"_vrk":"sql","count":N}`)
+	fs.Duration("timeout", defaultTimeout, "stop and exit 1 if loading and the query take longer, 0 for no limit")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs
 }
