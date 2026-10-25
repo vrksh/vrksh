@@ -553,26 +553,30 @@ func endpointBody(model, prompt string, temp float64, schema map[string]string, 
 	return req
 }
 
-// endpointKey returns the VRK_LLM_KEY to send to endpoint, or "" when it must
-// not go there. The key belongs to VRK_LLM_URL: an --endpoint on any other
-// origin (scheme, host, port) gets no key, so a caller that can pick the
-// endpoint can't collect it. warn says why a set key was held back. Plain http
-// to a host that isn't loopback is an error, since the key would cross the
+// endpointKey returns the VRK_LLM_KEY to send to endpoint. The key belongs to
+// VRK_LLM_URL: an --endpoint on any other origin (scheme, host, port) is an
+// error, so a caller that can pick the endpoint can't collect the key, and a
+// user who forgot VRK_LLM_URL gets told why instead of a bare 401. Plain http
+// to a host that isn't loopback is an error too, since the key would cross the
 // network in clear.
-func endpointKey(endpoint string) (key, warn string, err error) {
-	key = os.Getenv("VRK_LLM_KEY")
+func endpointKey(endpoint string) (string, error) {
+	key := os.Getenv("VRK_LLM_KEY")
 	if key == "" {
-		return "", "", nil
+		return "", nil
 	}
 	ep, e1 := url.Parse(endpoint)
 	home, e2 := url.Parse(os.Getenv("VRK_LLM_URL"))
 	if e1 != nil || e2 != nil || origin(ep) != origin(home) || origin(ep) == "" {
-		return "", fmt.Sprintf("prompt: VRK_LLM_KEY not sent to %s (not the VRK_LLM_URL origin)", ep.Redacted()), nil
+		host := endpoint
+		if e1 == nil {
+			host = ep.Redacted()
+		}
+		return "", fmt.Errorf("prompt: VRK_LLM_KEY is set but %s is not the VRK_LLM_URL origin; set VRK_LLM_URL to that server, or unset VRK_LLM_KEY if it needs no key", host)
 	}
 	if ep.Scheme == "http" && !isLoopback(ep.Hostname()) {
-		return "", "", errors.New("prompt: refusing to send VRK_LLM_KEY over plain http to non-loopback host " + ep.Hostname())
+		return "", errors.New("prompt: refusing to send VRK_LLM_KEY over plain http to non-loopback host " + ep.Hostname())
 	}
-	return key, "", nil
+	return key, nil
 }
 
 // origin is scheme://host:port with the default port filled in, or "".
@@ -701,18 +705,15 @@ func dotGet(obj map[string]any, path string) (any, error) {
 // sender makes one request at the given temperature.
 type sender func(prompt string, temp float64) (callResult, error)
 
-// resolveEndpointKey wraps endpointKey for Run and runFieldMode: prints the
-// warning (stderr, not under --json) and turns the error into exit 2.
+// resolveEndpointKey wraps endpointKey for Run and runFieldMode, turning its
+// error into exit 2.
 func resolveEndpointKey(endpoint string, jsonFlag bool) (string, int) {
-	key, warn, err := endpointKey(endpoint)
+	key, err := endpointKey(endpoint)
 	if err != nil {
 		if jsonFlag {
 			return "", shared.PrintJSONError(map[string]any{"error": err.Error(), "code": 2})
 		}
 		return "", shared.UsageErrorf("%s", err.Error())
-	}
-	if warn != "" && !jsonFlag {
-		shared.Warn("%s", warn)
 	}
 	return key, 0
 }

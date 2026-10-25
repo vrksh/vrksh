@@ -1268,34 +1268,41 @@ func TestResponseBodyLimit(t *testing.T) {
 	}
 }
 
-// TestEndpointKeyNotSentToOtherOrigin: --endpoint pointing anywhere other than
-// VRK_LLM_URL must not get VRK_LLM_KEY, or a model that picks the endpoint can
-// collect the key.
-func TestEndpointKeyNotSentToOtherOrigin(t *testing.T) {
-	var gotAuth string
+// TestEndpointKeyOtherOriginExits2: with VRK_LLM_KEY set, an --endpoint other
+// than VRK_LLM_URL must exit 2 without contacting the server, or a model that
+// picks the endpoint could collect the key.
+func TestEndpointKeyOtherOriginExits2(t *testing.T) {
+	hit := false
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(mockOpenAIResponse))
+		hit = true
 	}))
 	defer other.Close()
 
 	for _, llmURL := range []string{"", "http://127.0.0.1:1/v1"} {
-		gotAuth = ""
-		env := map[string]string{"VRK_LLM_KEY": "sk-test", "VRK_LLM_URL": llmURL}
-		stdout, stderr, code := runPrompt(t, env, []string{"--endpoint", other.URL + "/v1", "--model", "x"}, "hi")
-		if code != 0 {
-			t.Fatalf("VRK_LLM_URL=%q: exit %d, stderr %q", llmURL, code, stderr)
+		for _, jsonFlag := range []bool{false, true} {
+			args := []string{"--endpoint", other.URL + "/v1", "--model", "x"}
+			if jsonFlag {
+				args = append(args, "--json")
+			}
+			env := map[string]string{"VRK_LLM_KEY": "sk-test", "VRK_LLM_URL": llmURL}
+			stdout, stderr, code := runPrompt(t, env, args, "hi")
+			if code != 2 {
+				t.Fatalf("VRK_LLM_URL=%q json=%v: exit %d, want 2", llmURL, jsonFlag, code)
+			}
+			msg := stderr
+			if jsonFlag {
+				msg = stdout
+				if stderr != "" {
+					t.Errorf("json: stderr = %q, want empty", stderr)
+				}
+			}
+			if !strings.Contains(msg, "not the VRK_LLM_URL origin") || strings.Contains(msg, "sk-test") {
+				t.Errorf("VRK_LLM_URL=%q json=%v: message %q", llmURL, jsonFlag, msg)
+			}
 		}
-		if gotAuth != "" {
-			t.Errorf("VRK_LLM_URL=%q: key sent to other origin: %q", llmURL, gotAuth)
-		}
-		if !strings.Contains(stderr, "VRK_LLM_KEY not sent") {
-			t.Errorf("VRK_LLM_URL=%q: stderr %q, want a not-sent warning", llmURL, stderr)
-		}
-		if !strings.Contains(stdout, "pong") {
-			t.Errorf("stdout = %q, want the response", stdout)
-		}
+	}
+	if hit {
+		t.Error("server was contacted")
 	}
 }
 
@@ -1307,16 +1314,16 @@ func TestEndpointKeyRules(t *testing.T) {
 		{"http://127.0.0.1:8080/v1", "http://127.0.0.1:8080/v1/chat/completions", true, false},
 		{"http://localhost:11434", "http://localhost:11434/v1/chat/completions", true, false},
 		{"https://api.example.com/v1", "https://API.example.com:443/v1/chat/completions", true, false},
-		{"http://127.0.0.1:8080/v1", "http://127.0.0.1:8081/v1/chat/completions", false, false},
-		{"https://api.example.com/v1", "http://api.example.com/v1/chat/completions", false, false},
-		{"", "https://api.example.com/v1/chat/completions", false, false},
+		{"http://127.0.0.1:8080/v1", "http://127.0.0.1:8081/v1/chat/completions", false, true},
+		{"https://api.example.com/v1", "http://api.example.com/v1/chat/completions", false, true},
+		{"", "https://api.example.com/v1/chat/completions", false, true},
 		{"http://gpu.lan:8000/v1", "http://gpu.lan:8000/v1/chat/completions", false, true},
 		{"http://10.0.0.5/v1", "http://10.0.0.5/v1/chat/completions", false, true},
 	}
 	for _, c := range cases {
 		t.Setenv("VRK_LLM_KEY", "sk-test")
 		t.Setenv("VRK_LLM_URL", c.llmURL)
-		key, _, err := endpointKey(c.endpoint)
+		key, err := endpointKey(c.endpoint)
 		if (err != nil) != c.fail {
 			t.Errorf("%s -> %s: err = %v, want fail=%v", c.llmURL, c.endpoint, err, c.fail)
 		}

@@ -117,7 +117,7 @@ echo "$out" | grep -q "/v1/chat/completions" || fail "--endpoint --explain: URL 
 pass "--endpoint --explain shows resolved chat/completions URL"
 
 # --endpoint + --explain does not leak VRK_LLM_KEY value
-out=$(echo 'hello' | env VRK_LLM_KEY=supersecretkeyabc123 "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
+out=$(echo 'hello' | env VRK_LLM_KEY=supersecretkeyabc123 VRK_LLM_URL=http://localhost:11434/v1 "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
 if echo "$out" | grep -q "supersecretkeyabc123"; then
   fail "--endpoint --explain: leaked VRK_LLM_KEY" "key appeared in output"
 fi
@@ -128,12 +128,16 @@ out=$(echo 'hello' | env VRK_LLM_KEY=somekey VRK_LLM_URL=http://localhost:11434/
 echo "$out" | grep -q 'VRK_LLM_KEY' || fail "--endpoint --explain with key: missing \$VRK_LLM_KEY in output" "got: $out"
 pass "--endpoint --explain shows \$VRK_LLM_KEY reference when key is set"
 
-# --endpoint on another origin than VRK_LLM_URL gets no key (no Authorization line)
-out=$(echo 'hello' | env VRK_LLM_KEY=somekey VRK_LLM_URL=http://localhost:11434/v1 "$BIN" prompt --endpoint http://localhost:9999/v1 --model llama3.2 --explain 2>/dev/null)
-if echo "$out" | grep -q "Authorization"; then
-  fail "--endpoint other origin: key would be sent" "got: $out"
-fi
-pass "--endpoint on another origin than VRK_LLM_URL gets no key"
+# --endpoint on another origin than VRK_LLM_URL with a key set exits 2, key not echoed
+code=0; err=$(echo 'hello' | env VRK_LLM_KEY=somekey VRK_LLM_URL=http://localhost:11434/v1 "$BIN" prompt --endpoint http://localhost:9999/v1 --model llama3.2 2>&1 >/dev/null) || code=$?
+[ "$code" = 2 ] || fail "--endpoint other origin with key: want exit 2" "got $code"
+echo "$err" | grep -q "somekey" && fail "--endpoint other origin: key in error" "got: $err"
+pass "--endpoint on another origin than VRK_LLM_URL exits 2 while VRK_LLM_KEY is set"
+
+# same, VRK_LLM_URL unset
+code=0; echo 'hello' | env -u VRK_LLM_URL VRK_LLM_KEY=somekey "$BIN" prompt --endpoint http://localhost:9999/v1 --model x >/dev/null 2>&1 || code=$?
+[ "$code" = 2 ] || fail "--endpoint with key and no VRK_LLM_URL: want exit 2" "got $code"
+pass "--endpoint with VRK_LLM_KEY but no VRK_LLM_URL exits 2"
 
 # key over plain http to a non-loopback host is refused, exit 2
 code=0; echo 'hello' | env VRK_LLM_KEY=somekey VRK_LLM_URL=http://gpu.lan:8000/v1 "$BIN" prompt --model x >/dev/null 2>&1 || code=$?

@@ -832,7 +832,7 @@ Works with any OpenAI-compatible server: Ollama, LM Studio, vLLM, LocalAI, Jan.
 
 **Auth:** set `VRK_LLM_KEY` if the server requires a Bearer token. Omit it for local models that need no auth. `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are never used for custom endpoints.
 
-**Gotcha:** `VRK_LLM_KEY` is bound to `VRK_LLM_URL`. It goes only to that origin (scheme, host, port). `--endpoint` pointing somewhere else runs without the key and warns on stderr. Set both: `VRK_LLM_URL=https://llm.example.com/v1 VRK_LLM_KEY=...`.
+**Gotcha:** `VRK_LLM_KEY` is bound to `VRK_LLM_URL`. It goes only to that origin (scheme, host, port). `--endpoint` pointing somewhere else exits 2 while `VRK_LLM_KEY` is set; unset it (`VRK_LLM_KEY= vrk prompt --endpoint ...`) for a keyless local server. Set both: `VRK_LLM_URL=https://llm.example.com/v1 VRK_LLM_KEY=...`.
 
 **Gotcha:** a key over plain `http` to a host that isn't `localhost`/`127.0.0.1`/`::1` exits 2. Use https. Only `http` and `https` endpoints are accepted, and redirects are never followed (a 3xx exits 1).
 
