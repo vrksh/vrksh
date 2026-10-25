@@ -331,8 +331,10 @@ func open(data []byte) (pages []lpdf.Page, broken int, err error) {
 // error comes back in pageErrs. clean drops running headers, footers and
 // page numbers and re-joins hyphenated words.
 func extract(all []lpdf.Page, pages []int, clean bool) (lines [][]line, pageErrs []error) {
+	left := maxDocGlyphs
 	for _, i := range pages {
-		gs, perr := pageGlyphs(all[i-1])
+		gs, perr := pageGlyphs(all[i-1], left)
+		left -= len(gs)
 		lines = append(lines, layout(columns(gs)))
 		pageErrs = append(pageErrs, perr)
 	}

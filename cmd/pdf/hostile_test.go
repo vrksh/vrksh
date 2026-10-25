@@ -117,3 +117,25 @@ func TestContentsArray(t *testing.T) {
 		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
 	}
 }
+
+// The glyph budget covers the whole document, not just each page: 40 pages
+// sharing one 1M-glyph stream gave 40 MB of text from an 11 KB file. Past
+// the budget, pages keep what they read, warn, and the run still exits 0.
+func TestDocGlyphBudget(t *testing.T) {
+	orig := maxDocGlyphs
+	maxDocGlyphs = 2_500_000
+	t.Cleanup(func() { maxDocGlyphs = orig })
+	stdout, stderr, code, _ := runHostile(t, "pages_glyphs_10.pdf", "--text")
+	if code != 0 {
+		t.Fatalf("exit %d stderr %.200q", code, stderr)
+	}
+	if n := len([]rune(stdout)); n > 2_600_000 || n < 2_000_000 {
+		t.Errorf("stdout has %d runes, want about 2.5M", n)
+	}
+	if strings.Count(stdout, "\f") != 9 {
+		t.Errorf("want 9 page separators, got %d", strings.Count(stdout, "\f"))
+	}
+	if !strings.Contains(stderr, "pdf: page 3: exceeds the document glyph budget") || strings.Contains(stderr, "page 2:") {
+		t.Errorf("stderr %.300q", stderr)
+	}
+}

@@ -32,8 +32,16 @@ const (
 	maxSaves  = 10_000 // q nesting
 )
 
-// errBudget stops a page's walk when it goes over a budget.
-var errBudget = errors.New("exceeds the per-page glyph or form budget; text after that is lost")
+// maxDocGlyphs caps glyphs across the whole document, so many pages sharing
+// one big content stream can't multiply the per-page budget. A var so tests
+// can lower it.
+var maxDocGlyphs = 20_000_000
+
+// errBudget and errDocBudget stop a page's walk when it goes over a budget.
+var (
+	errBudget    = errors.New("exceeds the per-page glyph or form budget; text after that is lost")
+	errDocBudget = errors.New("exceeds the document glyph budget; text after that is lost")
+)
 
 // matrix is a PDF transform [a b c d e f], applied to row vectors.
 type matrix [6]float64
@@ -198,6 +206,7 @@ type walker struct {
 	box   [4]float64 // llx lly urx ury
 	clip  bool
 	fonts map[fontKey]*font
+	limit int // glyphs this page may still add, at most maxGlyphs
 }
 
 // fontKey names a font within a page walk. Font names are local to a
@@ -213,12 +222,15 @@ type fontKey struct {
 // pageGlyphs returns a page's glyphs in drawing order. The interpreter can
 // panic on a broken stream; that comes back as err, along with the glyphs
 // read before it.
-func pageGlyphs(p lpdf.Page) (gs []glyph, err error) {
-	w := &walker{st: textState{ctm: identity, tm: identity, tlm: identity, th: 1}, fonts: map[fontKey]*font{}}
+func pageGlyphs(p lpdf.Page, limit int) (gs []glyph, err error) {
+	if limit <= 0 {
+		return nil, errDocBudget
+	}
+	w := &walker{st: textState{ctm: identity, tm: identity, tlm: identity, th: 1}, fonts: map[fontKey]*font{}, limit: min(limit, maxGlyphs)}
 	defer func() {
 		if r := recover(); r != nil {
-			if e, ok := r.(error); ok && e == errBudget {
-				gs, err = w.out, errBudget
+			if e, ok := r.(error); ok && (e == errBudget || e == errDocBudget) {
+				gs, err = w.out, e
 				return
 			}
 			gs, err = w.out, fmt.Errorf("%v", r)
@@ -295,7 +307,10 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 			if n := math.Hypot(start[0], start[1]); n > 0 {
 				g.ux, g.uy = start[0]/n, start[1]/n
 			}
-			if len(w.out) >= maxGlyphs {
+			if len(w.out) >= w.limit {
+				if w.limit < maxGlyphs {
+					panic(errDocBudget)
+				}
 				panic(errBudget)
 			}
 			w.out = append(w.out, g)
