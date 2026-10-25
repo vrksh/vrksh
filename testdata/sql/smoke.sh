@@ -287,6 +287,36 @@ assert_exit "wide header, short rows, under 10s" 0
 assert_eq "wide header: missing cells are NULL" "count(*),count(c2000)
 20000,0" "$(cat "$TMP/out")"
 
+# Double quotes are names only: a typo or a "string" fails instead of
+# printing the literal on every row.
+run /dev/null 'SELECT "nme" FROM users' "$U"
+assert_exit "double-quoted typo" 1
+assert_eq "double-quoted typo: stdout empty" "" "$stdout"
+assert_contains "double-quoted typo lists columns" "no such column: nme (users: id, name" "$stderr"
+run /dev/null 'SELECT count(*) FROM users WHERE city = "Pune"' "$U"
+assert_exit "string in double quotes" 1
+assert_contains "string in double quotes: hint" "strings take single quotes: 'Pune'" "$stderr"
+
+run /dev/null "$U"
+assert_exit "file in place of the query" 2
+assert_contains "file in place of the query: hint" "the query comes first" "$stderr"
+
+printf 'id\n5\n50\n99999999999999999999\n' > "$TMP/bigid.csv"
+run /dev/null --json 'SELECT count(*) AS n FROM bigid' "$TMP/bigid.csv"
+assert_exit "int past int64 --json" 0
+assert_eq "int past int64 --json: stderr empty" "" "$stderr"
+assert_contains "int past int64 --json: warning in trailer" '"warnings":["sql: ' "$stdout"
+
+printf '\n' > "$TMP/nl"
+run "$TMP/nl" 'SELECT count(*) FROM stdin'
+assert_exit "lone newline on stdin is empty" 0
+assert_eq "lone newline: no output" "" "$stdout$stderr"
+
+# A typo'd column feeding a gate must fail the pipeline, not count literals.
+code=0
+"$VRK" sql 'SELECT id, "nme" FROM users' "$U" 2>/dev/null | "$VRK" sql --no-header 'SELECT count(*) FROM stdin' > "$TMP/out" 2> "$TMP/err" || code=$?
+assert_eq "typo upstream: no rows downstream" "" "$(cat "$TMP/out")"
+
 echo "---"
 echo "Results: $PASS passed, $FAIL failed"
 echo ""

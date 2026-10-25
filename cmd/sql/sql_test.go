@@ -1184,3 +1184,90 @@ func TestBigDecimalStaysText(t *testing.T) {
 		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
 	}
 }
+
+// TestScaleOnlyWhenLossless: a REAL(n) result column must not round values
+// that came from somewhere else, like a second UNION arm or an UPDATE.
+func TestScaleOnlyWhenLossless(t *testing.T) {
+	dir := t.TempDir()
+	a := writeCSV(t, dir, "a.csv", "sku,price\na,1.50\nb,2.00\n")
+	b := writeCSV(t, dir, "b.csv", "sku,price\nc,0.125\nd,3.999\n")
+	out, errOut, code := runSql(t, []string{"SELECT sku, price FROM a UNION ALL SELECT sku, price FROM b", a, b}, "")
+	if code != 0 || out != "sku,price\na,1.50\nb,2.00\nc,0.125\nd,3.999\n" {
+		t.Errorf("union: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, _, _ = runSql(t, []string{"--json", "UPDATE a SET price = price / 3 RETURNING price", a}, "")
+	if !strings.HasPrefix(out, `{"price":0.50}`+"\n"+`{"price":0.6666666666666666}`) {
+		t.Errorf("returning: stdout %q", out)
+	}
+}
+
+// TestDoubleQuotedNameMustExist: SQLite's legacy fallback reads a
+// double-quoted name that isn't a column as a string. That is off, so a typo
+// fails instead of printing the typo on every row.
+func TestDoubleQuotedNameMustExist(t *testing.T) {
+	f := usersFile(t)
+	p := writeCSV(t, t.TempDir(), "p.csv", "First Name,n\nana,1\n")
+	cases := []struct {
+		name string
+		args []string
+		code int
+		want string // stdout on success, stderr substring on failure
+	}{
+		{"typo", []string{`SELECT "nme" FROM users`, f}, 1, "sql: no such column: nme"},
+		{"string in double quotes", []string{`SELECT id FROM users WHERE city = "Pune"`, f}, 1, "strings take single quotes"},
+		{"original header, wrong case", []string{`SELECT "first name" FROM p`, p}, 1, "headers are sanitized, use First_Name"},
+		{"header text in a literal", []string{`SELECT n FROM p WHERE First_Name <> 'say "First Name"'`, p}, 0, "n\n1\n"},
+		{"alias without AS", []string{`SELECT First_Name "First Name" FROM p`, p}, 0, "First Name\nana\n"},
+		{"quoted real column", []string{`SELECT "name" FROM users WHERE id = 1`, f}, 0, "name\nana\n"},
+	}
+	for _, c := range cases {
+		out, errOut, code := runSql(t, c.args, "")
+		got := out
+		if c.code != 0 {
+			got = errOut
+		}
+		if code != c.code || !strings.Contains(got, c.want) {
+			t.Errorf("%s: exit %d stdout %q stderr %q, want exit %d and %q", c.name, code, out, errOut, c.code, c.want)
+		}
+	}
+}
+
+func TestNoSuchColumnListsColumns(t *testing.T) {
+	_, errOut, code := runSql(t, []string{"SELECT nme FROM users", usersFile(t)}, "")
+	if code != 1 || !strings.Contains(errOut, "sql: no such column: nme (users: id, name, age, city)") || strings.Contains(errOut, "SQL logic error") {
+		t.Errorf("exit %d stderr %q", code, errOut)
+	}
+}
+
+// TestOutOfRangeNumberWarns: one integer past int64 makes the column TEXT, so
+// id > 10 compares text. That has to be said, on stderr or in the trailer.
+func TestOutOfRangeNumberWarns(t *testing.T) {
+	f := writeCSV(t, t.TempDir(), "big.csv", "id\n5\n50\n99999999999999999999\n")
+	_, errOut, code := runSql(t, []string{"SELECT id FROM big WHERE id > 10", f}, "")
+	if code != 0 || !strings.Contains(errOut, `column id is TEXT: row 3 has "99999999999999999999"`) {
+		t.Errorf("exit %d stderr %q", code, errOut)
+	}
+	out, errOut, _ := runSql(t, []string{"--json", "SELECT count(*) AS n FROM big", f}, "")
+	recs := parseJSONL(t, out)
+	w, _ := recs[len(recs)-1]["warnings"].([]any)
+	if errOut != "" || len(w) != 1 || !strings.Contains(fmt.Sprint(w[0]), "column id is TEXT") {
+		t.Errorf("--json stdout %q stderr %q", out, errOut)
+	}
+}
+
+func TestQueryIsAFile(t *testing.T) {
+	f := usersFile(t)
+	for _, args := range [][]string{{f}, {f, "SELECT * FROM users"}} {
+		_, errOut, code := runSql(t, args, "")
+		if code != 2 || !strings.Contains(errOut, "the query comes first") {
+			t.Errorf("%q: exit %d stderr %q", args, code, errOut)
+		}
+	}
+}
+
+func TestWhitespaceStdinIsEmpty(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT * FROM stdin"}, "\n \n")
+	if code != 0 || out != "" || errOut != "" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}

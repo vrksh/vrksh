@@ -24,6 +24,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -34,6 +35,7 @@ import (
 
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
+	"modernc.org/libc"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
@@ -63,14 +65,16 @@ var (
 	intRe    = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
 	realRe   = regexp.MustCompile(`^-?(0|[1-9][0-9]*)\.[0-9]+$`)
 	nameRe   = regexp.MustCompile(`[^\p{L}\p{N}_]`)
-	// looseNumRe matches digit strings intRe and realRe turn down on purpose:
-	// leading zeros and integers past int64. Those are codes, not numbers.
-	looseNumRe = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
+	// zeroCodeRe matches digit strings with leading zeros, like zip codes.
+	// They are TEXT on purpose and not worth a warning.
+	zeroCodeRe = regexp.MustCompile(`^-?0[0-9]+(\.[0-9]+)?$`)
 	identRe    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	noTableRe  = regexp.MustCompile(`no such table: (\S+)`)
-	dqRe       = regexp.MustCompile(`"((?:[^"]|"")*)"`)
-	asRe       = regexp.MustCompile(`(?i)\bas\s*$`)
-	scaleRe    = regexp.MustCompile(`^REAL\(([0-9]+)\)$`)
+	// With double-quoted strings off, SQLite says: no such column: "x" - should
+	// this be a string literal in single-quotes?
+	noColRe  = regexp.MustCompile(`no such column: (?:"((?:[^"]|"")*)" - should this be a string literal in single-quotes\?|(.+?))$`)
+	sqlErrRe = regexp.MustCompile(`^SQL logic error: (.*?)(?: \(1\))?$`)
+	scaleRe  = regexp.MustCompile(`^REAL\(([0-9]+)\)$`)
 )
 
 // nullMarkers load as NULL in a numeric column. In a TEXT column they stay text.
@@ -153,6 +157,9 @@ func Run() int {
 	}
 	if strings.TrimSpace(query) == "" {
 		return fail(2, `sql: no query: usage: vrk sql 'SELECT ...' file.csv`)
+	}
+	if fi, err := os.Stat(query); err == nil && !fi.IsDir() {
+		return fail(2, `sql: %s is a file: the query comes first: vrk sql 'SELECT ...' %s`, query, query)
 	}
 	var comma rune
 	if delimFlag != "" {
@@ -244,6 +251,10 @@ func Run() int {
 				return fail(1, "sql: stdin exceeds %d MiB input limit", maxInput>>20)
 			}
 		}
+		// A lone newline (echo "" | ...) is as empty as no bytes.
+		if len(bytes.TrimSpace(data)) == 0 {
+			data = nil
+		}
 		if len(data) == 0 && !ttyStdin {
 			empty[strings.ToLower(tables[stdinAt].name)] = true
 		}
@@ -301,11 +312,15 @@ func Run() int {
 		if _, err := conn.ExecContext(ctx, "PRAGMA temp_store = MEMORY"); err != nil {
 			return fail(1, "sql: opening database: %v", err)
 		}
+		if err := noDQS(conn); err != nil {
+			return fail(1, "sql: opening database: %v", err)
+		}
 
-		renamed := map[string]string{} // original header -> column name, where they differ
+		renamed := map[string]string{} // lowercased header -> column name, where they differ
+		var warnings []string
 		loaded := tables[:0]
 		for _, t := range tables {
-			err := load(ctx, conn, t, !jsonFlag, renamed)
+			err := load(ctx, conn, t, &warnings, renamed)
 			if errors.Is(err, errNoRecords) {
 				empty[strings.ToLower(t.name)] = true
 				continue
@@ -319,18 +334,15 @@ func Run() int {
 			loaded = append(loaded, t)
 		}
 		tables = loaded
-		// SQLite reads a double-quoted name that isn't a column as a string, so
-		// "First Name" would quietly select the text First Name on every row.
-		// An AS "First Name" alias is fine.
-		for _, m := range dqRe.FindAllStringSubmatchIndex(query, -1) {
-			name := strings.ReplaceAll(query[m[2]:m[3]], `""`, `"`)
-			if col, ok := renamed[name]; ok && !asRe.MatchString(query[:m[0]]) {
-				return fail(1, "sql: no column %s: headers are sanitized, use %s", query[m[0]:m[1]], col)
+		// Under --json stderr stays empty, so warnings ride in the trailer.
+		if !jsonFlag {
+			for _, w := range warnings {
+				shared.Warn("%s", w)
 			}
 		}
 
 		out := &spillWriter{out: os.Stdout}
-		err = runQuery(ctx, conn, query, jsonFlag, noHeader, out)
+		err = runQuery(ctx, conn, query, jsonFlag, noHeader, warnings, out)
 		if err == nil {
 			err = out.Flush()
 		}
@@ -359,7 +371,18 @@ func Run() int {
 				}
 				return fail(1, "sql: no such table: %s (tables: %s)", m[1], strings.Join(names, ", "))
 			}
-			return fail(1, "sql: %v", err)
+			msg := err.Error()
+			if m := sqlErrRe.FindStringSubmatch(msg); m != nil {
+				msg = m[1]
+			}
+			if m := noColRe.FindStringSubmatch(msg); m != nil {
+				name, quoted := strings.ReplaceAll(m[1], `""`, `"`), m[2] == ""
+				if !quoted {
+					name = m[2]
+				}
+				return fail(1, "sql: no such column: %s%s", name, columnHint(ctx, conn, name, quoted, tables, renamed))
+			}
+			return fail(1, "sql: %s", msg)
 		}
 		return 0
 	}
@@ -430,10 +453,10 @@ func tableName(path string) string {
 	return nameRe.ReplaceAllString(name, "_")
 }
 
-// load creates table t from its CSV or JSONL data in one transaction. warn reports
-// mostly-numeric columns that had to be TEXT. Headers that sanitizing changed
-// are added to renamed.
-func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map[string]string) error {
+// load creates table t from its CSV or JSONL data in one transaction. Mostly
+// numeric columns that had to be TEXT are added to warnings. Headers that
+// sanitizing changed are added to renamed, keyed in lower case.
+func load(ctx context.Context, conn *dbsql.Conn, t table, warnings *[]string, renamed map[string]string) error {
 	data := bytes.TrimPrefix(t.data, []byte("\xef\xbb\xbf"))
 	if bytes.HasPrefix(data, []byte{0x1f, 0x8b}) {
 		return fmt.Errorf("sql: %s is gzip-compressed; pipe it in: gunzip -c %s | vrk sql 'SELECT ... FROM stdin' -", t.source, t.source)
@@ -465,7 +488,7 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 	cols := sanitizeNames(header)
 	for i, h := range header {
 		if h != cols[i] {
-			renamed[h] = cols[i]
+			renamed[strings.ToLower(h)] = cols[i]
 		}
 	}
 
@@ -489,8 +512,8 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 	for c, s := range stats {
 		var junk int
 		types[c], junk = s.result()
-		if warn && junk >= 0 {
-			shared.Warn("sql: %s: column %s is TEXT: row %d has %q; use CAST(%s AS REAL) to compare it as a number", t.source, cols[c], junk+1, s.junkVal, cols[c])
+		if junk >= 0 {
+			*warnings = append(*warnings, fmt.Sprintf("sql: %s: column %s is TEXT: row %d has %q; use CAST(%s AS REAL) to compare it as a number", t.source, cols[c], junk+1, s.junkVal, cols[c]))
 		}
 		defs[c] = quote(cols[c]) + " " + types[c]
 	}
@@ -555,7 +578,7 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 
 // runQuery runs query and writes the formatted output to out. It stops at
 // the first write error.
-func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHeader bool, out *spillWriter) error {
+func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHeader bool, warnings []string, out *spillWriter) error {
 	rows, err := conn.QueryContext(ctx, query)
 	if err != nil {
 		return err
@@ -647,9 +670,75 @@ func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHe
 		return err
 	}
 	if jsonOut {
-		_, _ = fmt.Fprintf(out, "{\"_vrk\":\"sql\",\"count\":%d}\n", count)
+		trailer := fmt.Sprintf(`{"_vrk":"sql","count":%d`, count)
+		if len(warnings) > 0 {
+			ws := make([]string, len(warnings))
+			for i, w := range warnings {
+				ws[i] = jsonString(w)
+			}
+			trailer += `,"warnings":[` + strings.Join(ws, ",") + "]"
+		}
+		_, _ = fmt.Fprintln(out, trailer+"}")
 	}
 	return out.err
+}
+
+// noDQS turns off SQLite's fallback that reads a double-quoted name that is
+// no column as a string, so a typo like "nme" fails instead of selecting the
+// text nme on every row. modernc has no wrapper for sqlite3_db_config, so
+// this reaches into its driver conn for the db handle. If that layout ever
+// changes, opening fails here rather than quietly keeping the fallback.
+func noDQS(c *dbsql.Conn) error {
+	return c.Raw(func(dc any) error {
+		v := reflect.ValueOf(dc)
+		if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
+			return fmt.Errorf("unexpected sqlite driver conn %T", dc)
+		}
+		db, tlsF := v.Elem().FieldByName("db"), v.Elem().FieldByName("tls")
+		if db.Kind() != reflect.Uintptr || !tlsF.IsValid() || tlsF.Type() != reflect.TypeFor[*libc.TLS]() {
+			return fmt.Errorf("unexpected sqlite driver conn %T", dc)
+		}
+		tls := (*libc.TLS)(tlsF.UnsafePointer())
+		va := libc.NewVaList(int32(0), uintptr(0))
+		defer libc.Xfree(tls, va)
+		if rc := sqlite3.Xsqlite3_db_config(tls, uintptr(db.Uint()), sqlite3.SQLITE_DBCONFIG_DQS_DML, va); rc != sqlite3.SQLITE_OK {
+			return fmt.Errorf("disabling double-quoted strings: code %d", rc)
+		}
+		return nil
+	})
+}
+
+// columnHint explains a no such column error: a sanitized header, or the
+// columns each table has, plus the single-quote fix if name was in double
+// quotes and so may have been meant as a string.
+func columnHint(ctx context.Context, conn *dbsql.Conn, name string, quoted bool, tables []table, renamed map[string]string) string {
+	if col, ok := renamed[strings.ToLower(name)]; ok {
+		return ": headers are sanitized, use " + col
+	}
+	var parts []string
+	for _, t := range tables {
+		rows, err := conn.QueryContext(ctx, "SELECT name FROM pragma_table_info(?)", t.name)
+		if err != nil {
+			break
+		}
+		var cols []string
+		for rows.Next() {
+			var c string
+			if rows.Scan(&c) == nil {
+				cols = append(cols, c)
+			}
+		}
+		_ = rows.Close()
+		parts = append(parts, t.name+": "+strings.Join(cols, ", "))
+	}
+	hint := ""
+	if len(parts) > 0 {
+		hint = " (" + strings.Join(parts, "; ") + ")"
+	}
+	if quoted {
+		hint += `; strings take single quotes: '` + strings.ReplaceAll(name, "'", "''") + "'"
+	}
+	return hint
 }
 
 // writeCSVRow writes one record. A lone empty field is written as "" so it
@@ -664,12 +753,17 @@ func writeCSVRow(w *csv.Writer, out *spillWriter, rec []string) {
 	w.Flush()
 }
 
-// formatFloat prints x with scale decimals, or as short as it round-trips
-// when scale is -1. Like JSON, exponents are only for very big or very small
-// numbers.
+// formatFloat prints x with scale decimals when that loses nothing, else as
+// short as it round-trips. A REAL(n) result column can hold values that never
+// came from the n-decimal file (a second UNION arm, UPDATE ... RETURNING), and
+// those must not be rounded. Like JSON, exponents are only for very big or
+// very small numbers.
 func formatFloat(x float64, scale int) string {
 	if scale >= 0 {
-		return strconv.FormatFloat(x, 'f', scale, 64)
+		s := strconv.FormatFloat(x, 'f', scale, 64)
+		if f, err := strconv.ParseFloat(s, 64); err == nil && f == x {
+			return s
+		}
 	}
 	if a := math.Abs(x); a == 0 || a >= 1e-6 && a < 1e21 {
 		return strconv.FormatFloat(x, 'f', -1, 64)
@@ -1005,7 +1099,7 @@ func (s *colStats) add(i int, v string) {
 		places = len(v) - strings.IndexByte(v, '.') - 1
 	default:
 		s.others++
-		if s.junk < 0 && !looseNumRe.MatchString(v) {
+		if s.junk < 0 && !zeroCodeRe.MatchString(v) {
 			s.junk, s.junkVal = i, v
 		}
 		return
@@ -1096,6 +1190,7 @@ func printUsage(fs *pflag.FlagSet) int {
 		"The first row is the header. Column types are inferred: INTEGER or REAL when",
 		"every non-empty value is a number (N/A, null, - load as NULL), TEXT otherwise",
 		"(so 007 stays 007). Empty cells are NULL.",
+		"Double quotes are for names only: \"nme\" is an error, not the string nme.",
 		"Output is CSV with a header row, or JSONL with --json.",
 		"",
 		"flags:",
