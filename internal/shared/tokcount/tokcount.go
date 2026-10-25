@@ -115,6 +115,56 @@ type encoder struct {
 }
 
 func (e *encoder) encode(text string) ([]int, error) {
+	var out, spaceIDs []int
+	var spaceSeg string
+	for len(text) > 0 {
+		n := segmentLen(text)
+		seg := text[:n]
+		text = text[n:]
+		// A cut segment of only spaces is a single piece to the regex, and a
+		// long run is the same 4 KB segment over and over: encode it once.
+		if strings.Trim(seg, " ") == "" {
+			if seg != spaceSeg {
+				spaceSeg, spaceIDs = seg, encodePiece([]byte(seg), e.ranks)
+			}
+			out = append(out, spaceIDs...)
+			continue
+		}
+		ids, err := e.encodeSegment(seg)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ids...)
+	}
+	return out, nil
+}
+
+// segmentLen returns how much of text to hand the split regex at once: all
+// of it, or up to a cut once a run of spaces reaches maxPieceBytes. On a long
+// run the regex keeps a backtrack entry per rune, so 10 MB of spaces cost
+// 1.3 GB. The cut lands where encodePiece would chunk the run anyway, and
+// only where another space follows, so the run's last space still joins the
+// next word as it does in one pass.
+// ponytail: only U+0020 runs are cut. A long run of tabs or other Unicode
+// spaces still goes to the regex whole; cut those too if they show up. When a
+// tab or newline sits right before a 4 KB+ space run the count can move by
+// one token per 4 KB of run (TestSegmentedMatchesSinglePass).
+func segmentLen(text string) int {
+	run := 0
+	for i := 0; i < len(text); i++ {
+		if text[i] != ' ' {
+			run = 0
+			continue
+		}
+		run++
+		if run >= maxPieceBytes && i+1 < len(text) && text[i+1] == ' ' {
+			return i + 1
+		}
+	}
+	return len(text)
+}
+
+func (e *encoder) encodeSegment(text string) ([]int, error) {
 	var out []int
 	m, err := e.split.FindStringMatch(text)
 	for m != nil && err == nil {
@@ -124,7 +174,7 @@ func (e *encoder) encode(text string) ([]int, error) {
 		if r, ok := e.ranks[piece]; ok {
 			out = append(out, r)
 		} else {
-			out = append(out, bytePairEncode([]byte(piece), e.ranks)...)
+			out = append(out, encodePiece([]byte(piece), e.ranks)...)
 		}
 		m, err = e.split.FindNextMatch(m)
 	}

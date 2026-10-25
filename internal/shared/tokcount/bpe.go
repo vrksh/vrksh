@@ -5,6 +5,29 @@ import (
 	"math"
 )
 
+// maxPieceBytes bounds how much of one piece is merged at once. The merge
+// needs ~60 bytes of state per input byte, so one 20 MB whitespace run used
+// to cost 1.4 GB. Real text never splits into pieces this long.
+const maxPieceBytes = 4096
+
+// encodePiece is bytePairEncode over chunks of at most maxPieceBytes.
+// ponytail: a token can't straddle a chunk boundary, so a pathological piece
+// over 4 KB may count a few tokens differently from tiktoken; the ids still
+// decode to the exact input. Uniform runs (spaces, newlines, one letter)
+// match exactly because 4096 is a multiple of their token lengths.
+func encodePiece(piece []byte, ranks map[string]int) []int {
+	if len(piece) <= maxPieceBytes {
+		return bytePairEncode(piece, ranks)
+	}
+	var out []int
+	for len(piece) > 0 {
+		n := min(len(piece), maxPieceBytes)
+		out = append(out, bytePairEncode(piece[:n], ranks)...)
+		piece = piece[n:]
+	}
+	return out
+}
+
 // bytePairEncode splits a piece that is not itself a token into tokens by
 // repeatedly merging the adjacent pair with the lowest rank, leftmost on a
 // tie. That is the merge order of tiktoken and tiktoken-go, so the output is
