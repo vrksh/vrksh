@@ -417,7 +417,7 @@ vrk sse --field event             # extracts the event name itself
 | Code | Meaning |
 |------|---------|
 | 0 | Success — stream parsed, `[DONE]` encountered, or stdin closed cleanly |
-| 1 | Runtime error - I/O error reading stdin, or `--field` matched no events |
+| 1 | Runtime error - I/O error reading stdin, `--field` matched no events, or one event's `data:` lines passed 64 MiB |
 | 2 | Usage error — no stdin when running interactively, unknown flag |
 
 ### Examples
@@ -475,6 +475,8 @@ curl -sN ... | vrk sse | jq 'select(.event == "content_block_delta") | .data.del
 - **`data:` with no value contributes an empty string** to the multi-line accumulation buffer. This is per the SSE spec.
 - **Non-JSON `data:` values are emitted as strings**, not dropped. This means comment-like lines (`data: [DONE]`, `data: ping`) appear in the output as `{"event":"message","data":"[DONE]"}` — except `[DONE]` which is intercepted as the termination sentinel before emission.
 - **`--field` skips silently on missing paths or non-JSON data.** No error, no output for that record. This is intentional - real streams mix JSON and non-JSON events. Only when no event in the whole stream matched does `sse` exit 1.
+- **One event is capped at 64 MiB of data.** A server that streams `data:` lines without the closing blank line hits the cap and `sse` exits 1 with `sse: event exceeds 64 MiB limit`. Events already named something `--event` won't emit are not buffered.
+- **`--field` strips terminal control characters only when stdout is a terminal.** Piped output, `--raw` included, stays byte-exact for reassembly.
 - **Stdout is always empty on error.** Errors go to stderr only.
 
 ---

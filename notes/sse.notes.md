@@ -96,3 +96,5 @@ $ echo $?
 ```
 
 Non-SSE input produces no output and exits 0 - there are simply no events to parse.
+
+An event whose `data:` lines pass 64 MiB before the closing blank line exits 1 with `sse: event exceeds 64 MiB limit`, so a server that never ends an event can't run you out of memory.
