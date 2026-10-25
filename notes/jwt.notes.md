@@ -40,7 +40,9 @@ Exits 0 if the token is still valid. Exits 1 if expired. The error message shows
 echo "$TOKEN" | vrk jwt --valid
 ```
 
-Checks three things: not expired (`exp`), not before valid time (`nbf`), and not issued in the future (`iat`). Exits 1 if any check fails.
+Checks three things: not expired (`exp`), not before valid time (`nbf`), and not issued in the future (`iat`). Exits 1 if any check fails. A time claim that is present but isn't a number (a string, `null`) also fails, so a malformed token can't slip past the guard. Fractional dates like `1700000000.5` are compared as real dates.
+
+`--valid` and the `valid` field in `--json` cover the time claims only. The signature is never checked, and `--json` says so with `"signature_verified":false`.
 
 ### JSON output
 

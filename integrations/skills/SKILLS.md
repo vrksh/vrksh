@@ -26,7 +26,7 @@ Input: positional argument or stdin.
 
 | Flags | Shape |
 |-------|-------|
-| `--json` alone | `{"header":{…},"payload":{…},"signature":"…","expired":bool,"valid":bool}` |
+| `--json` alone | `{"header":{…},"payload":{…},"signature":"…","expired":bool,"valid":bool,"signature_verified":false}` |
 | `--expired --json` | `{"expired":bool}` — exit 1 if expired, 0 if not |
 | `--claim <name> --json` | `{"claim":"name","value":"…"}` |
 | Any error + `--json` | `{"error":"msg","code":N}` on stdout; stderr empty |
@@ -80,8 +80,16 @@ echo "$TOKEN" | vrk jwt --json | jq '.payload.exp'
 
 ### Gotchas
 
-- `--expired` exits 1 only if the `exp` claim is present **and** in the past.
+- `--expired` exits 1 only if the `exp` claim is present **and** now is on or after it (RFC 7519).
   A token with no `exp` claim is treated as never-expiring and exits 0.
+- **`valid` means the time claims are OK, not that the token is genuine.** The signature is never checked,
+  so `alg: none` with an empty signature can be `"valid":true`. `signature_verified` is always `false` to make that explicit.
+  Verify signatures with your auth library before trusting any claim.
+- **Time claims fail closed** - `exp`, `nbf` and `iat` may be fractional or use an exponent (`1e9`), and are compared as real
+  dates. A time claim that is present but is not a number (a string, `null`) makes `--expired` and `--valid` exit 1 and
+  `valid` false.
+- **`--claim` prints strings raw** - the claim is attacker-controlled token data, and terminal escape sequences in it
+  reach your terminal unchanged. Use `--claim <name> --json` or pipe through `cat -v` before showing it to a person.
 - `--json` alone never exits 1 for an expired token — check `expired` field or use `--expired`.
 - `--expired --json`: exits 1 when expired, but stdout still has `{"expired":true}` (not empty).
   This differs from `--expired` without `--json`, where stdout is empty on exit 1.
