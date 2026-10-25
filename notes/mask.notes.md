@@ -3,9 +3,10 @@
 Built-in patterns detect:
 
 - **Bearer tokens**: `Bearer eyJ...`, `Bearer ghp_...`
-- **Passwords**: `password=...`, `passwd:...` and similar patterns
+- **Keyword secrets**: any key ending in `password`, `secret`, `token`, `api_key` and similar words (`DB_PASS`, `X-API-Key`, `access_token`), written as `key=v`, `key: v`, `"key": "v"`, `<key>v</key>` or `--key v`. Quoted values are redacted up to the closing quote and the quotes stay, so JSON stays valid
+- **Credentials in transit**: `Authorization:` headers with any scheme (`Basic`, `token`, ...), the password in `scheme://user:pass@host`, and `curl -u user:pass`
 - **Known key prefixes**: AWS (`AKIA`, `ASIA`), OpenAI and Anthropic (`sk-`), Stripe (`sk_live_`, `rk_test_`), GitHub (`ghp_`, `github_pat_`), Slack (`xoxb-`), Google (`AIza`), Hugging Face (`hf_`), npm (`npm_`), SendGrid (`SG.`), and JWTs (`eyJ...`). These match anywhere in a line, including inside URLs and paths
-- **High-entropy strings**: any token with Shannon entropy at or above the threshold (default 4.0) that looks like a secret - API keys, connection strings, hex tokens
+- **High-entropy strings**: any token with Shannon entropy at or above the threshold (default 4.0) that looks like a secret - API keys, connection strings. Random hex can't go above 4.0, so runs of 32+ hex characters use 3.0 instead
 
 ```bash
 $ printf 'API key: sk-proj-abc123def456ghi789jkl012mno345pqr678stu901vwx234yz\nBearer ghp_FAKE0000example0000notreal0000000000\nPassword: s3cr3t-p4ssw0rd-v3ry-l0ng\nNormal text stays untouched\n' | vrk mask
@@ -15,11 +16,22 @@ Password: [REDACTED]
 Normal text stays untouched
 ```
 
+JSON records keep their shape, and keys like `tokens` or `max_tokens` are left alone:
+
+```bash
+$ printf '%s\n' '{"id": 0, "password": "pw0", "token": "f9c0b7fb5a83541b7e4924b2d17670dbdf99c483"}' '{"tokens":42,"model":"o200k_base"}' 'Authorization: Basic YWRtaW46aHVudGVyMg==' 'amqp://guest:guest@mq' | vrk mask
+{"id": 0, "password": "[REDACTED]", "token": "[REDACTED]"}
+{"tokens":42,"model":"o200k_base"}
+Authorization: Basic [REDACTED]
+amqp://guest:[REDACTED]@mq
+```
+
 ### What entropy scanning leaves alone
 
 An LLM reading a log needs its URLs, paths, and IDs. These are never redacted as a whole by entropy:
 
-- URLs with no userinfo (`user@` or `user:pass@`). A URL with userinfo is entropy-checked as one token.
+- URLs with no userinfo (`user@` or `user:pass@`). In a URL with `user:pass@` the password is redacted by pattern and the rest of the URL is not checked.
+- A 40-character hex git SHA on a line that mentions git (`commit`, `merge`, `sha`, `rev`, ...). Other bare runs of 32+ hex characters, such as `md5sum` output, are redacted; write a digest as `sha256:<hex>` to keep it
 - Paths that start with `/`, `./`, `../`, or `~/`
 - Canonical UUIDs (`7cbc81bf-c747-466a-a777-f3f88dcdfe38`)
 - Digests with an algorithm prefix (`sha256:...`, `sha1:...`, `md5:...`)

@@ -1407,10 +1407,13 @@ Applied before entropy scanning. For the keyword patterns the key prefix is pres
 | Name | Matches |
 |------|---------|
 | `bearer` | `Bearer <token>` (case-insensitive) |
-| `password` | `password=<value>` or `password:<value>` |
-| `secret` | `secret=<value>` or `secret:<value>` |
-| `api_key` | `api_key=<value>`, `api-key=<value>`, etc. |
-| `token` | `token=<value>` or `token:<value>` |
+| `password` | keys ending in `password`, `passwd` or `passphrase`, or a `pass` / `pwd` segment (`DB_PASS`, `db-pwd`) |
+| `secret` | keys ending in `secret(s)` or `credential(s)`, or an `auth` segment (`basic_auth`) |
+| `api_key` | keys ending in `api_key`, `apikey`, `access_key`, `private_key`, `secret_key`, `signing_key` (`X-API-Key`, `aws_secret_access_key`) |
+| `token` | keys ending in `token` (`access_token`, `HF_TOKEN`, `_authToken`) |
+| `auth_header` | `Authorization:` / `Proxy-Authorization:` with any scheme (`Basic`, `token`, `Digest`, ...) or none |
+| `url_userinfo` | the password in `scheme://user:pass@host` (the user is kept) |
+| `curl_user` | the password in `curl -u user:pass` / `--user user:pass` |
 | `aws_key` | AWS `AKIA` / `ASIA` access key IDs |
 | `openai_anthropic` | `sk-...` keys (20+ key characters) |
 | `stripe` | `sk_live_`, `sk_test_`, `rk_live_`, `rk_test_` keys |
@@ -1422,6 +1425,15 @@ Applied before entropy scanning. For the keyword patterns the key prefix is pres
 | `sendgrid` | `SG.<id>.<secret>` keys |
 | `jwt` | `eyJ...` three-part JWTs |
 
+Each keyword family matches these shapes, case-insensitive:
+
+- `key=v`, `key: v`, `key = v`, and quoted keys and values: `"password": "v"`, `'token': 'v'`. A quoted value is redacted up to its closing quote (escaped quotes included) and the quotes stay, so JSON stays valid and a quoted passphrase with spaces goes completely.
+- A YAML/INI/env line that starts with an unquoted key (`db_password: v`, `password = v`, `export PGPASSWORD=v`, `- token: v`) loses the rest of the line, so an unquoted multi-word passphrase goes too.
+- `<password>v</password>` (a namespace prefix is allowed).
+- `--password v` and `-token v` on a command line.
+
+Only keys that end in the secret word count, so `"tokens": 42` (from `vrk tok --json`), `max_tokens` and `bypass` are left alone.
+
 The key-prefix patterns (`aws_key` onward) replace only the key itself, apply anywhere in a line, and also catch keys inside URLs and paths, which entropy scanning skips.
 
 ### Entropy scanning
@@ -1429,6 +1441,8 @@ The key-prefix patterns (`aws_key` onward) replace only the key itself, apply an
 Tokens shorter than 8 characters are never entropy-checked. Tokens that already
 contain `[REDACTED]` (from pattern substitution) are skipped. Shannon entropy is
 calculated per whitespace-delimited token: `H = -sum(p * log2(p))`.
+
+Random hex can't go above 4.0 bits per character, so runs of 32 or more hex characters are judged against 3.0 instead (or `--entropy`, if lower). That catches hex API keys and webhook secrets. A 40-character hex run on a line that mentions git (`commit`, `merge`, `sha`, `rev`, `ref`, `tree`, `parent`, `cherry-pick`, `revert`) is taken as a commit SHA and kept.
 
 URLs without credentials, file paths, UUIDs, prefixed digests (`sha256:...`) and container image refs are not redacted by entropy, so logs keep their context. Each path segment and each secret-named query value (`api_key`, `token`, `sig`, ...) is still checked on its own. Punctuation around a redacted secret is kept: `key sk-..., please` gives `key [REDACTED], please`.
 
@@ -1503,11 +1517,16 @@ vrk prompt --system "summarise this" < doc.txt | vrk mask | vrk kv set summary
 
 - **Best-effort only — not a security boundary.** Do not rely on `mask` as a compliance or audit control. Use it to reduce accidental exposure in logs and pipelines.
 - **UUIDs, `sha256:...` digests, file paths and plain URLs are left alone** by entropy scanning. Other high-entropy tokens still count as secrets.
+- **Hex digests get redacted.** `md5sum` / `sha256sum` output and other bare 32+ character hex runs look like hex keys. Keep a digest by writing it as `sha256:<hex>`, the form `vrk digest` prints. A 40-hex git SHA survives only on a line that mentions git (see Entropy scanning).
+- **Strings under 16 characters can't reach the 4.0 entropy threshold**, so a short random password or key with no keyword or known prefix passes through. Lower `--entropy` or add a `--pattern` if you need those.
+- **Line-form keys take the rest of the line.** `password = correct horse battery staple` becomes `password = [REDACTED]`, and anything after the value on that line goes with it.
+- **JSON nested inside a JSON string is not seen by the keyword patterns.** In `"{\"password\": \"x\"}"` the escaped quotes hide the key. Decode the inner JSON first (`jq -r`) if your logs carry it.
+- **URLs with a password skip the per-segment check.** `https://u:pass@host/<secret>` gets the password redacted, but the path segments after it are not entropy-checked.
 - **Short passwords are below the 8-char token floor — expect false negatives.** `hunter2` (7 chars) is never entropy-checked. Pattern-based detection (`password=hunter2`) still catches it, but a bare short password with no keyword prefix will not be redacted.
 - **Token floor is 8 characters.** Tokens shorter than 8 chars are skipped by entropy analysis regardless of `--entropy` setting.
 - **`--pattern` replaces the entire match.** Unlike built-in patterns (which preserve the key prefix via a capture group), `--pattern` replaces the whole regex match with `[REDACTED]`. To preserve a prefix, use a lookahead or adjust the pattern to match only the value portion.
 - **`patterns_matched` uses literal regex strings for `--pattern` values.** The field `"sk-ant-[A-Za-z0-9]+"` in `patterns_matched` means that exact regex fired, not a named category.
-- **Ordering in `patterns_matched`:** built-ins in declaration order (bearer → password → secret → api_key → token → the key-prefix patterns), then `"entropy"`, then custom `--pattern` values in argument order.
+- **Ordering in `patterns_matched`:** built-ins in declaration order (bearer → password → secret → api_key → token → auth_header → url_userinfo → curl_user → the key-prefix patterns), then `"entropy"`, then custom `--pattern` values in argument order.
 
 ---
 
