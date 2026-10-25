@@ -606,3 +606,53 @@ func TestVerifyWithFileRejected(t *testing.T) {
 		t.Fatalf("stdout = %q, want empty", stdout)
 	}
 }
+
+func TestHMACKeyEnvAndFile(t *testing.T) {
+	want, _, code := runDigest(t, []string{"--hmac", "-k", "s3cret"}, "payload\n")
+	if code != 0 {
+		t.Fatalf("-k: exit %d", code)
+	}
+
+	t.Setenv("DIGEST_TEST_SECRET", "s3cret")
+	got, _, code := runDigest(t, []string{"--hmac", "--key-env", "DIGEST_TEST_SECRET"}, "payload\n")
+	if code != 0 || got != want {
+		t.Errorf("--key-env: exit %d, got %q want %q", code, got, want)
+	}
+
+	// One trailing newline in the key file is dropped, like `echo s3cret > f`.
+	path := writeTempFile(t, "s3cret\n")
+	got, _, code = runDigest(t, []string{"--hmac", "--key-file", path}, "payload\n")
+	if code != 0 || got != want {
+		t.Errorf("--key-file: exit %d, got %q want %q", code, got, want)
+	}
+}
+
+func TestHMACKeySourceErrors(t *testing.T) {
+	path := writeTempFile(t, "s3cret")
+	t.Setenv("DIGEST_TEST_SECRET", "s3cret")
+	t.Setenv("DIGEST_TEST_EMPTY", "")
+	cases := []struct {
+		name string
+		args []string
+		code int
+	}{
+		{"key and key-env", []string{"--hmac", "-k", "a", "--key-env", "DIGEST_TEST_SECRET"}, 2},
+		{"key and key-file", []string{"--hmac", "-k", "a", "--key-file", path}, 2},
+		{"key-env and key-file", []string{"--hmac", "--key-env", "DIGEST_TEST_SECRET", "--key-file", path}, 2},
+		{"key-env unset", []string{"--hmac", "--key-env", "DIGEST_TEST_NOPE_UNSET"}, 2},
+		{"key-env empty", []string{"--hmac", "--key-env", "DIGEST_TEST_EMPTY"}, 2},
+		{"key-file missing", []string{"--hmac", "--key-file", path + ".missing"}, 1},
+	}
+	for _, tc := range cases {
+		stdout, stderr, code := runDigest(t, tc.args, "payload\n")
+		if code != tc.code {
+			t.Errorf("%s: exit %d, want %d (stderr %q)", tc.name, code, tc.code, stderr)
+		}
+		if stdout != "" {
+			t.Errorf("%s: stdout = %q, want empty", tc.name, stdout)
+		}
+		if strings.Contains(stderr, "s3cret") {
+			t.Errorf("%s: stderr leaks the key: %q", tc.name, stderr)
+		}
+	}
+}

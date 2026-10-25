@@ -1734,8 +1734,10 @@ Input: positional argument or stdin, or one or more `--file` paths.
 | `--bare` | `-b` | Output hash only — no `algo:` prefix; mutually exclusive with `--json` |
 | `--file <path>` | none | File to hash; repeatable for multiple files |
 | `--compare` | none | Compare hashes of all `--file` inputs; outputs `match: true` or `match: false`; exits 0 either way |
-| `--hmac` | none | Compute HMAC instead of plain hash; requires `--key` |
-| `--key <secret>` | `-k` | HMAC secret key |
+| `--hmac` | none | Compute HMAC instead of plain hash; requires one of `--key`, `--key-env`, `--key-file` |
+| `--key <secret>` | `-k` | HMAC secret key. Visible in `ps` and shell history; prefer `--key-env` or `--key-file` |
+| `--key-env <NAME>` | none | Read the HMAC key from environment variable `NAME`; unset or empty exits 2 |
+| `--key-file <path>` | none | Read the HMAC key from a file; one trailing newline is dropped |
 | `--verify <hex>` | none | Compare computed HMAC against this hex string or `sha256:<hex>` (the form digest prints); exits 0 on match, 1 on mismatch (constant-time). An empty value (`''` or `sha256:`) is a mismatch. A prefix naming a different algorithm than `--algo` exits 2. Not allowed with `--file` (exit 2) |
 | `--json` | `-j` | Emit JSON object with metadata |
 
@@ -1755,7 +1757,7 @@ Input: positional argument or stdin, or one or more `--file` paths.
 |------|---------|
 | 0 | Success — hash produced, `--compare` result (match or mismatch), `--hmac --verify` match |
 | 1 | Runtime error — `--hmac --verify` mismatch (including an empty `--verify`), file not found, I/O error |
-| 2 | Usage error — interactive terminal with no `--file`; unknown flag; unknown `--algo`; `--hmac` without `--key`; `--verify` without `--hmac`; `--verify` with `--file`; `--compare` with fewer than 2 `--file` values; `--bare` + `--json` together |
+| 2 | Usage error — interactive terminal with no `--file`; unknown flag; unknown `--algo`; `--hmac` without a key; more than one of `--key`/`--key-env`/`--key-file`; `--verify` without `--hmac`; `--verify` with `--file`; `--compare` with fewer than 2 `--file` values; `--bare` + `--json` together |
 
 ### Examples
 
@@ -1785,9 +1787,10 @@ vrk digest --file a.txt --file b.txt --compare
 # → match: true   or   match: false
 
 # HMAC — produce and verify a message authentication code
-echo 'payload' | vrk digest --hmac --key mysecret
-HMAC=$(echo 'payload' | vrk digest --hmac --key mysecret --bare)
-echo 'payload' | vrk digest --hmac --key mysecret --verify "$HMAC"
+# --key-env keeps the secret out of argv (ps, shell history, agent transcripts)
+echo 'payload' | vrk digest --hmac --key-env WEBHOOK_SECRET
+HMAC=$(echo 'payload' | vrk digest --hmac --key-env WEBHOOK_SECRET --bare)
+echo 'payload' | vrk digest --hmac --key-env WEBHOOK_SECRET --verify "$HMAC"
 # → exit 0 (match); exit 1 on mismatch
 
 # Pipeline: hash → store

@@ -269,6 +269,16 @@ for v in '' 'sha256:'; do
   assert_eq "--verify '$v' prints nothing" "" "$out"
 done
 
+# --key-env and --key-file give the same MAC as --key
+want=$(echo 'payload' | $VRK digest --hmac --key mysecret)
+got=$(echo 'payload' | WEBHOOK_SECRET=mysecret $VRK digest --hmac --key-env WEBHOOK_SECRET)
+assert_eq "--key-env matches --key" "$want" "$got"
+echo 'mysecret' > "$TMPDIR/key"
+got=$(echo 'payload' | $VRK digest --hmac --key-file "$TMPDIR/key")
+assert_eq "--key-file matches --key" "$want" "$got"
+ec=$(set +e; echo 'payload' | $VRK digest --hmac --key a --key-file "$TMPDIR/key" >/dev/null 2>&1; echo $?)
+assert_exit "--key with --key-file exits 2" 2 "$ec"
+
 # --verify with --file is rejected instead of silently ignored
 printf 'payload\n' > "$TMPDIR/verify.txt"
 ec=$(set +e; $VRK digest --hmac --key mysecret --verify "$HMAC_HEX" --file "$TMPDIR/verify.txt" >/dev/null 2>&1; echo $?)

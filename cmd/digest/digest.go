@@ -35,7 +35,9 @@ func init() {
 			{Name: "file", Usage: "file to hash (repeatable)"},
 			{Name: "compare", Usage: "compare hashes of all --file inputs; exits 0 either way"},
 			{Name: "hmac", Usage: "compute HMAC instead of plain hash"},
-			{Name: "key", Shorthand: "k", Usage: "HMAC secret key (required with --hmac)"},
+			{Name: "key", Shorthand: "k", Usage: "HMAC secret key (visible in ps; prefer --key-env or --key-file)"},
+			{Name: "key-env", Usage: "read the HMAC key from this environment variable"},
+			{Name: "key-file", Usage: "read the HMAC key from this file (one trailing newline dropped)"},
 			{Name: "verify", Usage: "known HMAC (algo:hex or hex); exits 0 if match, 1 if mismatch"},
 			{Name: "json", Shorthand: "j", Usage: "emit JSON object"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
@@ -57,6 +59,8 @@ func Run() int {
 		compareFlag bool
 		hmacFlag    bool
 		keyFlag     string
+		keyEnv      string
+		keyFile     string
 		verifyFlag  string
 	)
 
@@ -65,7 +69,9 @@ func Run() int {
 	fs.StringArrayVar(&files, "file", nil, "file to hash (repeatable)")
 	fs.BoolVar(&compareFlag, "compare", false, "compare hashes of all --file inputs; exits 0 either way")
 	fs.BoolVar(&hmacFlag, "hmac", false, "compute HMAC instead of plain hash")
-	fs.StringVarP(&keyFlag, "key", "k", "", "HMAC secret key (required with --hmac)")
+	fs.StringVarP(&keyFlag, "key", "k", "", "HMAC secret key (visible in ps; prefer --key-env or --key-file)")
+	fs.StringVar(&keyEnv, "key-env", "", "read the HMAC key from this environment variable")
+	fs.StringVar(&keyFile, "key-file", "", "read the HMAC key from this file (one trailing newline dropped)")
 	fs.StringVar(&verifyFlag, "verify", "", "known HMAC (algo:hex or hex); exits 0 if match, 1 if mismatch")
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit JSON object")
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
@@ -100,15 +106,41 @@ func Run() int {
 		return shared.UsageErrorf("digest: %s", algoErr)
 	}
 
-	// --hmac requires --key.
-	if hmacFlag && keyFlag == "" {
-		if jsonFlag {
-			return shared.PrintJSONError(map[string]any{
-				"error": "digest: --hmac requires --key",
-				"code":  2,
-			})
+	// A key on argv shows up in ps and shell history, so it can also come
+	// from the environment or a file. Exactly one source.
+	sources := 0
+	for _, name := range []string{"key", "key-env", "key-file"} {
+		if fs.Changed(name) {
+			sources++
 		}
-		return shared.UsageErrorf("digest: --hmac requires --key")
+	}
+	if sources > 1 {
+		return usageOut(jsonFlag, "digest: --key, --key-env and --key-file are mutually exclusive")
+	}
+	if fs.Changed("key-env") {
+		keyFlag = os.Getenv(keyEnv)
+		if keyFlag == "" {
+			return usageOut(jsonFlag, fmt.Sprintf("digest: --key-env: $%s is unset or empty", keyEnv))
+		}
+	}
+	if fs.Changed("key-file") {
+		b, err := shared.ReadFileLimited(keyFile, 1<<20, true)
+		if err != nil {
+			msg := fmt.Sprintf("digest: --key-file: %v", err)
+			if jsonFlag {
+				return shared.PrintJSONError(map[string]any{"error": msg, "code": 1})
+			}
+			return shared.Errorf("%s", msg)
+		}
+		keyFlag = strings.TrimSuffix(string(b), "\n")
+		if keyFlag == "" {
+			return usageOut(jsonFlag, "digest: --key-file: "+keyFile+" is empty")
+		}
+	}
+
+	// --hmac requires a key.
+	if hmacFlag && keyFlag == "" {
+		return usageOut(jsonFlag, "digest: --hmac requires --key, --key-env or --key-file")
 	}
 
 	// fs.Changed, not verifyFlag != "": an empty --verify must fail, not
@@ -393,11 +425,21 @@ func Flags() *pflag.FlagSet {
 	fs.StringArray("file", nil, "file to hash (repeatable)")
 	fs.Bool("compare", false, "compare hashes of all --file inputs; exits 0 either way")
 	fs.Bool("hmac", false, "compute HMAC instead of plain hash")
-	fs.StringP("key", "k", "", "HMAC secret key (required with --hmac)")
+	fs.StringP("key", "k", "", "HMAC secret key (visible in ps; prefer --key-env or --key-file)")
+	fs.String("key-env", "", "read the HMAC key from this environment variable")
+	fs.String("key-file", "", "read the HMAC key from this file (one trailing newline dropped)")
 	fs.String("verify", "", "known HMAC (algo:hex or hex); exits 0 if match, 1 if mismatch")
 	fs.BoolP("json", "j", false, "emit JSON object")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	return fs
+}
+
+// usageOut reports a usage error (exit 2) on stderr, or on stdout as JSON.
+func usageOut(useJSON bool, msg string) int {
+	if useJSON {
+		return shared.PrintJSONError(map[string]any{"error": msg, "code": 2})
+	}
+	return shared.UsageErrorf("%s", msg)
 }
 
 // writeJSONResult encodes v as JSON to stdout and returns 0 on success.

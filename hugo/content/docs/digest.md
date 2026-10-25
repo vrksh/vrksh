@@ -130,6 +130,16 @@ $ echo $?
 0
 ```
 
+`--key` puts the secret on the command line, where `ps` and shell history can see it. `--key-env NAME` reads it from an environment variable instead, and `--key-file PATH` from a file (one trailing newline is dropped). Pass only one of the three.
+
+```bash
+$ export WEBHOOK_SECRET='secret'
+$ SIG=$(echo 'message' | vrk digest --hmac --key-env WEBHOOK_SECRET)
+$ echo 'message' | vrk digest --hmac --key-env WEBHOOK_SECRET --verify "$SIG"
+$ echo $?
+0
+```
+
 `--verify` accepts the `sha256:<hex>` form that digest prints, or bare hex. If the prefix names a different algorithm than `--algo`, it exits 2. An empty value (an unset `$SIG`, or just `sha256:`) is a mismatch and exits 1, so a missing signature header never passes. `--verify` reads stdin or a positional argument; combined with `--file` it exits 2.
 
 The `--verify` flag uses constant-time comparison to prevent timing attacks.
@@ -173,7 +183,7 @@ HMAC without key:
 
 ```bash
 $ echo 'hello' | vrk digest --hmac
-usage error: digest: --hmac requires --key
+usage error: digest: --hmac requires --key, --key-env or --key-file
 $ echo $?
 2
 ```
