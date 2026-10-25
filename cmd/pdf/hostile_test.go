@@ -16,6 +16,7 @@ var hostile = []string{
 	"objstm_cycle.pdf", "objstm_lenself.pdf", "objstm_hugeN.pdf",
 	"xs_index_huge.pdf", "xref_start_1000000000.pdf", "xs_size_1099511627776.pdf",
 	"contents_arr_20000.pdf", "operands_10.pdf", "array_10.pdf", "litstr_10.pdf",
+	"pred_cols_1000000000000.pdf", "pred_cols_-5.pdf",
 }
 
 // runHostile runs vrk pdf on a fixture with a 2s deadline and reports how

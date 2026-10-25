@@ -929,7 +929,15 @@ func applyFilter(rd io.Reader, name string, param Value) io.Reader {
 		if pred.Kind() == Null {
 			return zr
 		}
-		columns := param.Key("Columns").Int64()
+		// Columns sizes two row buffers, so a huge or negative value would
+		// allocate gigabytes or panic in make. The spec default is 1.
+		columns := int64(1)
+		if c := param.Key("Columns"); c.Kind() != Null {
+			columns = c.Int64()
+		}
+		if columns <= 0 || columns > 1<<16 {
+			panic("bad predictor Columns")
+		}
 		switch pred.Int64() {
 		default:
 			if DebugOn {
