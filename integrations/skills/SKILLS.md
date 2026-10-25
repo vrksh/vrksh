@@ -370,6 +370,7 @@ cat generated_prompt.txt | vrk tok --check 100000 > /dev/null || { echo "Prompt 
 - **`--check` buffers all stdin** before deciding whether to pass through - O(input size) memory. For inputs >100MB, sample first with `vrk sip`.
 - **`--json` + `--check` within limit** passes raw input through, not a JSON envelope. `--json` only affects the error path.
 - **`--check 0`** exits 1 for any non-empty input. Valid but rarely useful.
+- **Runs over 4 KB without a break are merged in 4 KB pieces.** This keeps memory flat (20 MB of spaces counts in under a second). Counts match tiktoken for normal text; a single word or space run longer than 4 KB can come out a token or two off, and `chunk` output still decodes back to the exact input.
 - **Positional arg passthrough** joins with space, no trailing newline. Stdin passthrough preserves raw bytes exactly including trailing newlines.
 - **`--model` picks the tokenizer.** Matching follows tiktoken: `gpt-4`, `gpt-4-*`, `gpt-3.5*` and `text-embedding-*` count with cl100k_base; every other `gpt-*`, `chatgpt-*` and `o1`/`o3`/`o4` model counts with o200k_base. Non-OpenAI names such as `claude-*` exit 2; leave `--model` off to estimate for them.
 - **Counts differ between encodings.** English prose and code come out within about 1% of each other; Hindi, CJK and Greek are often half as many tokens in o200k_base. Pass the model you send to.
@@ -1012,6 +1013,7 @@ cat article.txt | vrk chunk --size 800 --overlap 80 --by paragraph | jq '.text'
 - **`--by paragraph` uses double newline as the separator and keeps it.** Packed paragraphs are joined with `\n\n` in `text`. A single newline is not a paragraph break. If your text uses single newlines as paragraph separators, pre-process it with `sed` or `awk` before piping to `chunk`.
 - **`--by paragraph` oversized paragraphs fall back to token-level split.** A paragraph that exceeds `--size` tokens is split at token boundaries, not at sentence or word boundaries. The mid-word split caveat applies.
 - **`--overlap` is in tokens, matching `--size` units.** Overlap is not a percentage.
+- **A large `--overlap` multiplies output.** Each chunk advances `size - overlap` tokens, so output is roughly `size / (size - overlap)` times the input: `--size 1000 --overlap 999` on 200 KB writes about 195 MB. Records stream out one at a time, so memory stays flat, but keep overlap well under half of `--size` unless you mean it.
 - **Empty input exits 0 with no output.** `printf '' | vrk chunk --size 1000` emits nothing and exits 0. This is intentional — empty input is not an error.
 - **`tokens` field is exact.** It reflects the actual token count of the emitted `text`, not an approximation. Use it for downstream budget checks.
 - **OpenAI tokenizers are an estimate for Claude.** Set `--size` at 90% of the model's actual context limit to absorb the error margin.
