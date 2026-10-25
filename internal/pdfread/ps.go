@@ -9,6 +9,15 @@ import (
 	"runtime"
 )
 
+// Limits on what one content stream may hold. Content streams are usually
+// FlateDecoded, so a few KB of file can expand to millions of operands.
+// No operator takes more than a few dozen operands (a TJ array is one), and
+// real pages use a handful of content streams.
+const (
+	maxOperands       = 1 << 16
+	maxContentStreams = 4096
+)
+
 // A Stack represents a stack of values.
 type Stack struct {
 	stack []Value
@@ -19,6 +28,9 @@ func (stk *Stack) Len() int {
 }
 
 func (stk *Stack) Push(v Value) {
+	if len(stk.stack) >= maxOperands {
+		panic("operand stack overflow")
+	}
 	stk.stack = append(stk.stack, v)
 }
 
@@ -58,11 +70,10 @@ func Interpret(strm Value, do func(stk *Stack, op string)) {
 	var dicts []dict
 	var rd io.Reader
 	if strm.Kind() == Array {
-		readers := make([]io.Reader, 0, strm.Len())
-		for i := 0; i < strm.Len(); i++ {
-			readers = append(readers, strm.Index(i).Reader())
+		if strm.Len() > maxContentStreams {
+			panic("too many content streams")
 		}
-		rd = io.MultiReader(readers...)
+		rd = &lazyStreams{strm: strm}
 	} else {
 		rd = strm.Reader()
 	}
@@ -148,6 +159,36 @@ Reading:
 			continue
 		}
 		stk.Push(Value{nil, objptr{}, obj})
+	}
+}
+
+// lazyStreams reads an array of streams as one, opening each only once the
+// one before it is used up. Opening them all up front held one zlib
+// decompressor per element at the same time.
+type lazyStreams struct {
+	strm Value
+	next int
+	cur  io.ReadCloser
+}
+
+func (l *lazyStreams) Read(p []byte) (int, error) {
+	for {
+		if l.cur == nil {
+			if l.next >= l.strm.Len() {
+				return 0, io.EOF
+			}
+			l.cur = l.strm.Index(l.next).Reader()
+			l.next++
+		}
+		n, err := l.cur.Read(p)
+		if err != io.EOF {
+			return n, err
+		}
+		_ = l.cur.Close()
+		l.cur = nil
+		if n > 0 {
+			return n, nil
+		}
 	}
 }
 

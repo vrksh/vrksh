@@ -36,6 +36,13 @@ type keyword string
 // a recoverable panic instead of a fatal process crash.
 const maxObjectDepth = 1000
 
+// maxArrayLen and maxStringLen cap one array or string, so an unterminated
+// "[" or "(" in a decompressed content stream can't grow without bound.
+const (
+	maxArrayLen  = 1 << 20
+	maxStringLen = 16 << 20
+)
+
 // A buffer holds buffered input bytes from the PDF file.
 type buffer struct {
 	r           io.Reader // source of data
@@ -206,8 +213,11 @@ func (b *buffer) readHexString() token {
 		}
 		x := unhex(c)<<4 | unhex(c2)
 		if x < 0 {
-			b.errorf("malformed hex string %c %c %s", c, c2, b.buf[b.pos:])
+			b.errorf("malformed hex string")
 			break
+		}
+		if len(tmp) >= maxStringLen {
+			b.errorf("string too long")
 		}
 		tmp = append(tmp, byte(x))
 	}
@@ -233,6 +243,9 @@ func (b *buffer) readLiteralString() token {
 Loop:
 	for !b.eof {
 		c := b.readByte()
+		if len(tmp) >= maxStringLen {
+			b.errorf("string too long")
+		}
 		switch c {
 		default:
 			tmp = append(tmp, c)
@@ -487,6 +500,9 @@ func (b *buffer) readArray() object {
 		// allocates memory without bound.
 		if tok == nil || tok == io.EOF || tok == keyword("]") {
 			break
+		}
+		if len(x) >= maxArrayLen {
+			b.errorf("array too long")
 		}
 		b.unreadToken(tok)
 		x = append(x, b.readObject())

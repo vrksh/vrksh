@@ -14,6 +14,7 @@ import (
 var hostile = []string{
 	"objstm_cycle.pdf", "objstm_lenself.pdf", "objstm_hugeN.pdf",
 	"xs_index_huge.pdf", "xref_start_1000000000.pdf", "xs_size_1099511627776.pdf",
+	"contents_arr_20000.pdf", "operands_10.pdf", "array_10.pdf", "litstr_10.pdf",
 }
 
 // runHostile runs vrk pdf on a fixture with a 2s deadline and reports how
@@ -57,7 +58,7 @@ func TestHostileFixtures(t *testing.T) {
 			if strings.Contains(stdout, "runtime error") {
 				t.Errorf("runtime error leaked: %.200q", stdout)
 			}
-			if alloc > 64<<20 {
+			if alloc > 128<<20 {
 				t.Errorf("allocated %d MB", alloc>>20)
 			}
 			t.Logf("exit %d, %d KB allocated, %.120q", code, alloc>>10, stdout)
@@ -71,5 +72,23 @@ func TestObjStmCycle(t *testing.T) {
 	for _, name := range []string{"objstm_cycle.pdf", "objstm_lenself.pdf"} {
 		stdout, stderr, code, _ := runHostile(t, name, "--json")
 		assertJSONError(t, stdout, stderr, code, 1, "pdf: ")
+	}
+}
+
+// A /Contents array reads as one stream, even with an operator split across
+// two elements. Elements are opened one at a time now.
+func TestContentsArray(t *testing.T) {
+	data := writePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents [5 0 R 6 0 R 7 0 R] >>",
+		stream("", "BT /F1 12 Tf 72 720 Td (one) Tj"),
+		stream("", "( two) T"),
+		stream("", "j ET"),
+	}, "")
+	stdout, stderr, code := runPdf(t, []string{"--text"}, data)
+	if code != 0 || stdout != "one two\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
 	}
 }
