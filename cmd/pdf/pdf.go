@@ -29,8 +29,12 @@ import (
 // isTerminal is a var so tests can override TTY detection without a real fd.
 var isTerminal = shared.IsTerminal
 
+// maxInput caps the PDF read into memory, from a file or stdin. A var so
+// tests can lower it.
+var maxInput int64 = 512 << 20
+
 // readAll is a var so tests can inject I/O errors.
-var readAll = io.ReadAll
+var readAll = func(r io.Reader) ([]byte, error) { return shared.ReadAllLimited(r, maxInput) }
 
 // maxTreeDepth caps how deep the page-tree walk goes. Real trees are a few
 // levels deep; a cycle in /Kids would otherwise loop forever.
@@ -116,12 +120,14 @@ func Run() int {
 	var data []byte
 	if len(args) == 1 {
 		var err error
-		data, err = os.ReadFile(args[0])
+		// Regular files only: /dev/zero would read until memory ran out and
+		// a FIFO with no writer would block for ever.
+		data, err = shared.ReadFileLimited(args[0], maxInput, false)
 		if errors.Is(err, os.ErrNotExist) {
 			return fail(1, "pdf: file not found: %s", args[0])
 		}
 		if err != nil {
-			return fail(1, "pdf: reading %s: %v", args[0], err)
+			return fail(1, "pdf: %v", err)
 		}
 	} else {
 		// TTY guard: interactive terminal with no piped input -> usage error.

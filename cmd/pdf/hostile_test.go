@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"bytes"
 	"encoding/json"
 	"path/filepath"
 	"runtime"
@@ -73,6 +74,26 @@ func TestObjStmCycle(t *testing.T) {
 		stdout, stderr, code, _ := runHostile(t, name, "--json")
 		assertJSONError(t, stdout, stderr, code, 1, "pdf: ")
 	}
+}
+
+// Input is capped, and a device or FIFO path is refused before reading:
+// /dev/zero used to read until the machine ran out of memory.
+func TestInputLimit(t *testing.T) {
+	orig := maxInput
+	maxInput = 1024
+	t.Cleanup(func() { maxInput = orig })
+	big := bytes.Repeat([]byte("x"), 2048)
+
+	_, stderr, code := runPdf(t, nil, big)
+	if code != 1 || !strings.Contains(stderr, "exceeds") {
+		t.Errorf("stdin: exit %d stderr %q", code, stderr)
+	}
+	_, stderr, code = runPdf(t, []string{writeTemp(t, "big.pdf", big)}, nil)
+	if code != 1 || !strings.Contains(stderr, "exceeds") {
+		t.Errorf("file: exit %d stderr %q", code, stderr)
+	}
+	stdout, stderr, code := runPdfDeadline(t, []string{"--json", "/dev/zero"}, nil)
+	assertJSONError(t, stdout, stderr, code, 1, "not a regular file")
 }
 
 // A /Contents array reads as one stream, even with an operator split across
