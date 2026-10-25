@@ -1,9 +1,9 @@
 ---
 title: "Batch LLM with rate limiting"
 meta_title: "Batch LLM with rate limiting - vrk pipeline recipe"
-description: "Prevents failure at job 847 of 10,000 - throttle paces filenames so each API call respects the rate limit. Process a large document set without ..."
-why: "Prevents failure at job 847 of 10,000 - throttle paces filenames so each API call respects the rate limit."
-body: "Process a large document set without hitting API rate limits. Safe to rerun."
+description: "throttle releases filenames at a fixed rate, so each API call stays inside the rate limit. Process a large set of documents at a fixed request rate, ..."
+why: "throttle releases filenames at a fixed rate, so each API call stays inside the rate limit."
+body: "Process a large set of documents at a fixed request rate, with a token check and stored results, so you can rerun it safely."
 slug: "batch-llm-with-rate-limiting"
 steps:
   - |-

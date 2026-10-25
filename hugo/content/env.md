@@ -1,15 +1,15 @@
 ---
 title: "Environment Variables"
 meta_title: "Environment Variables - vrksh runtime configuration"
-description: "Environment variables read by vrk at runtime. No config file required."
+description: "Learn which environment variables vrk reads: API keys and model settings for vrk prompt, and the database path for vrk kv."
 noindex: false
 ---
 
-Most vrk tools need zero configuration. Only two of 28 tools read environment variables at all.
+vrk reads environment variables in only two of its 28 tools: `vrk prompt` and `vrk kv`. The other tools need no configuration, and vrk has no config file.
 
 ## vrk prompt
 
-`vrk prompt` is the only tool that requires an environment variable. Set one API key to get started.
+`vrk prompt` is the only tool that needs an environment variable. Set one API key to start.
 
 | Variable | Required | What it does | Default |
 |----------|----------|-------------|---------|
@@ -25,7 +25,7 @@ When `VRK_LLM_URL` (or `--endpoint`) is set, there is no default model. Pass `--
 
 ## vrk kv
 
-`vrk kv` works out of the box. The only env var changes where the database lives.
+`vrk kv` works without setup. The only environment variable sets where the database is stored.
 
 | Variable | Required | What it does | Default |
 |----------|----------|-------------|---------|
@@ -33,7 +33,7 @@ When `VRK_LLM_URL` (or `--endpoint`) is set, there is no default model. Pass `--
 
 ## Everything else
 
-The other 26 tools (tok, chunk, grab, mask, validate, jwt, epoch, uuid, sse, coax, links, plain, jsonl, emit, assert, sip, throttle, digest, base, recase, slug, moniker, pct, urlinfo, pdf, sql) need no environment variables. They work with zero setup.
+The other 26 tools (tok, chunk, grab, mask, validate, jwt, epoch, uuid, sse, coax, links, plain, jsonl, emit, assert, sip, throttle, digest, base, recase, slug, moniker, pct, urlinfo, pdf, sql) need no environment variables. They work without setup.
 
 ## Flag precedence
 

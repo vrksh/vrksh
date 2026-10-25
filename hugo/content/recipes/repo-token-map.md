@@ -1,9 +1,9 @@
 ---
 title: "Repo token map"
 meta_title: "Repo token map - vrk pipeline recipe"
-description: "Shows which files blow your context window before you paste them into a prompt. Count tokens for every source file and list the biggest ones first."
-why: "Shows which files blow your context window before you paste them into a prompt."
-body: "Count tokens for every source file and list the biggest ones first."
+description: "You see which files are too big for your context window before you paste them into a prompt. Count the tokens in every source file and list the ..."
+why: "You see which files are too big for your context window before you paste them into a prompt."
+body: "Count the tokens in every source file and list the biggest files first."
 slug: "repo-token-map"
 steps:
   - |-
@@ -16,7 +16,7 @@ tags:
 
 ## The problem
 
-You want to hand a model part of a codebase. You do not know which files are cheap and which ones eat half the window. Guessing from file size is bad. A 40 KB generated file and a 40 KB hand-written file do not tokenise the same.
+You want to hand a model part of a codebase. You do not know which files are cheap and which ones eat half the window. File size is a poor guide. A 40 KB generated file and a 40 KB hand-written file do not tokenise the same.
 
 ## How the pipeline works
 

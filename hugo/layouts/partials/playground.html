@@ -1,0 +1,59 @@
+<style>
+    .pg-input { width: 100%; background: transparent; border: none; outline: none; resize: vertical; font-family: var(--font-mono); font-size: 0.875rem; line-height: 1.6; color: var(--color-text); }
+    .pg-row { display: flex; gap: 0.5rem; align-items: flex-start; }
+    .pg-prompt { font-family: var(--font-mono); font-size: 0.875rem; line-height: 1.6; color: var(--color-accent); user-select: none; }
+    .pg-run { font-family: var(--font-mono); font-size: 0.8125rem; padding: 0.25rem 0.875rem; border-radius: 0.375rem; background: var(--color-accent); color: var(--color-bg); font-weight: 500; cursor: pointer; white-space: nowrap; }
+    .pg-run:disabled { opacity: 0.5; cursor: wait; }
+    .pg-output { margin: 0.75rem 0 0; padding-top: 0.75rem; border-top: 1px solid var(--color-border); min-height: 3rem; max-height: 22rem; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.8125rem; }
+    .pg-stderr { color: #f59e0b; }
+    .pg-muted { color: var(--color-muted); }
+    .pg-status { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+    .pg-status[data-code="ok"] { color: var(--color-accent); }
+    .pg-status[data-code="fail"] { color: #f59e0b; }
+    .pg-examples { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+    .pg-chip { font-family: var(--font-mono); font-size: 0.75rem; padding: 0.25rem 0.625rem; border-radius: 9999px; border: 1px solid var(--color-border); color: var(--color-muted); background: none; cursor: pointer; }
+    .pg-chip:hover, .pg-chip:focus-visible { border-color: var(--color-accent); color: var(--color-accent); }
+    .pg-stdin { width: 100%; margin-top: 0.5rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 0.375rem; padding: 0.5rem; font-family: var(--font-mono); font-size: 0.8125rem; color: var(--color-text); }
+</style>
+
+<div data-playground id="{{ .id | default "try" }}" class="text-left">
+    <div class="terminal">
+        <div class="terminal-header">
+            <div class="terminal-dots"><span></span><span></span><span></span></div>
+            <div class="terminal-title">vrk playground - runs in your browser</div>
+        </div>
+        <div class="terminal-body">
+            <div class="pg-row">
+                <span class="pg-prompt" aria-hidden="true">$</span>
+                <label for="pg-input-{{ .id | default "try" }}" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Command to run</label>
+                <textarea id="pg-input-{{ .id | default "try" }}" class="pg-input" rows="1" spellcheck="false" autocomplete="off" autocapitalize="off" data-pg-input>{{ .cmd | default "cat README.md | vrk plain | vrk mask | vrk tok --check 200" }}</textarea>
+                <button type="button" class="pg-run" data-pg-run>Run</button>
+            </div>
+            <pre class="pg-output" data-pg-output aria-live="polite"><span class="pg-muted">Press Run or Enter. The real vrk tools run here, compiled to WebAssembly. Nothing leaves your browser.</span></pre>
+            <div class="flex justify-between items-center mt-2 gap-4 flex-wrap">
+                <span class="pg-status" data-pg-status></span>
+                <span class="pg-status">files you can cat: <span data-pg-files></span></span>
+            </div>
+        </div>
+    </div>
+    <div class="pg-examples" aria-label="Example commands">
+        {{ range (.examples | default (slice
+            "cat README.md | vrk tok"
+            "cat README.md | vrk tok --check 20"
+            "echo 'deploy key: sk-ant-api03-Xk9fQ2mLp7RtVw3ZbN8cYd4HjE6sUa1G' | vrk mask"
+            "cat README.md | vrk links --json"
+            "cat users.jsonl | vrk validate --schema '{\"name\":\"string\",\"age\":\"number\"}'"
+            "cat stream.sse | vrk sse --field 'data.choices[0].delta.content' --raw"
+            "vrk epoch 1740009600 --iso"
+            "vrk jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+            "vrk slug 'Hello, World! 2026'"
+            "vrk"
+        )) }}
+        <button type="button" class="pg-chip" data-pg-example="{{ . }}">{{ if gt (len .) 48 }}{{ substr . 0 46 }}...{{ else }}{{ . }}{{ end }}</button>
+        {{ end }}
+    </div>
+    <p class="text-sm mt-3" style="color: var(--color-muted);">
+        22 of the tools run here. <code>prompt</code>, <code>grab</code>, <code>kv</code>, <code>sql</code>, <code>pdf</code> and <code>coax</code> need your machine (network, SQLite, files or other programs), so <a href="/install/" class="muted-link" style="text-decoration: underline;">install vrk</a> to use them.
+    </p>
+</div>
+<script src="/js/playground.js" defer></script>

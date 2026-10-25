@@ -1,10 +1,10 @@
 name: mask
 tagline: secret redactor - entropy + pattern-based, streaming
-meta_description: "Redact secrets from pipeline output before logging. Detects API keys, tokens, and high-entropy strings automatically."
+meta_description: "vrk mask redacts secrets such as API keys, Bearer tokens, and high-entropy strings from text. It reads line by line."
 meta_lead: "vrk mask redacts secrets from text using pattern matching and entropy analysis, streaming line by line."
 og_title: "vrk mask - automatic secret redaction for pipeline output"
 description: |
-  `vrk mask` redacts secrets from text using built-in patterns for Bearer tokens, passwords, and known API key prefixes (AWS, OpenAI, Anthropic, Stripe, GitHub, Slack, Google, and more). It also flags high-entropy strings that look like secrets, while leaving URLs, paths, UUIDs, digests, and image refs readable for the LLM. Streams line-by-line, so it handles any file size. Add `--pattern` for custom regexes.
+  `vrk mask` redacts secrets from text using built-in patterns for Bearer tokens, passwords, and known API key prefixes (AWS, OpenAI, Anthropic, Stripe, GitHub, Slack, Google, and more). It also flags high-entropy strings that look like secrets, while leaving URLs, paths, UUIDs, digests, and image refs readable for the LLM. It reads line by line, so it handles any file size. Use `--pattern` to add custom regexes.
 problem: >
   You pipe 500 lines of application logs to an LLM to diagnose an outage. The
   logs contain database connection strings, API keys in HTTP headers, and Bearer

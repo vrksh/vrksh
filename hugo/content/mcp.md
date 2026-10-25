@@ -1,16 +1,16 @@
 ---
 title: "MCP discovery"
-description: "MCP discovery for vrksh - let your agent see all 28 tools and their flags through Model Context Protocol. The agent runs them in its shell."
+description: "Set up the vrk MCP server so your agent can list all vrk tools and their flags. The server does discovery only and runs nothing."
 noindex: false
 ---
 
 ## What this gives your agent
 
-The vrk MCP server is for discovery. It lists the tools and their flags, and it does not run them.
+The vrk MCP server lists the vrk tools and their flags to an agent. It does not run the tools.
 
-Your agent framework supports [Model Context Protocol](https://modelcontextprotocol.io/) and you want it to know about vrk tools. You add three lines of config and every tool - tok, prompt, grab, mask, validate, all 26 of them - appears in your agent's tool list with full input schemas. The agent sees what's available, knows what flags each tool accepts, and can decide when to use them.
+If your agent framework supports [Model Context Protocol](https://modelcontextprotocol.io/), add the config below. 25 tools (tok, grab, mask, validate and the rest) then appear in the agent's tool list, each with its input schema. `prompt`, `kv` and `coax` are not listed, because they call an LLM, write state or run other programs. The agent sees which flags each tool accepts and decides when to use it.
 
-The MCP layer handles **discovery, not execution**. It tells your agent what exists. The agent still runs tools as shell commands. This is deliberate - every tool invocation is a real process that appears in logs, respects permissions, and behaves exactly like it would if you ran it yourself from the terminal.
+The MCP layer does **discovery, not execution**. The agent still runs the tools as shell commands. This is deliberate. Each tool call is a real process that appears in logs, respects permissions, and behaves as it does in your terminal.
 
 ## Setup
 
@@ -31,36 +31,36 @@ Add to your MCP settings (`.claude/settings.json` or project-level):
 
 ### Other MCP-compatible agents
 
-The same config structure works anywhere MCP is supported. The server communicates over stdio using JSON-RPC 2.0 - no network, no ports, no auth.
+The same config works in any agent that supports MCP. The server talks over stdio with JSON-RPC 2.0. It uses no network, no ports, and no auth.
 
 ## How it works
 
-`vrk mcp` starts a JSON-RPC 2.0 server over stdio. It implements two methods:
+`vrk mcp` starts a JSON-RPC 2.0 server over stdio. The server has two methods:
 
 - **`initialize`** - returns server capabilities and the vrksh version
-- **`tools/list`** - returns all 26 tool definitions with their input schemas (flags, types, descriptions)
+- **`tools/list`** - returns all 25 tool definitions with their input schemas (flags, types, descriptions)
 
-`tools/call` is intentionally not implemented. When the agent decides to use a tool, it executes it as a shell command:
+`tools/call` is not implemented, by design. When the agent decides to use a tool, it runs the tool as a shell command:
 
 ```bash
 echo "hello" | vrk tok --json
 ```
 
-For example, the agent reads the `tok` definition from `tools/list`, then runs this in its shell tool, not through MCP:
+For example, the agent reads the `tok` definition from `tools/list`. Then it runs this command in its shell tool, not through MCP:
 
 ```bash
 cat prompt.txt | vrk tok --check 4000 --json
 ```
 
-If you want the agent to always do this, say it in the system prompt: "vrk tools are listed by the vrksh MCP server. Run them as shell commands, for example `echo text | vrk tok`."
+To make the agent always do this, add a line to the system prompt: "vrk tools are listed by the vrksh MCP server. Run them as shell commands, for example `echo text | vrk tok`."
 
-This keeps things auditable. There's no hidden execution layer between the agent and the tool. The agent runs a process, reads stdout, checks the exit code. Same as any other command.
+This keeps the setup easy to audit. No hidden execution layer sits between the agent and the tool. The agent runs a process, reads stdout, and checks the exit code, as with any other command.
 
 ## When to use MCP vs CLI discovery
 
-**Use MCP** when your agent framework speaks MCP natively and you want tools to show up automatically in the agent's tool list without prompt engineering.
+**Use MCP** if your agent framework supports MCP and you want the tools to appear in the agent's tool list without prompt changes.
 
-**Use CLI discovery** when your agent has shell access and you want lower overhead. No server process, no protocol - just:
+**Use CLI discovery** if your agent has shell access and you want less overhead. It needs no server process and no protocol:
 
 ```bash
 vrk --manifest           # JSON tool registry
@@ -68,4 +68,4 @@ vrk --skills tok         # single-tool reference (flags, exit codes, examples)
 vrk --skills             # full reference for all tools
 ```
 
-Both approaches give the agent the same information. MCP is more structured. CLI is simpler. See the [agent endpoints page](/agents/) for the complete list of discovery surfaces.
+Both methods give the agent the same information. MCP is more structured. The CLI is simpler. See the [agent endpoints page](/agents/) for the complete list of discovery surfaces.

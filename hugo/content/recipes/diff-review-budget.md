@@ -1,9 +1,9 @@
 ---
 title: "Diff review budget"
 meta_title: "Diff review budget - vrk pipeline recipe"
-description: "A huge diff fails fast and cheap, instead of getting cut off halfway through the review. Gate a git diff on token count before it goes to the model."
-why: "A huge diff fails fast and cheap, instead of getting cut off halfway through the review."
-body: "Gate a git diff on token count before it goes to the model."
+description: "A diff that is too big fails fast and cheap, instead of being cut off halfway through the review. Check the token count of a git diff, then send it ..."
+why: "A diff that is too big fails fast and cheap, instead of being cut off halfway through the review."
+body: "Check the token count of a git diff, then send it to the model for review only if it fits."
 slug: "diff-review-budget"
 steps:
   - "git diff main | vrk tok --check 20000 | vrk prompt --system \"Review this diff\""

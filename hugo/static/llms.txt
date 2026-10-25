@@ -17,17 +17,17 @@
 - vrk digest - universal hasher - sha256/md5/sha512, --hmac, --compare
 - vrk emit - structured logger - wraps stdin lines as JSONL log records
 - vrk epoch - timestamp converter - unix/ISO, relative time
-- vrk grab - URL fetcher - clean markdown, plain text, or raw HTML.
+- vrk grab - URL fetcher - clean markdown, plain text, or raw HTML
 - vrk jsonl - JSON array to JSONL converter - --collect, --json
-- vrk jwt - JWT inspector - decode, --claim, --expired, --valid.
-- vrk kv - key-value store - SQLite-backed, namespaces, TTL, atomic counters.
+- vrk jwt - JWT inspector - decode, --claim, --expired, --valid
+- vrk kv - key-value store - SQLite-backed, namespaces, TTL, atomic counters
 - vrk links - hyperlink extractor - markdown, HTML, bare URLs to JSONL
 - vrk mask - secret redactor - entropy + pattern-based, streaming
 - vrk moniker - memorable name generator - run IDs, job labels, temp dirs
 - vrk pct - percent encoder/decoder - RFC 3986, --encode, --decode, --form
 - vrk pdf - PDF text extractor - Markdown, --text, JSONL per page
 - vrk plain - markdown stripper - removes syntax, keeps prose
-- vrk prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
+- vrk prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain
 - vrk recase - naming convention converter - snake, camel, kebab, pascal, title
 - vrk sip - stream sampler - --first, --count, --every, --sample
 - vrk slug - URL/filename slug generator - --separator, --max, --json

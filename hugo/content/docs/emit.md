@@ -1,6 +1,6 @@
 ---
 title: "vrk emit"
-description: "Turn plain text into structured JSONL log records. Add timestamps, levels, and fields to any pipeline output."
+description: "vrk emit turns plain text lines into JSONL log records with timestamps, levels, and tags. Pipe the output of any command through it."
 meta_lead: "vrk emit wraps plain text lines into structured JSONL log records with ISO timestamps and log levels."
 og_title: "vrk emit - structured JSONL logging for shell pipelines"
 tool: emit
@@ -19,7 +19,7 @@ A five-stage pipeline prints 10,000 lines of unstructured text. Stage 3 fails. T
 
 ## The solution
 
-`vrk emit` wraps plain text lines into structured JSONL log records with ISO timestamps, log levels, and tags. Pipe any command's output through it and get machine-parseable logs. `--parse-level` auto-detects ERROR/WARN/INFO prefixes from existing output. `--tag` labels records by pipeline stage so you can filter later.
+`vrk emit` wraps plain text lines into structured JSONL log records with ISO timestamps, log levels, and tags. Pipe the output of any command through it to get logs a program can parse. `--parse-level` auto-detects ERROR/WARN/INFO prefixes from existing output. `--tag` labels records by pipeline stage so you can filter by stage later.
 
 ## Before and after
 
@@ -65,6 +65,8 @@ run-pipeline 2>&1 | vrk emit --tag deploy --parse-level
 
 ## How it works
 
+`vrk emit` turns each line of stdin into a structured JSONL log record with a timestamp and a log level.
+
 ### Basic structured logging
 
 ```bash
@@ -72,7 +74,7 @@ $ echo 'Application started' | vrk emit
 {"ts":"...","level":"info","msg":"Application started"}
 ```
 
-Every line becomes a JSONL record with an ISO timestamp and log level.
+Every line becomes a JSONL record (one JSON object per line) with an ISO timestamp and a log level.
 
 ### Set log level
 
@@ -93,7 +95,7 @@ $ printf 'Application started\nERROR: database connection failed\nWARNING: cache
 {"ts":"...","level":"info","msg":"Processing complete"}
 ```
 
-Recognizes `ERROR`, `WARN`, `WARNING`, `INFO`, and `DEBUG` prefixes. Strips the prefix from the message.
+emit recognizes the prefixes `ERROR`, `WARN`, `WARNING`, `INFO`, and `DEBUG`. It removes the prefix from the message.
 
 ### Tag records by pipeline stage
 
@@ -102,7 +104,7 @@ $ echo 'Fetching data' | vrk emit --tag fetch
 {"ts":"...","level":"info","tag":"fetch","msg":"Fetching data"}
 ```
 
-Tags let you filter logs by stage: `jq 'select(.tag == "fetch")'`.
+Use tags to filter logs by stage: `jq 'select(.tag == "fetch")'`.
 
 ### Combined: tag + parse-level
 
@@ -115,7 +117,7 @@ $ printf 'INFO Starting deployment\nERROR Container health check failed\nWARN Ro
 
 ### Override message field (--msg)
 
-When stdin contains JSON you want to merge as extra fields:
+If stdin is JSON, emit merges its fields into the record as extra fields:
 
 ```bash
 echo '{"duration_ms":1234,"status":"ok"}' | vrk emit --msg 'Request completed'

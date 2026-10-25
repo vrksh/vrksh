@@ -1,8 +1,10 @@
 ## How it works
 
+`vrk sql` runs a SQL query on CSV, TSV or JSONL files with SQLite and prints the result as CSV.
+
 ### One file, one table
 
-The table is named after the file: `users.csv` is `users`. The first row is the header.
+The table name is the file name: `users.csv` is `users`. The first row is the header.
 
 ```bash
 $ vrk sql 'SELECT name, city FROM users WHERE age > 25' users.csv
@@ -20,9 +22,16 @@ $ vrk sql --no-header 'SELECT age FROM users ORDER BY age' users.csv
 100
 ```
 
+Strings take single quotes. Double quotes are for column and table names, so a string in double quotes, or a misspelled quoted name, is an error rather than a silent match on nothing:
+
+```bash
+$ vrk sql 'SELECT name FROM users WHERE city = "Pune"' users.csv
+error: sql: no such column: Pune (users: id, name, age, city); strings take single quotes: 'Pune'
+```
+
 ### Joins
 
-Pass more files and each one is another table.
+If you pass more files, each file is another table.
 
 ```bash
 $ vrk sql 'SELECT u.name, sum(o.total) AS spent FROM users u JOIN orders o ON o.user_id = u.id GROUP BY u.name ORDER BY spent DESC' users.csv orders.csv
@@ -40,7 +49,7 @@ Delhi,1
 Pune,2
 ```
 
-Stdin is only read when the query mentions `stdin`, so a file query inside a script never waits on an empty pipe. To be explicit, pass `-` as a file. `name=-` gives piped CSV its own table name.
+vrk sql reads stdin only when the query mentions `stdin`, so a query on files never waits on an empty pipe. To read stdin in a different way, pass `-` as a file. Use `name=-` to give the piped CSV its own table name.
 
 ```bash
 $ cat users.csv | vrk sql 'SELECT count(*) AS n FROM people' people=-
@@ -50,7 +59,7 @@ n
 
 ### Naming tables (name=file.csv)
 
-`name=path` picks the table name. Use it for files whose names make awkward tables, like `2024-sales.csv` or process substitution (`<(...)`).
+`name=path` sets the table name. Use it when the file name is a poor table name, like `2024-sales.csv`, or when you use process substitution (`<(...)`).
 
 ```bash
 $ vrk sql 'SELECT name FROM u WHERE id = 2' u=users.csv
@@ -60,7 +69,7 @@ bo
 
 ### TSV and other delimiters
 
-Files ending in `.tsv` are read as tab-separated. For anything else, `--delimiter` (`-d`) takes one character, or `\t` for a tab.
+vrk sql reads files that end in `.tsv` as tab-separated. For any other delimiter, `--delimiter` (`-d`) takes one character, or `\t` for a tab.
 
 ```bash
 $ printf 'a;b\n1;2\n' | vrk sql -d ';' 'SELECT b FROM stdin'
@@ -70,7 +79,9 @@ b
 
 ### JSONL in
 
-JSONL works as input too, so you can query what other vrk tools print. Keys become columns in the order they first appear. A missing key or `null` is NULL, `true` and `false` are 1 and 0, and nested objects and arrays stay JSON text for `json_extract`. The `{"_vrk":...}` trailer that `--json` adds is skipped. If the trailer is all there is, because the tool upstream found nothing, it's treated like empty stdin: no output, exit 0.
+JSONL (one JSON object per line) works as input too, so you can query the output of other vrk tools. Each key becomes a column, in the order the keys first appear. A missing key or `null` is NULL, and `true` and `false` are 1 and 0. Nested objects and arrays stay as JSON text, which you can read with `json_extract`.
+
+vrk sql skips the `{"_vrk":...}` trailer that `--json` adds. If the trailer is the only record, vrk sql treats the input as empty stdin: no output, exit 0.
 
 ```bash
 $ printf '{"id":1,"ok":true,"tags":["a","b"]}\n{"id":2,"ok":false}\n' | vrk sql "SELECT id, json_extract(tags, '\$[0]') AS tag FROM stdin WHERE ok"
@@ -93,13 +104,13 @@ $ vrk sql --json 'SELECT id, name, age FROM users WHERE city = '"'"'Pune'"'"'' u
 {"_vrk":"sql","count":2}
 ```
 
-Keys keep the column order. Numbers stay numbers and NULL is `null`. The last record is the trailer.
+The keys keep the column order. Numbers stay numbers and NULL is `null`. The last record is the trailer.
 
 ## Type inference
 
-A column is INTEGER when every non-empty value is a whole number that fits in 64 bits, REAL when the values are whole numbers and decimals like `25.5`, and TEXT otherwise. Leading zeros keep a column TEXT, so ZIP codes and IDs like `007` come out unchanged. Empty cells are NULL.
+vrk sql sets the type of each column from its values. A column is INTEGER when every non-empty value is a whole number that fits in 64 bits. It is REAL when the values are whole numbers and decimals like `25.5`. In all other cases it is TEXT. Leading zeros keep a column TEXT, so ZIP codes and IDs like `007` come out unchanged. Empty cells are NULL.
 
-`N/A`, `NA`, `null`, `none`, `nan` and `-` don't count against a number column. They load as NULL, so one missing value doesn't turn `qty > 3` into a string comparison:
+`N/A`, `NA`, `null`, `none`, `nan` and `-` do not stop a column from being a number column. They load as NULL, so one missing value does not turn `qty > 3` into a string comparison:
 
 ```bash
 $ printf 'sku,qty\na,5\nb,N/A\nc,12\n' | vrk sql 'SELECT sku FROM stdin WHERE qty > 3'
@@ -108,9 +119,9 @@ a
 c
 ```
 
-Any other text in a mostly-numeric column makes it TEXT, with a warning on stderr that names the column and the row.
+Any other text in a mostly numeric column makes it TEXT, and so does an integer too big for 64 bits. vrk sql then warns on stderr and names the column and the row. With `--json`, stderr stays empty and the warnings go in the trailer as `"warnings":[...]`.
 
-Decimals keep their digits when every value in the column has the same number of places, so `19.90` prints as `19.90`, not `19.9`. Computed values like `sum(price)` print as short as they can.
+If every value in a column has the same number of decimal places, the values keep them, so `19.90` prints as `19.90`, not `19.9`. Computed values like `sum(price)` print with the fewest digits they need.
 
 ```bash
 $ printf 'sku,price\na,19.90\nb,5.00\n' | vrk sql 'SELECT price FROM stdin ORDER BY price'
@@ -138,7 +149,7 @@ $ vrk sql --no-header 'SELECT count(*) FROM orders WHERE total > 50' orders.csv
 
 ## When it fails
 
-A table with no files is a usage error, since it almost always means the file was left off:
+If the query names a table and you pass no files, vrk sql exits 2, because the file is almost always missing:
 
 ```bash
 $ vrk sql 'SELECT * FROM users'
@@ -147,7 +158,7 @@ $ echo $?
 2
 ```
 
-With files given, a wrong table name is SQLite's own error and exits 1:
+If you pass files and the table name is wrong, SQLite gives the error and vrk sql exits 1:
 
 ```bash
 $ vrk sql 'SELECT * FROM user' users.csv
@@ -156,29 +167,29 @@ $ echo $?
 1
 ```
 
-ATTACH and VACUUM INTO are blocked, so a query can't open or write other database files. PRAGMA is rejected outright, and temp tables stay in memory:
+vrk sql blocks ATTACH and VACUUM INTO, so a query cannot open or write other database files. It rejects PRAGMA, and temp tables stay in memory:
 
 ```bash
 $ vrk sql "ATTACH DATABASE 'other.db' AS o"
-error: sql: SQL logic error: too many attached databases - max 0 (1)
+error: sql: too many attached databases - max 0
 $ vrk sql 'PRAGMA temp_store = FILE'
 error: sql: PRAGMA is not allowed
 ```
 
-A query that never ends, like a recursive CTE with no stop condition, stops after 60 seconds. `--timeout` changes that, and `--timeout 0` turns it off:
+A query that never ends, like a recursive CTE with no stop condition, stops after 60 seconds. Use `--timeout` to change the limit. Use `--timeout 0` to turn the limit off:
 
 ```bash
 $ vrk sql --timeout 200ms --query 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c'
 error: sql: query timed out after 200ms
 ```
 
-A quote that is never closed exits 1 instead of quietly folding the rest of the file into one cell:
+If a quote is never closed, vrk sql exits 1. It does not fold the rest of the file into one cell:
 
 ```bash
 $ printf 'id,note\n1,"never closed\n2,b\n' | vrk sql 'SELECT count(*) FROM stdin'
 error: sql: CSV parse error in stdin: line 2: stray or unclosed quote in a quoted field; quotes inside one must be doubled ("")
 ```
 
-There are size limits too: 1 GiB of input per file, 50 million cells (rows times header columns), 64 MiB for one value and 1 GiB of result. Each one exits 1 and says which it hit.
+vrk sql also has size limits: 1 GiB of input per file, 50 million cells (rows times header columns), 64 MiB for one value and 1 GiB of result. If a limit is hit, vrk sql exits 1 and names the limit.
 
-Output is raw. Cells that start with `=`, `+`, `-` or `@` aren't neutralised for spreadsheets, and control characters pass through, so use `--json` when the result is going to a terminal or an LLM.
+The output is raw. vrk sql does not escape cells that start with `=`, `+`, `-` or `@` for spreadsheets, and control characters pass through. Use `--json` when the result goes to a terminal or an LLM.

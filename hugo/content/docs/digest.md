@@ -1,6 +1,6 @@
 ---
 title: "vrk digest"
-description: "Hash anything with sha256, md5, or sha512. Verify with --compare. Sign with --hmac. One tool, no flags to memorize."
+description: "vrk digest hashes text or files with SHA-256, MD5, or SHA-512. Use --hmac to sign, --verify to check, and --compare to match files."
 meta_lead: "vrk digest hashes stdin with SHA-256, MD5, or SHA-512, with HMAC support and cross-platform consistency."
 og_title: "vrk digest - hash, verify, and HMAC from the command line"
 tool: digest
@@ -19,7 +19,7 @@ vrk digest hashes stdin with SHA-256, MD5, or SHA-512, with HMAC support and cro
 
 ## The solution
 
-`vrk digest` hashes with SHA-256 (default), MD5, or SHA-512. Works the same on macOS and Linux. Compare file hashes with `--compare`, compute HMACs with `--hmac`, and verify them with `--verify`. Uses constant-time comparison for verification to resist timing attacks.
+`vrk digest` hashes with SHA-256 (default), MD5, or SHA-512. It works the same on macOS and Linux. Use `--compare` to compare file hashes, `--hmac` to compute an HMAC, and `--verify` to check one. Verification uses a constant-time comparison to resist timing attacks.
 
 ## Before and after
 
@@ -70,6 +70,8 @@ vrk digest --file release.tar.gz --compare
 
 ## How it works
 
+`vrk digest` prints the hash (sha256 by default, also md5 and sha512) or the HMAC of its input.
+
 ### Hash from stdin
 
 ```bash
@@ -91,7 +93,7 @@ $ vrk digest --file release.tar.gz
 sha256:c5ac14f502d9bc308ca094278d0adddaaad100b9fe09e38db93f1c17d0c09c9a
 ```
 
-Streams the file, so it works on files larger than available memory.
+digest reads the file as a stream, so it works on files larger than memory.
 
 ### Different algorithms
 
@@ -112,7 +114,7 @@ $ echo 'hello' | vrk digest --algo md5 --json
 
 ### Compare file hashes
 
-Check if multiple files have identical content:
+To check if files have identical content, compare them:
 
 ```bash
 vrk digest --file original.txt --file copy.txt --compare
@@ -130,7 +132,7 @@ $ echo $?
 0
 ```
 
-`--key` puts the secret on the command line, where `ps` and shell history can see it. `--key-env NAME` reads it from an environment variable instead, and `--key-file PATH` from a file (one trailing newline is dropped). Pass only one of the three.
+`--key` puts the secret on the command line, where `ps` and shell history can see it. `--key-env NAME` reads it from an environment variable instead, and `--key-file PATH` from a file (one trailing newline is dropped). Pass only one of the three flags.
 
 ```bash
 $ export WEBHOOK_SECRET='secret'
@@ -140,7 +142,7 @@ $ echo $?
 0
 ```
 
-`--verify` accepts the `sha256:<hex>` form that digest prints, or bare hex. If the prefix names a different algorithm than `--algo`, it exits 2. An empty value (an unset `$SIG`, or just `sha256:`) is a mismatch and exits 1, so a missing signature header never passes. `--verify` reads stdin or a positional argument; combined with `--file` it exits 2.
+`--verify` accepts the `sha256:<hex>` form that digest prints, or bare hex. If the prefix names a different algorithm than `--algo`, digest exits 2. An empty value (an unset `$SIG`, or just `sha256:`) is a mismatch and exits 1, so a missing signature header never passes. `--verify` reads stdin or a positional argument. If you use it with `--file`, digest exits 2.
 
 The `--verify` flag uses constant-time comparison to prevent timing attacks.
 

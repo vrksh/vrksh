@@ -1,5 +1,7 @@
 ## Subcommands
 
+`vrk kv` is a key-value store in a local SQLite file, with namespaces, TTL expiry, and atomic counters.
+
 ### set - store a value
 
 ```bash
@@ -20,7 +22,7 @@ $ vrk kv get mykey
 hello world
 ```
 
-Exits 1 if the key doesn't exist or has expired:
+If the key does not exist or has expired, kv exits 1:
 
 ```bash
 $ vrk kv get nonexistent
@@ -35,7 +37,7 @@ $ echo $?
 vrk kv del mykey
 ```
 
-Silent if the key doesn't exist. Always exits 0.
+If the key does not exist, del prints nothing. It always exits 0.
 
 ### list - show all keys
 
@@ -82,7 +84,7 @@ vrk kv get --ns weekly-report status    # "pending"
 
 ### --ttl (time to live)
 
-Automatically expires keys after a duration. Supports Go duration format: `1s`, `5m`, `24h`, `168h` (7 days).
+Expires a key after a set duration. Supports Go duration format: `1s`, `5m`, `24h`, `168h` (7 days).
 
 ```bash
 vrk kv set --ns cache response "$DATA" --ttl 1h

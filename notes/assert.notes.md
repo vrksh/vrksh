@@ -1,6 +1,6 @@
 ## JSON mode
 
-Evaluates gojq expressions against JSON input. Data passes through on success.
+`vrk assert` checks JSON input against gojq expressions and exits 1 if a condition is false. If every condition passes, the input goes to stdout unchanged.
 
 ### Basic conditions
 
@@ -45,11 +45,11 @@ $ echo $?
 1
 ```
 
-Your message goes in front, and the failed condition is added in brackets.
+The error shows your message first, then the failed condition in parentheses.
 
 ## Text mode
 
-Checks plain text input for substrings or regex patterns.
+`vrk assert` also checks plain text for a substring or a regex pattern.
 
 ### --contains (substring check)
 
@@ -79,7 +79,7 @@ $ echo $?
 1
 ```
 
-The pattern is printed as a Go-quoted string, so each backslash shows up twice.
+The pattern is printed as a Go-quoted string, so each backslash is printed twice.
 
 ## Pipeline integration
 
@@ -146,7 +146,7 @@ $ echo $?
 2
 ```
 
-Empty input with a JSON condition fails. A gate with nothing to check does not pass:
+If the input is empty and the condition is a JSON expression, assert exits 1. A check with nothing to test does not pass:
 
 ```bash
 $ printf '' | vrk assert '.ok == true'
@@ -164,4 +164,4 @@ $ echo $?
 1
 ```
 
-A condition that runs longer than 5 seconds is stopped and the assertion fails with `condition timed out after 5s`.
+If a condition runs longer than 5 seconds, assert stops it and the assertion fails with `condition timed out after 5s`.

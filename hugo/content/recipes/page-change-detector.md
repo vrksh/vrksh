@@ -1,9 +1,9 @@
 ---
 title: "Page change detector"
 meta_title: "Page change detector - vrk pipeline recipe"
-description: "You get told when a page changes, with no scraper, no database and no diff tool. Hash the page text and compare it with the hash stored on the last ..."
-why: "You get told when a page changes, with no scraper, no database and no diff tool."
-body: "Hash the page text and compare it with the hash stored on the last run."
+description: "You find out when a page changes, and you need no scraper, database, or diff tool. Hash the text of a web page and compare it with the hash stored on ..."
+why: "You find out when a page changes, and you need no scraper, database, or diff tool."
+body: "Hash the text of a web page and compare it with the hash stored on the last run."
 slug: "page-change-detector"
 steps:
   - |-

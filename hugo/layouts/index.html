@@ -22,8 +22,9 @@
                     class="text-lg md:text-xl mb-8 font-sans"
                     style="color: var(--color-muted);"
                 >
-                    zero silent failures &ensp;•&ensp; composable by default
-                    &ensp;•&ensp; one static CLI binary
+                    vrk is one static binary with Unix tools for AI pipelines.
+                    It counts tokens, masks secrets, validates JSON and calls LLMs,
+                    and every tool exits non-zero when something goes wrong.
                 </p>
 
                 <pre
@@ -75,31 +76,12 @@
                     </button>
                 </div>
 
-                <!-- Quick examples -->
-                <div class="mt-8 max-w-2xl mx-auto text-left">
-                    <p class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
-                        try it now - no API key needed
-                    </p>
-                    <div class="terminal">
-                        <div class="terminal-header">
-                            <div class="terminal-dots"><span></span><span></span><span></span></div>
-                            <div class="terminal-title">~ vrk</div>
-                        </div>
-                        <div class="terminal-body">
-                            <pre class="text-sm"><code class="language-bash"># Count tokens in a document
-cat README.md | vrk tok
-# → 342
-
-# Mask secrets before they leak
-echo "key: sk-ant-api-abc123xyz" | vrk mask
-# → key: [REDACTED]
-
-# Query a CSV with SQL - no database
-printf 'name,score\nana,91\nbo,78\n' | vrk sql 'SELECT AVG(score) AS avg FROM stdin'
-# → avg
-# → 84.5</code></pre>
-                        </div>
-                    </div>
+                <!-- Playground -->
+                <div class="mt-10 max-w-2xl mx-auto text-left">
+                    <h2 class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
+                        Try vrk here. It runs in your browser and needs no install or API key.
+                    </h2>
+                    {{ partial "playground.html" (dict "id" "try") }}
                 </div>
             </section>
 

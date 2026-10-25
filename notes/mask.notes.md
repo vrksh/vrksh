@@ -1,5 +1,7 @@
 ## What gets redacted
 
+`vrk mask` replaces secrets such as API keys, bearer tokens, and passwords with `[REDACTED]` before you send text to an LLM.
+
 Built-in patterns detect:
 
 - **Bearer tokens**: `Bearer eyJ...`, `Bearer ghp_...`
@@ -87,7 +89,7 @@ cat logs.txt | vrk mask --entropy 4.5
 
 ## The pipeline position rule
 
-Always mask **before** sending to an LLM, never after. The data goes to the API in the request, not in the response. Masking the output is too late.
+Mask **before** you send text to an LLM, never after. The secret leaves your machine in the request, not in the response. Masking the output is too late.
 
 ```bash
 # Correct: mask before prompt

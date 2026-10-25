@@ -163,7 +163,7 @@ Exit 2: No input, unknown flag, ambiguous timezone, --tz without --iso/--json
 vrk epoch '+3d' --iso
 ```
 
-## grab - URL fetcher - clean markdown, plain text, or raw HTML.
+## grab - URL fetcher - clean markdown, plain text, or raw HTML
 
 | Flag               | Short | Description                                                                                                                                                     |
 |--------------------|-------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -197,7 +197,7 @@ Exit 2: Interactive TTY with no input, unknown flag
 cat api-response.json | vrk jsonl | vrk validate --schema '{"name":"string"}'
 ```
 
-## jwt - JWT inspector - decode, --claim, --expired, --valid.
+## jwt - JWT inspector - decode, --claim, --expired, --valid
 
 | Flag        | Short | Description                                               |
 |-------------|-------|-----------------------------------------------------------|
@@ -215,7 +215,7 @@ Exit 2: Usage error - bad format, too many args
 echo $TOKEN | vrk jwt --claim sub
 ```
 
-## kv - key-value store - SQLite-backed, namespaces, TTL, atomic counters.
+## kv - key-value store - SQLite-backed, namespaces, TTL, atomic counters
 
 | Flag        | Short | Description                               |
 |-------------|-------|-------------------------------------------|
@@ -337,7 +337,7 @@ Exit 2: Interactive TTY with no piped input and no positional arg
 vrk grab https://example.com/docs | vrk plain | vrk tok
 ```
 
-## prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
+## prompt - LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain
 
 | Flag         | Short | Description                                                                |
 |--------------|-------|----------------------------------------------------------------------------|

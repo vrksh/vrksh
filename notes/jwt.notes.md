@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk jwt` decodes a JWT (JSON Web Token) and prints its payload, one claim, or an expiry check. It never verifies the signature.
+
 ### Decode a token
 
 ```bash
@@ -7,7 +9,7 @@ $ echo 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI
 {"exp":1600000000,"iat":1516239022,"name":"John Doe","sub":"1234567890"}
 ```
 
-The full payload as JSON, sorted alphabetically. No signature verification - this is for inspection only.
+jwt prints the full payload as JSON, sorted alphabetically. It does not verify the signature, so use it for inspection only.
 
 ### Extract a single claim
 
@@ -20,7 +22,7 @@ $ echo "$TOKEN" | vrk jwt --claim sub
 1234567890
 ```
 
-Returns the raw value, no JSON wrapping. Useful for extracting a user ID or email in a script.
+jwt prints the raw value with no JSON wrapping. Use it to get a user ID or email in a script.
 
 ### Check if a token is expired
 
@@ -40,7 +42,7 @@ Exits 0 if the token is still valid. Exits 1 if expired. The error message shows
 echo "$TOKEN" | vrk jwt --valid
 ```
 
-Checks three things: not expired (`exp`), not before valid time (`nbf`), and not issued in the future (`iat`). Exits 1 if any check fails. A time claim that is present but isn't a number (a string, `null`) also fails, so a malformed token can't slip past the guard. Fractional dates like `1700000000.5` are compared as real dates.
+`--valid` checks three things: not expired (`exp`), not before the valid time (`nbf`), and not issued in the future (`iat`). If any check fails, it exits 1. If a time claim is present but is not a number (a string, `null`), that also fails, so a malformed token cannot pass. Fractional dates like `1700000000.5` are compared as real dates.
 
 `--valid` and the `valid` field in `--json` cover the time claims only. The signature is never checked, and `--json` says so with `"signature_verified":false`.
 

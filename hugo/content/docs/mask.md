@@ -1,6 +1,6 @@
 ---
 title: "vrk mask"
-description: "Redact secrets from pipeline output before logging. Detects API keys, tokens, and high-entropy strings automatically."
+description: "vrk mask redacts secrets such as API keys, Bearer tokens, and high-entropy strings from text. It reads line by line."
 meta_lead: "vrk mask redacts secrets from text using pattern matching and entropy analysis, streaming line by line."
 og_title: "vrk mask - automatic secret redaction for pipeline output"
 tool: mask
@@ -19,7 +19,7 @@ You pipe 500 lines of application logs to an LLM to diagnose an outage. The logs
 
 ## The solution
 
-`vrk mask` redacts secrets from text using built-in patterns for Bearer tokens, passwords, and known API key prefixes (AWS, OpenAI, Anthropic, Stripe, GitHub, Slack, Google, and more). It also flags high-entropy strings that look like secrets, while leaving URLs, paths, UUIDs, digests, and image refs readable for the LLM. Streams line-by-line, so it handles any file size. Add `--pattern` for custom regexes.
+`vrk mask` redacts secrets from text using built-in patterns for Bearer tokens, passwords, and known API key prefixes (AWS, OpenAI, Anthropic, Stripe, GitHub, Slack, Google, and more). It also flags high-entropy strings that look like secrets, while leaving URLs, paths, UUIDs, digests, and image refs readable for the LLM. It reads line by line, so it handles any file size. Use `--pattern` to add custom regexes.
 
 ## Before and after
 
@@ -64,6 +64,8 @@ cat deploy.log | vrk mask | vrk prompt --system 'What errors occurred?'
 <!-- notes - edit in notes/mask.notes.md -->
 
 ## What gets redacted
+
+`vrk mask` replaces secrets such as API keys, bearer tokens, and passwords with `[REDACTED]` before you send text to an LLM.
 
 Built-in patterns detect:
 
@@ -152,7 +154,7 @@ cat logs.txt | vrk mask --entropy 4.5
 
 ## The pipeline position rule
 
-Always mask **before** sending to an LLM, never after. The data goes to the API in the request, not in the response. Masking the output is too late.
+Mask **before** you send text to an LLM, never after. The secret leaves your machine in the request, not in the response. Masking the output is too late.
 
 ```bash
 # Correct: mask before prompt

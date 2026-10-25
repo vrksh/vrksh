@@ -1,6 +1,6 @@
 export CGO_ENABLED=0
 
-.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate generate-og validate-schemas validate-manifest test-site doccheck recipecheck acceptance
+.PHONY: build test test-v test-tool test-integration lint fuzz cross check smoke clean generate generate-og validate-schemas validate-manifest test-site doccheck recipecheck acceptance playground
 
 # Build the binary. CGO_ENABLED=0 is mandatory - static binary promise depends on it.
 # git describe gives 0.2.0 on a tag, 0.1.1-78-gabc1234 between tags.
@@ -45,6 +45,12 @@ fuzz:
 	go test -fuzz=FuzzPdf   -fuzztime=60s ./cmd/pdf/
 	go test -fuzz=FuzzMatchesTiktokenGo -fuzztime=60s ./internal/shared/tokcount/
 
+# Browser build for the vrk.sh/play/ playground. Offline tools only (see
+# internal/playground/main). Output is gitignored; the site build runs this.
+playground:
+	GOOS=js GOARCH=wasm go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o hugo/static/play/vrk.wasm ./internal/playground/main
+	install -m 644 "$$(go env GOROOT)/lib/wasm/wasm_exec.js" hugo/static/play/wasm_exec.js
+
 # Verify cross-compilation works. Run after every Claude Code session.
 # If this fails, CGO crept in. Most common cause: mattn/go-sqlite3.
 cross:
@@ -52,6 +58,7 @@ cross:
 	@GOOS=linux  GOARCH=arm64 go build -o /dev/null . && echo "ok  linux/arm64"
 	@GOOS=darwin GOARCH=amd64 go build -o /dev/null . && echo "ok  darwin/amd64"
 	@GOOS=darwin GOARCH=arm64 go build -o /dev/null . && echo "ok  darwin/arm64"
+	@GOOS=js     GOARCH=wasm  go build -o /dev/null ./internal/playground/main && echo "ok  js/wasm (playground)"
 
 # Full pre-commit check. Run before every commit. Takes ~30 seconds.
 check: build test lint cross smoke validate-schemas doccheck recipecheck

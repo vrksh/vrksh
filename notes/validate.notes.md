@@ -1,12 +1,14 @@
 ## Schema format
 
-The schema is a JSON object where keys are required field names and values are type strings: `string`, `number`, `boolean`, `array`, `object`.
+`vrk validate` checks each JSONL record (one JSON object per line) against a schema and drops the records that do not match.
+
+The schema is a JSON object. Each key is a required field name, and each value is a type string: `string`, `number`, `boolean`, `array`, `object`.
 
 ```json
 {"name":"string","age":"number","active":"boolean"}
 ```
 
-Extra keys in the input records are ignored - only the schema keys are checked. You can provide the schema as an inline JSON string or as a path to a `.json` file.
+validate ignores extra keys in the input records and checks only the schema keys. Give the schema as an inline JSON string or as a path to a `.json` file.
 
 ## How it works
 
@@ -19,7 +21,7 @@ $ printf '{"name":"Alice","age":30}\n{"name":"Bob","age":25}\n' | \
 {"name":"Bob","age":25}
 ```
 
-No output on stderr. Exit 0. Only clean data reaches stdout.
+validate writes nothing to stderr and exits 0. Only valid records reach stdout.
 
 ### Invalid records are dropped with a warning
 
@@ -30,9 +32,9 @@ warning: validate: line 2: age is missing
 {"name":"Alice","age":30}
 ```
 
-Stderr shows: `warning: validate: line 2: age is missing`
+Stderr shows `warning: validate: line 2: age is missing`.
 
-Bob's record was missing `age`, so it was dropped. Alice's record passed through. The pipeline continues with only clean data.
+Bob's record has no `age`, so validate drops it. Alice's record passes through. The pipeline continues with only valid records.
 
 ### --strict halts on first failure
 
@@ -45,9 +47,9 @@ $ echo $?
 1
 ```
 
-Stderr shows: `error: validate: line 2: age is missing`
+Stderr shows `error: validate: line 2: age is missing`.
 
-In strict mode, the first invalid record stops the pipeline with exit 1. Use this when partial results are worse than no results.
+In strict mode, the first invalid record stops the pipeline with exit 1. Use `--strict` when a partial result is worse than no result.
 
 ### --fix sends invalid records to an LLM for repair
 
@@ -56,7 +58,7 @@ cat messy-output.jsonl | \
   vrk validate --schema '{"sentiment":"string","confidence":"number"}' --fix
 ```
 
-Invalid records are sent to `vrk prompt` with instructions to fix them to match the schema. The repaired records are emitted if they now pass validation. Requires `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
+validate sends each invalid record to `vrk prompt` with an instruction to fix it to match the schema. If the repaired record passes validation, validate prints it. This needs `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
 
 ### --json appends metadata
 
@@ -68,7 +70,7 @@ warning: validate: line 2: age is missing
 {"_vrk":"validate","total":2,"passed":1,"failed":1}
 ```
 
-The metadata trailer tells you how many records passed and failed.
+The metadata trailer gives the number of records that passed and failed.
 
 ## Pipeline integration
 
@@ -102,7 +104,7 @@ cat batch-output.jsonl | \
 
 ## When it fails
 
-Schema missing:
+If you leave out `--schema`, validate exits 2:
 
 ```bash
 $ cat data.jsonl | vrk validate
@@ -111,7 +113,7 @@ $ echo $?
 2
 ```
 
-A `--schema` value that is not a JSON object is treated as a schema file path:
+If the `--schema` value is not a JSON object, validate treats it as a schema file path:
 
 ```bash
 $ cat data.jsonl | vrk validate --schema 'not json'
@@ -120,7 +122,7 @@ $ echo $?
 2
 ```
 
-Strict mode on invalid record:
+If a record is invalid and you set `--strict`, validate exits 1:
 
 ```bash
 $ printf '{"name":"Alice"}\n' | vrk validate --schema '{"name":"string","age":"number"}' --strict
@@ -129,7 +131,7 @@ $ echo $?
 1
 ```
 
-A record must be a single JSON object. `null`, arrays, scalars and lines with a second value after the first are all invalid:
+A record must be one JSON object. `null`, arrays, scalars and lines with a second value after the first are all invalid:
 
 ```bash
 $ echo 'null' | vrk validate --schema '{"a":"number"}' --strict

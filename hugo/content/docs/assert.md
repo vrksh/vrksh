@@ -1,6 +1,6 @@
 ---
 title: "vrk assert"
-description: "Assert conditions mid-pipeline. Exit 1 if a check fails. Catches bad data before it reaches the next stage."
+description: "vrk assert checks a condition on pipeline data and exits 1 if it fails. Use a jq expression, --contains, or --matches to stop bad data early."
 meta_lead: "vrk assert evaluates conditions mid-pipeline and stops the flow if a check fails."
 og_title: "vrk assert - pipeline condition checks that halt on failure"
 tool: assert
@@ -19,7 +19,7 @@ Schema validation catches missing fields and wrong types. It does not catch wron
 
 ## The solution
 
-`vrk assert` evaluates conditions on pipeline data and stops the flow if a check fails. In JSON mode it runs gojq expressions. In text mode it checks substrings or regex patterns. Data passes through on success, so you can insert it between any two pipeline stages as a gate without breaking the data flow.
+`vrk assert` evaluates conditions on pipeline data and stops the flow if a check fails. In JSON mode it runs gojq expressions. In text mode it checks substrings or regex patterns. Data passes through on success, so you can put it between any two pipeline stages as a gate.
 
 ## Before and after
 
@@ -67,7 +67,7 @@ echo '{"status":"ok","count":42}' | vrk assert '.count > 0'
 
 ## JSON mode
 
-Evaluates gojq expressions against JSON input. Data passes through on success.
+`vrk assert` checks JSON input against gojq expressions and exits 1 if a condition is false. If every condition passes, the input goes to stdout unchanged.
 
 ### Basic conditions
 
@@ -112,11 +112,11 @@ $ echo $?
 1
 ```
 
-Your message goes in front, and the failed condition is added in brackets.
+The error shows your message first, then the failed condition in parentheses.
 
 ## Text mode
 
-Checks plain text input for substrings or regex patterns.
+`vrk assert` also checks plain text for a substring or a regex pattern.
 
 ### --contains (substring check)
 
@@ -146,7 +146,7 @@ $ echo $?
 1
 ```
 
-The pattern is printed as a Go-quoted string, so each backslash shows up twice.
+The pattern is printed as a Go-quoted string, so each backslash is printed twice.
 
 ## Pipeline integration
 
@@ -213,7 +213,7 @@ $ echo $?
 2
 ```
 
-Empty input with a JSON condition fails. A gate with nothing to check does not pass:
+If the input is empty and the condition is a JSON expression, assert exits 1. A check with nothing to test does not pass:
 
 ```bash
 $ printf '' | vrk assert '.ok == true'
@@ -231,4 +231,4 @@ $ echo $?
 1
 ```
 
-A condition that runs longer than 5 seconds is stopped and the assertion fails with `condition timed out after 5s`.
+If a condition runs longer than 5 seconds, assert stops it and the assertion fails with `condition timed out after 5s`.

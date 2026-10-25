@@ -1,9 +1,9 @@
 ---
 title: "Preview LLM request"
 meta_title: "Preview LLM request - vrk pipeline recipe"
-description: "You see the exact request, masked and complete, before any money or secrets leave the machine. Add --explain to vrk prompt to print the request ..."
-why: "You see the exact request, masked and complete, before any money or secrets leave the machine."
-body: "Add --explain to vrk prompt to print the request instead of sending it."
+description: "You see the exact request, after masking, before any money or secrets leave your machine. Add --explain to vrk prompt to print the request as a curl ..."
+why: "You see the exact request, after masking, before any money or secrets leave your machine."
+body: "Add --explain to vrk prompt to print the request as a curl command instead of sending it."
 slug: "preview-llm-request"
 steps:
   - "cat deploy.log | vrk mask | vrk prompt --system \"What failed?\" --explain"

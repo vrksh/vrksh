@@ -1,10 +1,10 @@
 name: plain
 tagline: markdown stripper - removes syntax, keeps prose
-meta_description: "Strip markdown syntax and keep the prose. Clean input for token counting or plain-text pipelines."
-meta_lead: "vrk plain strips markdown formatting and keeps the prose - clean plain text from any markdown input."
+meta_description: "vrk plain removes markdown syntax and keeps the prose. Use it to cut tokens before you send text to an LLM or count it with vrk tok."
+meta_lead: "vrk plain strips markdown formatting from text and keeps the prose."
 og_title: "vrk plain - strip markdown to plain text"
 description: |
-  `vrk plain` strips markdown formatting and keeps the prose. Headers become text, links keep their label but drop the URL, code blocks keep their content but lose the fences. The output is clean plain text ready for token-efficient LLM processing.
+  `vrk plain` strips markdown formatting and keeps the prose. Headers become text, links keep their label but drop the URL, code blocks keep their content but lose the fences. The output is plain text that uses fewer tokens.
 problem: >
   Markdown syntax (headers, link URLs, code fences, bullet markers) consumes tokens
   but adds no information for an LLM. A 2,000-token document is 1,400 tokens as

@@ -1,7 +1,7 @@
 ---
 title: "vrk plain"
-description: "Strip markdown syntax and keep the prose. Clean input for token counting or plain-text pipelines."
-meta_lead: "vrk plain strips markdown formatting and keeps the prose - clean plain text from any markdown input."
+description: "vrk plain removes markdown syntax and keeps the prose. Use it to cut tokens before you send text to an LLM or count it with vrk tok."
+meta_lead: "vrk plain strips markdown formatting from text and keeps the prose."
 og_title: "vrk plain - strip markdown to plain text"
 tool: plain
 group: v1
@@ -11,7 +11,7 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-vrk plain strips markdown formatting and keeps the prose - clean plain text from any markdown input.
+vrk plain strips markdown formatting from text and keeps the prose.
 
 ## The problem
 
@@ -19,7 +19,7 @@ Markdown syntax (headers, link URLs, code fences, bullet markers) consumes token
 
 ## The solution
 
-`vrk plain` strips markdown formatting and keeps the prose. Headers become text, links keep their label but drop the URL, code blocks keep their content but lose the fences. The output is clean plain text ready for token-efficient LLM processing.
+`vrk plain` strips markdown formatting and keeps the prose. Headers become text, links keep their label but drop the URL, code blocks keep their content but lose the fences. The output is plain text that uses fewer tokens.
 
 ## Before and after
 
@@ -62,6 +62,8 @@ vrk grab https://example.com/docs | vrk plain | vrk tok
 
 ## What gets stripped
 
+`vrk plain` removes Markdown formatting from text and keeps the words, so a model reads fewer tokens.
+
 | Markdown syntax | Plain text result |
 |----------------|-------------------|
 | `**bold**` | bold |
@@ -72,7 +74,7 @@ vrk grab https://example.com/docs | vrk plain | vrk tok
 | `# Headers` | Header text |
 | `- bullet` | bullet |
 
-URLs in links are dropped. Code content is kept. Everything that carries meaning stays; everything that's just formatting goes.
+plain drops the URL in a link and keeps the code content. It keeps the text that carries meaning and removes the formatting.
 
 ## How it works
 
@@ -93,7 +95,7 @@ $ echo '**hello** world' | vrk plain --json
 {"text":"hello world","input_bytes":16,"output_bytes":11}
 ```
 
-Wraps the plain text in a JSON envelope with byte counts.
+The JSON envelope holds the plain text and the byte counts of the input and the output.
 
 ## Pipeline integration
 
@@ -127,9 +129,9 @@ done
 
 ## When it fails
 
-Input with more than 1000 back-to-back nesting openers (`[a](`, `- `, `> `) is not parsed as Markdown, since the parser goes quadratic on it. It comes back as plain text with only whitespace cleanup. Anything else that takes longer than 10 seconds to parse exits 1 with `plain: markdown too complex to parse within 10s`.
+If the input has more than 1000 back-to-back nesting openers (`[a](`, `- `, `> `), plain does not parse it as Markdown, because the parser slows down quadratically on it. The input comes back as plain text with only whitespace cleanup. If any other input takes more than 10 seconds to parse, plain exits 1 with `plain: markdown too complex to parse within 10s`.
 
-No input:
+If you give no input on an interactive terminal, plain exits 2:
 
 <!-- doccheck: skip (only fails on an interactive terminal, doccheck stdin is not a TTY) -->
 ```bash

@@ -1,8 +1,8 @@
 name: tok
 tagline: Count tokens. Gate pipelines before they fail.
-meta_description: "vrk tok counts tokens from stdin and gates pipelines before they fail. Pass --check N to stop the pipeline if input exceeds your context budget. No Python runtime needed."
+meta_description: "vrk tok counts the tokens in text (o200k_base by default). Use --check N to stop a pipeline when the input is over your context budget."
 description: |
-  `vrk tok` counts tokens and gates pipelines in about 25 ms. Counts with o200k_base by default, the tokenizer of GPT-4o, GPT-4.1, GPT-5 and the o-series; `--model gpt-4` or `gpt-3.5-turbo` switches to cl100k_base. Exact for OpenAI models, an estimate for Claude. Without `--check` it prints the count. With `--check N` it passes input through if within budget, or exits 1 with empty stdout if over, killing the pipeline before it wastes an API call.
+  `vrk tok` counts tokens and gates pipelines in about 25 ms. It counts with o200k_base by default, the tokenizer of GPT-4o, GPT-4.1, GPT-5, and the o-series. `--model gpt-4` or `gpt-3.5-turbo` switches to cl100k_base. The count is exact for OpenAI models and an estimate for Claude. Without `--check`, tok prints the count. With `--check N`, tok passes the input through if it is within the budget. If the input is over the budget, tok exits 1 with empty stdout, so the pipeline stops before it wastes an API call.
 problem: >
   A 15,000-token document goes to a model with a 4,096-token window. No error.
   The response looks plausible. Three days later a QA reviewer finds inconsistencies.
@@ -41,7 +41,7 @@ exit_codes:
   - code: 2
     meaning: Usage error - unknown flag, unknown --model, no stdin, --check without value
 meta_title: "vrk tok - Token Counter CLI for LLM Pipelines"
-meta_lead: "vrk tok is a command-line token counter for LLM pipelines."
+meta_lead: "vrk tok counts the tokens in text and can stop a pipeline when the text is over a budget."
 og_title: "vrk tok - token counter and pipeline gate for LLM context budgets"
 og_image:
   headline: "Silent truncation looks like success. vrk tok fails loudly."

@@ -1,10 +1,10 @@
 name: epoch
 tagline: timestamp converter - unix/ISO, relative time
-meta_description: "Convert between Unix timestamps and ISO dates. Supports relative time like +3d or -1h."
+meta_description: "vrk epoch converts between Unix timestamps and ISO 8601 dates. It also accepts relative times such as +3d or -1h, on macOS and Linux."
 meta_lead: "vrk epoch converts between Unix timestamps and ISO 8601, and handles relative offsets like +3d or -1h."
 og_title: "vrk epoch - Unix timestamp and ISO date converter"
 description: |
-  `vrk epoch` converts between Unix timestamps and ISO 8601, and handles relative offsets like `+3d` or `-1h`. Works identically on macOS and Linux. Use `--at` to pin the reference time for deterministic pipeline output.
+  `vrk epoch` converts between Unix timestamps and ISO 8601, and handles relative offsets like `+3d` or `-1h`. It works the same on macOS and Linux. Use `--at` to pin the reference time, so the pipeline output is the same on every run.
 problem: >
   `date -d @1740009600` works on Linux. On macOS, `-d` means something different
   and you need `date -r 1740009600` instead. Relative times are worse: `date -d '+3 days'`

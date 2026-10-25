@@ -1,12 +1,14 @@
 # vrksh
 
-LLMs are probabilistic. The tools around them shouldn't be.
+vrksh is a set of 28 Unix-style command-line tools for LLM pipelines, shipped as one static binary named `vrk`. The tools count tokens, redact secrets, validate JSON, call models, and more, and each one exits with a code your pipeline can trust.
+
+LLMs are probabilistic. The tools around them should not be.
 
 [![CI](https://github.com/vrksh/vrksh/actions/workflows/ci.yml/badge.svg)](https://github.com/vrksh/vrksh/actions/workflows/ci.yml)
 ![Go](https://img.shields.io/badge/go-1.25-blue)
 ![Release](https://img.shields.io/github/v/release/vrksh/vrksh)
 
-One CLI binary. Small composable tools. Zero silent failures.
+The binary holds small tools that you chain with pipes. A failed step stops the pipeline with a non-zero exit code.
 
 ## Name
 
@@ -14,9 +16,9 @@ vrksh (वृक्ष) is the Sanskrit word for tree. The project is **vrksh**.
 
 ## Why
 
-Shell pipelines that call LLMs break in quiet ways. A prompt exceeds the context window and the model silently truncates. A retry loop swallows errors. An API key leaks into logs. `jq` and `awk` were not designed for this failure mode.
+Shell pipelines that call LLMs break in quiet ways. A prompt exceeds the context window and the model truncates it without a warning. A retry loop swallows errors. An API key leaks into logs. `jq` and `awk` were not built for these failures.
 
-vrksh is 28 Unix-style CLI tools in a single static binary. Each tool reads stdin, writes stdout, and uses exit codes that pipelines can trust: 0 for success, 1 for runtime errors, 2 for usage errors. JSONL is the native interchange format. Large inputs stream through `bufio.Scanner`, not `io.ReadAll`, so a 10GB log file won't OOM your agent.
+Each tool reads stdin, writes stdout, and uses the same exit codes: 0 for success, 1 for runtime errors, and 2 for usage errors. JSONL (one JSON object per line) is the main data format. Large inputs stream through `bufio.Scanner`, not `io.ReadAll`, so a 10GB log file does not run your agent out of memory.
 
 ## Install
 
@@ -134,7 +136,7 @@ vrk <tool> --help       # per-tool usage
 
 ## Symlinks
 
-Create direct symlinks so you can run `tok` instead of `vrk tok`:
+Create symlinks so you can run `tok` instead of `vrk tok`:
 
 ```bash
 vrk --bare tok jwt epoch     # creates symlinks in /usr/local/bin
@@ -167,12 +169,12 @@ vrk completions fish > ~/.config/fish/completions/vrk.fish
 
 - You need signature verification on JWTs. `vrk jwt` is an inspector, not a validator.
 - You want a chat interface. `vrk prompt` is a pipeline tool with temperature 0 by default.
-- You need exact token counts for Claude. `tok` counts with OpenAI tokenizers (o200k_base by default, cl100k_base with `--model gpt-4`), which are exact for OpenAI models and only an estimate for Claude.
-- You want a framework. vrksh is CLI filters and pipes, not an SDK.
+- You need exact token counts for Claude. `tok` uses OpenAI tokenizers (o200k_base by default, cl100k_base with `--model gpt-4`). The counts are exact for OpenAI models and an estimate for Claude.
+- You want a framework. vrksh is a set of CLI filters for pipes, not an SDK.
 
 ## Docs
 
-- **[Quickstart](https://vrk.sh/quickstart/)** - zero to working pipeline in five minutes
+- **[Quickstart](https://vrk.sh/quickstart/)** - install vrk and run four tools in two minutes
 - **[Tool reference](https://vrk.sh/docs/)** - flags, exit codes, examples for all 28 tools
 - **[Recipes](https://vrk.sh/recipes/)** - multi-tool pipeline patterns
 - **[Environment variables](https://vrk.sh/env/)** - API keys and runtime config

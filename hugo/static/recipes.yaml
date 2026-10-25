@@ -1,6 +1,6 @@
 - name: Token-checked LLM call
-  why: Prevents silent truncation - the model never sees a prompt it can only half-fit.
-  description: Count tokens before sending to an LLM - abort if too large.
+  why: "If the prompt is over the budget, the pipeline stops and the model never sees a prompt that only half fits."
+  description: "Count the tokens in a prompt and stop the pipeline before the LLM call if the prompt is over a budget."
   steps:
     - |-
       cat prompt.txt \
@@ -14,13 +14,13 @@
 
     LLMs have context windows. When your input exceeds the limit, the API either truncates silently or returns an error after you've already waited for the response and spent tokens on the request. In a pipeline, this is worse - downstream steps process garbage output without knowing the input was incomplete.
 
-    This is the most expensive bug in LLM pipelines because it looks like success. The API returns 200, the model responds, but the answer is based on a truncated document.
+    This bug is expensive because it looks like success. The API returns 200, the model responds, but the answer is based on a truncated document.
 
     ## How the pipeline works
 
     `vrk tok --check 4000` reads stdin, counts tokens, and makes a decision. If the count is 4000 or under, it passes the text through unchanged to stdout. If over, it exits 1 with empty stdout. `vrk prompt` gets no input, exits 1 with `prompt: empty prompt, nothing sent`, and no request reaches the API.
 
-    No wasted API call. No truncated output. No silent failure.
+    The pipeline sends no request and returns a clear exit code, so you never get a truncated answer.
 
     ## When it fails
 
@@ -43,8 +43,8 @@
     # Over budget: {"code":1,"error":"6201 tokens exceeds limit of 4000","limit":4000,"tokens":6201}
     ```
 - name: Fetch and summarise a page
-  why: Catches oversized pages before the API call - no wasted request on a doc that won't fit in context.
-  description: Grab a URL, check token count, then summarise with an LLM.
+  why: "If the page is too long, the pipeline stops before the API call, so you do not pay for a request that cannot fit."
+  description: "Fetch a web page as markdown, check its token count, and send it to an LLM for a summary."
   steps:
     - |-
       vrk grab https://example.com \
@@ -67,7 +67,7 @@
 
     ## Variations
 
-    Fetch and extract just the links. `links --bare` prints a URL every time it appears, so `sort -u` removes the duplicates:
+    Fetch a page and extract only the links. `links --bare` prints a URL every time it appears, so `sort -u` removes the duplicates:
 
     ```bash
     vrk grab https://example.com | vrk links --bare | sort -u
@@ -79,8 +79,8 @@
     vrk grab https://example.com | vrk plain | vrk tok
     ```
 - name: Chunked RAG pipeline
-  why: Keeps every chunk within the embedding model's token limit - no silent truncation during indexing.
-  description: Split a document into chunks and store each for retrieval.
+  why: "Each chunk stays within the token limit of the embedding model, so indexing does not truncate text silently."
+  description: "Split a document into token-sized chunks and store each chunk in kv under a document ID."
   steps:
     - DOC_ID=$(vrk uuid)
     - |-
@@ -118,8 +118,8 @@
 
     The `--overlap` flag controls how many tokens from the end of one chunk appear at the start of the next. This matters for retrieval quality - without overlap, a query that spans a chunk boundary might miss relevant content.
 - name: Retry flaky API call
-  why: Transient 500s don't kill the pipeline - coax retries with backoff so one bad request doesn't stop the run.
-  description: Wrap an LLM prompt in coax for exponential backoff retries.
+  why: "A transient 500 does not stop the run, because coax retries the call with backoff."
+  description: "Retry an LLM call with exponential backoff, and fail the attempt when the response does not match a schema."
   steps:
     - |-
       vrk coax --times 3 --backoff exp:1s --on 1 \
@@ -162,8 +162,8 @@
         | vrk validate --schema "{\"summary\":\"string\"}" --strict'
     ```
 - name: SSE stream to text
-  why: Raw SSE is unusable without parsing - sse extracts the content field so downstream tools get clean text, not protocol framing.
-  description: Parse an SSE stream and extract text tokens.
+  why: "Raw SSE has protocol framing that other tools cannot read, so sse extracts the text field and prints clean text."
+  description: "Parse a Server-Sent Events stream from an LLM API and print the streamed text."
   steps:
     - |-
       curl -sN $API \
@@ -216,8 +216,8 @@
     curl -sN $API | vrk sse --event content_block_delta | wc -l
     ```
 - name: JWT-based key lookup
-  why: Ties storage to identity without custom parsing - the JWT carries the key, so the lookup stays stateless and auditable.
-  description: Extract a claim from a JWT and use it as a kv key.
+  why: "The JWT carries the key, so the lookup needs no custom parsing and no extra state."
+  description: "Read the sub claim from a JWT and use it as a key to look up data in kv."
   steps:
     - SUB=$(vrk jwt --claim sub "$TOKEN")
     - vrk kv get "user:$SUB"
@@ -233,7 +233,7 @@
 
     `vrk jwt --claim sub` decodes the JWT (without verification - this is for reading claims, not authentication) and prints the value of the `sub` claim. That value becomes the key for a `vrk kv get` lookup.
 
-    No JSON parsing. No base64 decoding. No splitting on dots. One command extracts exactly the field you need.
+    One command extracts the field you need. You do not parse JSON, decode base64, or split on dots.
 
     ## Variations
 
@@ -254,8 +254,8 @@
     vrk jwt "$TOKEN"
     ```
 - name: Scrub secrets from LLM output
-  why: Catches secrets the model echoes back before they reach storage - one leaked API key in kv is a breach.
-  description: Mask any accidentally leaked secrets before storing a result.
+  why: "A model can echo a secret back, and mask removes it before it reaches storage."
+  description: "Redact secrets from an LLM response before the pipeline stores it in kv."
   steps:
     - |-
       vrk prompt --system "summarise this" < doc.txt \
@@ -270,7 +270,7 @@
 
     LLMs echo things back. If your input contains an API key, a password, or a bearer token, the model might include it in the response. If that response goes into a key-value store, a log file, or a downstream API, you've leaked a secret.
 
-    This is not hypothetical. Models trained on code regularly reproduce credential patterns. If you feed deployment logs into an LLM for analysis, any secrets in those logs can appear in the output.
+    Models trained on code regularly reproduce credential patterns. If you feed deployment logs into an LLM for analysis, any secrets in those logs can appear in the output.
 
     ## How the pipeline works
 
@@ -286,8 +286,8 @@
     cat deploy.log | vrk mask | vrk prompt --system "What errors occurred?" | vrk mask | vrk kv set analysis
     ```
 - name: Batch LLM with rate limiting
-  why: Prevents failure at job 847 of 10,000 - throttle paces filenames so each API call respects the rate limit.
-  description: Process a large document set without hitting API rate limits. Safe to rerun.
+  why: "throttle releases filenames at a fixed rate, so each API call stays inside the rate limit."
+  description: "Process a large set of documents at a fixed request rate, with a token check and stored results, so you can rerun it safely."
   steps:
     - |-
       ls docs/*.md | vrk throttle --rate 60/m \
@@ -334,8 +334,8 @@
 
     If the script crashes at document 5,000, restart it. The first 4,999 documents are already in kv and get skipped in milliseconds.
 - name: Validate LLM output before it propagates
-  why: Bad structured output exits 1 before reaching downstream systems - you catch schema drift at the source, not in production.
-  description: Gate the pipeline on schema correctness. Exit 1 on mismatch stops the next stage from running.
+  why: "A bad structured response exits 1 before it reaches downstream systems, so you catch schema drift at the source."
+  description: "Check the LLM response against a schema and exit 1 on a mismatch, so the next stage does not run."
   steps:
     - |-
       cat doc.txt \
@@ -357,7 +357,7 @@
 
     `vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against a flat schema. It checks top-level keys and their types, nothing deeper. If the response matches, the data passes through. If not, `--strict` makes `vrk validate` exit 1 with no output, so `vrk kv set` gets nothing to store, exits 2 with `kv set: no value`, and the key is never written. Without `--strict`, a bad line is only warned about on stderr.
 
-    No bad data reaches storage. No downstream code processes an invalid response.
+    A bad response never reaches storage, and no downstream code sees it.
 
     ## The schema
 
@@ -382,8 +382,8 @@
 
     If the API call or the validation fails (exit 1), `vrk coax` retries the entire sub-pipeline up to 3 times with exponential backoff. `set -o pipefail` is what lets a failed API call reach coax: without it the pipeline exits with validate's status, and validate exits 0 on empty input.
 - name: Agent-safe pipeline with secret masking
-  why: When agents handle user data, mask before any logging or storage - secrets should never reach an LLM or a kv store unredacted.
-  description: Full guard pipeline - mask secrets, gate on token budget, prompt, validate output.
+  why: "If an agent handles user data, mask it first, so secrets never reach the LLM or the kv store."
+  description: "Mask secrets, check the token budget, call the LLM, and validate the response in one pipeline."
   steps:
     - |-
       cat user-input.txt \
@@ -412,7 +412,7 @@
     3. `vrk prompt` - sends the cleaned, size-checked input to the LLM.
     4. `vrk validate --schema summary.json --strict` - checks that the LLM's response has the keys and types in your flat schema. With `--strict`, a bad response exits 1.
 
-    If any step fails, the pipeline stops. No partial results, no bad data downstream.
+    If any step fails, the pipeline stops, and no partial result goes downstream.
 
     ## When to use this pattern
 
@@ -431,8 +431,8 @@
       | vrk validate --schema summary.json --strict
     ```
 - name: Cache LLM response
-  why: Avoids duplicate API calls for identical prompts - the content hash keys the cache so reruns are free.
-  description: Hash the input, look it up in kv, call the model only on a miss.
+  why: "The content hash is the cache key, so a rerun with the same input makes no API call."
+  description: "Hash the input, look the hash up in kv, and call the model only if no answer is stored."
   steps:
     - K="llm:$(vrk digest --bare < doc.txt)"
     - |-
@@ -475,8 +475,8 @@
 
     `vrk kv` is a SQLite-backed key-value store on disk. No Redis, no external service. The cache survives restarts and reruns. A lookup takes microseconds, an API call takes seconds. Add `--ttl 24h` to `kv set` if you want entries to expire.
 - name: Repo token map
-  why: Shows which files blow your context window before you paste them into a prompt.
-  description: Count tokens for every source file and list the biggest ones first.
+  why: "You see which files are too big for your context window before you paste them into a prompt."
+  description: "Count the tokens in every source file and list the biggest files first."
   steps:
     - |-
       find . -name '*.go' ! -name '*_test.go' \
@@ -487,7 +487,7 @@
   detail: |
     ## The problem
 
-    You want to hand a model part of a codebase. You do not know which files are cheap and which ones eat half the window. Guessing from file size is bad. A 40 KB generated file and a 40 KB hand-written file do not tokenise the same.
+    You want to hand a model part of a codebase. You do not know which files are cheap and which ones eat half the window. File size is a poor guide. A 40 KB generated file and a 40 KB hand-written file do not tokenise the same.
 
     ## How the pipeline works
 
@@ -514,8 +514,8 @@
 
     Each `vrk tok` call is a separate process, one per file. On a repo with thousands of files that adds up. Counting a typical source file takes about 25 ms.
 - name: Preview LLM request
-  why: You see the exact request, masked and complete, before any money or secrets leave the machine.
-  description: Add --explain to vrk prompt to print the request instead of sending it.
+  why: "You see the exact request, after masking, before any money or secrets leave your machine."
+  description: "Add --explain to vrk prompt to print the request as a curl command instead of sending it."
   steps:
     - cat deploy.log | vrk mask | vrk prompt --system "What failed?" --explain
   tags:
@@ -551,8 +551,8 @@
 
     Use it the first time you wire up a pipeline, when you change the system prompt, and in CI to check that masking is still in the path. `--explain` also works with `--schema`, so you can see what the schema turns into for each provider.
 - name: Daily token budget
-  why: A runaway loop cannot burn through your API budget, because the counter says no.
-  description: Count tokens into a kv key named after today's date, then gate the call with assert.
+  why: "The counter refuses the call once the daily limit is reached, so a runaway loop cannot use up your API budget."
+  description: "Add each prompt's token count to a kv counter named after today's date, and use assert to stop the call when the total is over the limit."
   steps:
     - DAY=$(date +%F)
     - N=$(vrk tok < prompt.txt)
@@ -594,8 +594,8 @@
 
     As written, only prompt tokens, counted by `vrk tok` before the call. Replies are not in the total. To include them, run `vrk prompt --json`, read `response_tokens` from the envelope, and add that to the same counter with a second `vrk kv incr --by`. The tokenizer is an estimate for non-OpenAI models, so set the limit a little under your real one.
 - name: Reproducible eval sample
-  why: Two eval runs see the same prompts, so a score change comes from your change and not from the sample.
-  description: Sample 50 lines from a JSONL file with a fixed seed.
+  why: "Two eval runs see the same prompts, so a score change comes from your change and not from the sample."
+  description: "Sample 50 lines from a JSONL file with a fixed seed."
   steps:
     - vrk sip --count 50 --seed 7 < prompts.jsonl
   tags:
@@ -628,8 +628,8 @@
 
     `--json` adds a trailer record with the counts, so scripts can confirm they got 50 lines.
 - name: Page change detector
-  why: You get told when a page changes, with no scraper, no database and no diff tool.
-  description: Hash the page text and compare it with the hash stored on the last run.
+  why: "You find out when a page changes, and you need no scraper, database, or diff tool."
+  description: "Hash the text of a web page and compare it with the hash stored on the last run."
   steps:
     - |-
       NEW=$(VRK_ALLOW_INTERNAL=1 vrk grab --text --allow-internal http://localhost:8099/pricing.html | vrk digest --bare)
@@ -678,8 +678,8 @@
 
     `grab` does not run JavaScript. A page that builds its content in the browser gives you an empty or partial text, and the hash will not move when the real content does.
 - name: Structured secret-free logs
-  why: Plain script output becomes searchable JSON logs, and the secrets never reach the log file.
-  description: Mask the output of a script, then wrap each line as a JSON record with a level and a tag.
+  why: "Plain script output becomes searchable JSON logs, and secrets never reach the log file."
+  description: "Mask secrets in the output of a script, then wrap each line in a JSON record with a level and a tag."
   steps:
     - ./deploy.sh 2>&1 | vrk mask | vrk emit --tag deploy --parse-level
   tags:
@@ -718,8 +718,8 @@
     ./deploy.sh 2>&1 | vrk mask | vrk emit --tag deploy --parse-level >> deploy.jsonl
     ```
 - name: Diff review budget
-  why: A huge diff fails fast and cheap, instead of getting cut off halfway through the review.
-  description: Gate a git diff on token count before it goes to the model.
+  why: "A diff that is too big fails fast and cheap, instead of being cut off halfway through the review."
+  description: "Check the token count of a git diff, then send it to the model for review only if it fits."
   steps:
     - git diff main | vrk tok --check 20000 | vrk prompt --system "Review this diff"
   tags:

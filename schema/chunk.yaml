@@ -1,10 +1,10 @@
 name: chunk
 tagline: token-aware text splitter - JSONL chunks within a token budget
-meta_description: "Split text into token-aware chunks that fit LLM context windows. JSONL output, never splits a character."
-meta_lead: "vrk chunk splits text into token-counted pieces that fit within an LLM context window."
+meta_description: "vrk chunk splits text into chunks that fit a token budget and writes each one as a JSONL record. It never splits inside a character."
+meta_lead: "vrk chunk splits text into token-counted pieces that fit in an LLM context window."
 og_title: "vrk chunk - token-aware text splitter for LLM context windows"
 description: |
-  `vrk chunk` splits text into token-counted pieces that fit within an LLM context window. Each chunk is emitted as a JSONL record with its index, text, and exact token count. Configurable overlap preserves context at boundaries so entities that span a split point appear in both adjacent chunks.
+  `vrk chunk` splits text into token-counted pieces that fit within an LLM context window. Each chunk is emitted as a JSONL record with its index, text, and exact token count. Use `--overlap` to repeat tokens at each boundary, so an entity that spans a split point appears in both adjacent chunks.
 problem: >
   A 38,000-token document needs to go through a model with an 8,192-token window.
   `split -l 100` divides by line count, which has no relationship to tokens. One

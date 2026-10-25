@@ -1,7 +1,7 @@
 ---
 title: "vrk pdf"
-description: "Extract the text layer from a PDF. Markdown or plain text with form feeds between pages, or one JSONL record per page. No OCR, no Python."
-meta_lead: "vrk pdf reads a PDF from a file path or stdin and writes its text layer to stdout, pages separated by form feeds or as one JSONL record per page."
+description: "vrk pdf extracts the text layer of a PDF as Markdown or plain text, or as one JSONL record per page. It does no OCR and needs no Python."
+meta_lead: "vrk pdf reads a PDF from a file path or stdin and writes its text layer to stdout."
 og_title: "vrk pdf - extract text from PDFs for AI pipelines"
 tool: pdf
 group: v1
@@ -11,7 +11,7 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-vrk pdf reads a PDF from a file path or stdin and writes its text layer to stdout, pages separated by form feeds or as one JSONL record per page.
+vrk pdf reads a PDF from a file path or stdin and writes its text layer to stdout.
 
 ## The problem
 
@@ -19,7 +19,7 @@ Getting text out of a PDF usually means installing poppler for `pdftotext` or a 
 
 ## The solution
 
-`vrk pdf` extracts the text layer of a PDF. Markdown by default (headings from font size and weight, bullet lists, tables, paragraphs; running headers, page numbers and line-end hyphens cleaned up), `--text` for plain text, with a form feed (`\f`) between pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. `--pages` selects pages like `3`, `2-5`, `4-` or `1,3,5-7`. Scanned PDFs with no text layer exit 1 so a pipeline stops before sending empty text to a model.
+`vrk pdf` extracts the text layer of a PDF. The default output is Markdown: headings from font size and weight, bullet lists, tables, and paragraphs. It removes running headers, page numbers, and line-end hyphens. Use `--text` for plain text. A form feed (`\f`) separates the pages. `--json` emits one `{"page":N,"text":"..."}` record per page and a `{"_vrk":"pdf","count":N}` trailer. Use `--pages` to select pages, for example `3`, `2-5`, `4-` or `1,3,5-7`. If a scanned PDF has no text layer, pdf exits 1, so the pipeline stops before it sends empty text to a model.
 
 ## Before and after
 
@@ -65,6 +65,8 @@ vrk pdf --pages 1-3 report.pdf | vrk tok
 <!-- notes - edit in notes/pdf.notes.md -->
 
 ## How it works
+
+`vrk pdf` extracts the text of a PDF file and prints it as Markdown, plain text or one JSONL record per page.
 
 ### Markdown (default)
 

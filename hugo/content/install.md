@@ -1,14 +1,14 @@
 ---
 title: "Install"
-description: "Install vrksh - one command, any platform. Homebrew, go install, or shell script."
+description: "Install vrk on macOS or Linux with Homebrew, go install, or a shell script. Includes shell completions, bare mode, and uninstall steps."
 noindex: false
 ---
 
-One static binary. No runtime. No dependencies. Pick the method that fits your setup.
+vrk is one static binary with no runtime and no dependencies. Pick the install method that fits your setup.
 
 ## Homebrew (macOS and Linux)
 
-The fastest path if you already have Homebrew:
+If you already have Homebrew, use it:
 
 ```bash
 brew tap vrksh/vrksh
@@ -23,21 +23,21 @@ If you have Go 1.25+ installed:
 go install github.com/vrksh/vrksh@latest
 ```
 
-The binary lands in `$GOPATH/bin/vrk`. Make sure that's on your `$PATH`.
+Go puts the binary in `$GOPATH/bin/vrk`. Make sure that directory is in your `$PATH`.
 
 ## Shell script (CI, Docker, and ephemeral environments)
 
-One line, no package manager required:
+This needs no package manager:
 
 ```bash
 curl -fsSL vrk.sh/install.sh | sh
 ```
 
-The script detects your OS and architecture, downloads the right binary, verifies the SHA256 checksum, and installs to `/usr/local/bin/vrk` (or `~/.local/bin/vrk` if `/usr/local/bin` is not writable). Use this in Dockerfiles, CI pipelines, and fresh VMs where you don't want to install Homebrew or Go.
+The script detects your OS and architecture, downloads the right binary, and verifies the SHA256 checksum. It installs to `/usr/local/bin/vrk`, or to `~/.local/bin/vrk` if `/usr/local/bin` is not writable. Use it in Dockerfiles, CI pipelines, and fresh VMs where you do not want to install Homebrew or Go.
 
 ### Agent bootstrap
 
-If you're setting up vrk for an AI agent, use the agent script instead. It installs the binary and then prints an onboarding block the agent can read to learn how to use the tools:
+To set up vrk for an AI agent, use the agent script. It installs the binary and prints an onboarding block. The agent reads the block to learn how to use the tools:
 
 ```bash
 curl -fsSL vrk.sh/agent.sh | sh
@@ -45,17 +45,17 @@ curl -fsSL vrk.sh/agent.sh | sh
 
 ## Verify
 
-Check that everything works:
+Run this to check the install:
 
 ```bash
 vrk --manifest | jq '.tools | length'
 ```
 
 ```
-26
+28
 ```
 
-Or just run a tool:
+Or run a tool:
 
 ```bash
 echo 'hello world' | vrk tok
@@ -67,7 +67,7 @@ echo 'hello world' | vrk tok
 
 ## Shell completions
 
-Tab-complete tool names and flags. Set up once, works forever:
+Completions let you press tab to finish tool names and flags. Set them up once:
 
 ### Bash
 
@@ -93,13 +93,13 @@ After setup, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes fl
 
 ## Bare mode (optional)
 
-If you use vrk interactively and want to drop the prefix:
+If you use vrk interactively, you can drop the `vrk` prefix:
 
 ```bash
 vrk --bare
 ```
 
-Now `tok`, `jwt`, `epoch`, and every other tool works without the `vrk` prefix. See the [bare docs](/docs/bare/) for details.
+After this, `tok`, `jwt`, `epoch`, and every other tool works without the `vrk` prefix. See the [bare docs](/docs/bare/) for details.
 
 ## Uninstall
 
@@ -118,7 +118,7 @@ rm $(which vrk)
 
 ## Platforms
 
-vrk is a single static binary with no CGO. It runs anywhere Go cross-compiles to:
+vrk is a static binary with no CGO. It runs on these platforms:
 
 - **macOS** - amd64 (Intel) and arm64 (Apple Silicon)
 - **Linux** - amd64 and arm64

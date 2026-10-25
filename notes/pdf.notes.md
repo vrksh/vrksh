@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk pdf` extracts the text of a PDF file and prints it as Markdown, plain text or one JSONL record per page.
+
 ### Markdown (default)
 
 ```bash

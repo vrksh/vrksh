@@ -1,6 +1,6 @@
 ---
 title: "vrk coax"
-description: "Retry flaky commands with exponential backoff. Wrap any pipeline stage to handle transient API failures."
+description: "vrk coax retries a command with fixed or exponential backoff and replays the same stdin on every attempt. Use it for flaky API calls."
 meta_lead: "vrk coax retries a command with configurable backoff, buffering stdin so each attempt gets the same input."
 og_title: "vrk coax - retry wrapper with backoff for flaky commands"
 tool: coax
@@ -19,11 +19,11 @@ A bash retry loop around a flaky API call works until the API starts returning 5
 
 ## The solution
 
-`vrk coax` retries a command with configurable backoff. It buffers stdin so each attempt gets the same input. Fixed or exponential backoff, retry count caps, and exit-code filtering are all built in. It solves the three things bash retry loops always get wrong: stdin replay, backoff strategy, and retry limits.
+`vrk coax` retries a command with configurable backoff. It buffers stdin so each attempt gets the same input. It supports fixed or exponential backoff, a retry limit, and retry on chosen exit codes. Bash retry loops often get three things wrong: stdin replay, backoff, and retry limits.
 
 coax runs the command directly, not through a shell. For pipes or redirects, use `-- sh -c '...'`.
 
-Any other exit code is the wrapped command's own last exit code. A command killed by a signal gives 128 + the signal number.
+For any other failure, coax exits with the last exit code of the wrapped command. If a signal kills the command, the exit code is 128 plus the signal number.
 
 ## Before and after
 
@@ -73,6 +73,8 @@ echo 'Summarize this' | vrk coax --times 5 --backoff exp:200ms -- vrk prompt
 
 ## How the command runs
 
+`vrk coax` runs a command and retries it if it fails, with an optional delay between attempts.
+
 coax runs the command directly, not through a shell. For pipes or redirects, use `-- sh -c '...'`.
 
 Arguments reach the command exactly as you typed them, so quoting survives and data is never run as code:
@@ -84,7 +86,7 @@ $ vrk coax --times 1 -- echo 'x; echo INJECTED'
 x; echo INJECTED
 ```
 
-The exit code is the command's own. A command killed by a signal gives 128 plus the signal number (143 for SIGTERM). coax forwards SIGINT and SIGTERM to the running command and does not retry after it receives one.
+The exit code is the command's own. If a signal kills the command, the exit code is 128 plus the signal number (143 for SIGTERM). coax forwards SIGINT and SIGTERM to the running command and does not retry after it receives one.
 
 ### Migrating from v0.1
 
@@ -96,7 +98,7 @@ vrk coax --times 3 -- sh -c 'curl -sf https://api.example.com | jq .data'
 
 ## Stdin replay
 
-coax does not read stdin up front. The first attempt reads stdin as it needs it, and coax keeps a copy. A retry gets the saved bytes followed by any stdin the first attempt never read, so every attempt sees the same input. A command that ignores stdin starts and finishes at once, even when stdin is a pipe that never closes.
+coax does not read stdin up front. The first attempt reads stdin as it needs it, and coax keeps a copy. A retry gets the saved bytes, then any stdin the first attempt never read. So every attempt sees the same input. A command that ignores stdin starts and finishes at once, even when stdin is a pipe that never closes.
 
 coax keeps up to 64 MiB for replay. Bigger input still streams through on the first attempt, but a retry fails with `coax: stdin larger than 64 MiB cannot be replayed` (exit 1).
 
@@ -120,17 +122,17 @@ Start at 200ms, doubling each time: 200ms, 400ms, 800ms, 1600ms...
 vrk coax --times 5 --backoff exp:200ms -- curl -sf https://api.example.com/query
 ```
 
-This is the right strategy for rate-limited APIs. Early retries are fast. Later retries back off to let the rate limit window reset.
+Use this strategy for rate-limited APIs. Early retries are fast. Later retries wait longer, so the rate limit window can reset.
 
 ### Capped exponential
 
-Exponential without a cap can grow to absurd delays. Cap it with `--backoff-max`:
+Without a cap, exponential delays keep growing. Set a cap with `--backoff-max`:
 
 ```bash
 vrk coax --times 10 --backoff exp:100ms --backoff-max 30s -- curl -sf https://api.example.com
 ```
 
-Delays: 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s, 12.8s, 25.6s, 30s. The cap prevents the last retries from waiting minutes.
+Delays: 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s, 12.8s, 25.6s, 30s. The cap stops the last retries from waiting for minutes.
 
 ## Flag details
 
@@ -179,7 +181,7 @@ cat document.txt | \
     vrk prompt --system 'Summarize this document'
 ```
 
-stdin is buffered, so each retry sends the same document content.
+coax keeps a copy of stdin, so each retry sends the same document.
 
 ### Retry within a chunk-processing loop
 

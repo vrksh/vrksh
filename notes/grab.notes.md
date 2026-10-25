@@ -1,5 +1,7 @@
 ## Output formats
 
+`vrk grab` fetches a URL and prints the page as clean markdown, plain text, raw HTML, or JSON.
+
 ### Markdown (default)
 
 <!-- doccheck: skip (real network fetch) -->
@@ -26,11 +28,11 @@ Getting Started with LLM Pipelines
 Building reliable LLM pipelines requires careful attention to...
 ```
 
-No markdown syntax. Just prose. Useful when you want to minimize tokens or feed text to a tool that doesn't understand markdown.
+The output has no markdown syntax. Use it to save tokens or to feed text to a tool that does not read markdown.
 
 ### Raw HTML (--raw)
 
-The full, unprocessed HTML. Use when you need to extract specific elements yourself, or when the content extraction strips something you need.
+Prints the full, unprocessed HTML. Use it if you need to extract specific elements yourself, or if the content extraction removes something you need.
 
 ```bash
 vrk grab --raw https://example.com/blog/llm-pipelines
@@ -136,4 +138,4 @@ $ echo $?
 2
 ```
 
-A model choosing what to run can add a flag, so reaching private, loopback and link-local addresses takes both: the flag, and the variable set by whoever runs vrk. Local testing looks like `VRK_ALLOW_INTERNAL=1 vrk grab --allow-internal http://localhost:8080/`.
+A model that chooses what to run can add a flag. So to reach private, loopback and link-local addresses, you need both the flag and the variable. The person who runs vrk sets the variable. Local testing looks like `VRK_ALLOW_INTERNAL=1 vrk grab --allow-internal http://localhost:8080/`.

@@ -1,5 +1,7 @@
 ## What gets stripped
 
+`vrk plain` removes Markdown formatting from text and keeps the words, so a model reads fewer tokens.
+
 | Markdown syntax | Plain text result |
 |----------------|-------------------|
 | `**bold**` | bold |
@@ -10,7 +12,7 @@
 | `# Headers` | Header text |
 | `- bullet` | bullet |
 
-URLs in links are dropped. Code content is kept. Everything that carries meaning stays; everything that's just formatting goes.
+plain drops the URL in a link and keeps the code content. It keeps the text that carries meaning and removes the formatting.
 
 ## How it works
 
@@ -31,7 +33,7 @@ $ echo '**hello** world' | vrk plain --json
 {"text":"hello world","input_bytes":16,"output_bytes":11}
 ```
 
-Wraps the plain text in a JSON envelope with byte counts.
+The JSON envelope holds the plain text and the byte counts of the input and the output.
 
 ## Pipeline integration
 
@@ -65,9 +67,9 @@ done
 
 ## When it fails
 
-Input with more than 1000 back-to-back nesting openers (`[a](`, `- `, `> `) is not parsed as Markdown, since the parser goes quadratic on it. It comes back as plain text with only whitespace cleanup. Anything else that takes longer than 10 seconds to parse exits 1 with `plain: markdown too complex to parse within 10s`.
+If the input has more than 1000 back-to-back nesting openers (`[a](`, `- `, `> `), plain does not parse it as Markdown, because the parser slows down quadratically on it. The input comes back as plain text with only whitespace cleanup. If any other input takes more than 10 seconds to parse, plain exits 1 with `plain: markdown too complex to parse within 10s`.
 
-No input:
+If you give no input on an interactive terminal, plain exits 2:
 
 <!-- doccheck: skip (only fails on an interactive terminal, doccheck stdin is not a TTY) -->
 ```bash

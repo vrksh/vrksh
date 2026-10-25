@@ -1,10 +1,16 @@
 name: sql
 tagline: SQL over CSV or JSONL - SQLite in memory, CSV or JSONL out
-meta_description: "Run SQL over CSV files from the command line. Joins, GROUP BY and type inference in an in-memory SQLite database. CSV or JSONL out, no database to set up."
+meta_description: "vrk sql runs SQL over CSV or JSONL files in an in-memory SQLite database. It supports joins, GROUP BY, and type inference. Output is CSV or JSONL."
 meta_lead: "vrk sql loads CSV files into an in-memory SQLite database, one table per file, runs your query and writes the result as CSV or JSONL."
 og_title: "vrk sql - SQL over CSV files for AI pipelines"
 description: |
-  `vrk sql` runs a SQL query over CSV files. Each file becomes a table named after its basename (`users.csv` is `users`), or `name=file.csv` names it, and piped CSV is the table `stdin` (or `-`). Column types are inferred: INTEGER or REAL when every non-empty value is a number (`N/A` and friends load as NULL), TEXT otherwise, so `007` stays `007` and `19.90` stays `19.90`. TSV and other delimiters work with `.tsv` or `--delimiter`. JSONL works too, so the output of other vrk tools can be queried: keys become columns, `true`/`false` are 1/0, nested values stay JSON text for `json_extract`, and `{"_vrk":...}` trailers are skipped. Output is CSV with a header row, or one JSON object per row with `--json`. ATTACH is blocked, so a query can't read or write other files.
+  `vrk sql` runs a SQL query over CSV files in an in-memory SQLite database. Each file becomes a table named after its basename (`users.csv` is `users`). Use `name=file.csv` to choose the table name. Piped CSV is the table `stdin` (or `-`).
+
+  vrk sql infers the column types. A column is INTEGER or REAL when every non-empty value is a number (`N/A` and similar values load as NULL). Otherwise the column is TEXT, so `007` stays `007` and `19.90` stays `19.90`. TSV and other delimiters work with a `.tsv` file name or `--delimiter`.
+
+  JSONL input works too, so you can query the output of other vrk tools. Keys become columns, `true` and `false` become 1 and 0, nested values stay JSON text for `json_extract`, and `{"_vrk":...}` trailers are skipped.
+
+  The output is CSV with a header row, or one JSON object per row with `--json`. ATTACH is blocked, so a query cannot read or write other files.
 problem: >
   Joining two CSVs or filtering one by a numeric column means a Python script,
   a pandas install, or importing into a database by hand. sqlite3's `.import`
