@@ -10,6 +10,64 @@ import (
 	"testing"
 )
 
+// A second JSON value on a line, or a non-object, must not pass the gate.
+func TestTrailingJSONAndNonObjectsInvalid(t *testing.T) {
+	for _, in := range []string{
+		`{"name":"a"} {"name":1,"admin":true}`,
+		`{"name":"a"}{"name":1}`,
+		`{"name":"a"}garbage`,
+		`null`,
+		`[1,2]`,
+		`"str"`,
+	} {
+		stdout, _, code := runValidate(t, in+"\n", []string{"--schema", `{"name":"string"}`, "--strict"})
+		if code != 1 {
+			t.Errorf("%s: exit %d, want 1", in, code)
+		}
+		if stdout != "" {
+			t.Errorf("%s: stdout %q, want empty", in, stdout)
+		}
+	}
+	// --schema '{}' used to let null through.
+	stdout, _, code := runValidate(t, "null\n", []string{"--schema", `{}`, "--strict"})
+	if code != 1 || stdout != "" {
+		t.Errorf("null with empty schema: code=%d stdout=%q", code, stdout)
+	}
+}
+
+// A schema file with bad type values must not have those values echoed: it
+// may be a secrets file passed by mistake.
+func TestSchemaErrorDoesNotEchoValues(t *testing.T) {
+	path := t.TempDir() + "/secrets.json"
+	if err := os.WriteFile(path, []byte(`{"OPENAI_API_KEY":"sk-fake-0000000000000000000000"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := runValidate(t, "{}\n", []string{"--schema", path})
+	if code != 2 {
+		t.Errorf("exit %d, want 2", code)
+	}
+	if strings.Contains(stdout+stderr, "sk-fake") {
+		t.Errorf("schema value echoed: stdout=%q stderr=%q", stdout, stderr)
+	}
+
+	long := strings.Repeat("k", 500)
+	_, stderr, _ = runValidate(t, "{}\n", []string{"--schema", `{"` + long + `":"nope"}`})
+	if strings.Contains(stderr, long) {
+		t.Errorf("long key not truncated: %d bytes of stderr", len(stderr))
+	}
+}
+
+func TestSchemaFileSizeCapped(t *testing.T) {
+	path := t.TempDir() + "/big.json"
+	if err := os.WriteFile(path, []byte(`{"a":"string","pad":"`+strings.Repeat("x", 2<<20)+`"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code := runValidate(t, "{}\n", []string{"--schema", path})
+	if code != 2 || !strings.Contains(stderr, "cannot read schema file") {
+		t.Errorf("code=%d stderr=%q", code, stderr)
+	}
+}
+
 // runValidate replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and
 // returns captured stdout, stderr, and exit code. Restores all globals via
 // t.Cleanup. Do not call t.Parallel() — tests share os.Stdin/Stdout/Stderr

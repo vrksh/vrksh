@@ -353,6 +353,19 @@ rc=$?
 assert_exit "pipeline composition" 0 "$rc"
 assert_stdout_equals "pipeline data flows" '{"confidence":0.9}' "$got"
 
+echo ""
+echo "--- 21. Gate fails closed ---"
+
+rc=0; got=$(echo '{"ok":true}{"ok":false,"cmd":"rm -rf"}' | "$VRK" assert '.ok == true' 2>/dev/null) || rc=$?
+assert_exit "trailing JSON value" 1 "$rc"
+assert_stdout_empty "trailing JSON value" "$got"
+
+rc=0; printf '' | "$VRK" assert '.ok == true' 2>/dev/null || rc=$?
+assert_exit "empty input" 1 "$rc"
+
+rc=0; echo '{}' | timeout 10 "$VRK" assert 'last(range(1e18))' 2>/dev/null || rc=$?
+assert_exit "runaway condition times out" 1 "$rc"
+
 # ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------

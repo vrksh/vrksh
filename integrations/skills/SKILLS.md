@@ -1384,6 +1384,9 @@ done
 - **Schema is a subset check** — extra keys in a record are not an error. Only keys declared in the schema are validated.
 - **Large integers are safe** — records are decoded with `UseNumber()` so integers above 2^53 retain full precision.
 - **Empty lines in the stream are skipped** — they do not count toward `total`.
+- **One JSON object per line** - a line with a second value after the first (`{"a":1} {"a":2}`) is invalid, and so is a line that is valid JSON but not an object (`null`, `[]`, `"x"`).
+- **Schema errors don't echo values** - an unknown type names the key only, so pointing `--schema` at a secrets file by mistake does not print the secrets. A `--schema` file is capped at 1 MB.
+- **`--strict` on zero records exits 0** - empty input is not a failure for validate. Gate with `vrk assert` if you need at least one record.
 
 ---
 
@@ -2416,7 +2419,7 @@ mutually exclusive with positional jq conditions.
 | Code | Meaning |
 |------|---------|
 | 0 | Assertion passed — stdin passed through byte-for-byte |
-| 1 | Assertion failed, JSON parse error, or I/O error |
+| 1 | Assertion failed, JSON parse error, empty input in JSON mode, condition timed out, or I/O error |
 | 2 | Usage error — no condition, no stdin, mode conflict, invalid regex |
 
 ### Examples
@@ -2474,6 +2477,7 @@ echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set last_result
 | Pass (JSON mode) | `{"passed":true,"condition":"<expr>","input":<parsed>}` |
 | Fail (JSON mode) | `{"passed":false,"condition":"<expr>","input":<parsed>}` |
 | Fail with --message | adds `"message":"<msg>"` to the fail object |
+| Fail with a reason (empty input, timeout, eval error) | adds `"error":"<reason>"` to the fail object |
 | Pass (plain text) | `{"passed":true,"condition":"--contains: <str>"}` |
 | Fail (plain text) | `{"passed":false,"condition":"--contains: <str>","message":"..."}` |
 | Error | `{"error":"assert: ...","code":2}` |
@@ -2488,6 +2492,9 @@ echo '{"score":0.9}' | vrk assert '.score > 0.8' | vrk kv set last_result
 - **`.field > 0` on a missing field** — compares `null > 0` which is false. Check for presence first if the field may be absent.
 - **`--quiet` suppresses stderr only** — it does not suppress `--json` output (which goes to stdout).
 - **`--json` fail: `message` field omitted when `--message` not set** — only included when explicitly provided via `--message`.
+- **One JSON value per line** - `{"ok":true}{"ok":false}` on one line is a parse error (exit 1), not a pass on the first value.
+- **Empty input fails** - with a jq condition and no JSON records on stdin, assert exits 1. A gate with nothing to check does not pass.
+- **Conditions time out after 5s** - a runaway expression like `last(range(1e18))` exits 1 with `condition timed out after 5s`. Memory is not capped, so don't feed it untrusted conditions.
 
 ---
 

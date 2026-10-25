@@ -145,3 +145,23 @@ usage error: assert: a condition expression is required
 $ echo $?
 2
 ```
+
+Empty input with a JSON condition fails. A gate with nothing to check does not pass:
+
+```bash
+$ printf '' | vrk assert '.ok == true'
+error: assert: no JSON records on stdin
+$ echo $?
+1
+```
+
+Each line must hold exactly one JSON value. A second value on the same line is a parse error, not a pass on the first:
+
+```bash
+$ echo '{"a":1} {"a":2}' | vrk assert '.a == 1'
+assert: input is not valid JSON
+$ echo $?
+1
+```
+
+A condition that runs longer than 5 seconds is stopped and the assertion fails with `condition timed out after 5s`.

@@ -184,7 +184,7 @@ A `--schema` value that is not a JSON object is treated as a schema file path:
 
 ```bash
 $ cat data.jsonl | vrk validate --schema 'not json'
-usage error: validate: cannot read schema file: open not json: no such file or directory
+usage error: validate: cannot read schema file: stat not json: no such file or directory
 $ echo $?
 2
 ```
@@ -194,6 +194,15 @@ Strict mode on invalid record:
 ```bash
 $ printf '{"name":"Alice"}\n' | vrk validate --schema '{"name":"string","age":"number"}' --strict
 error: validate: line 1: age is missing
+$ echo $?
+1
+```
+
+A record must be a single JSON object. `null`, arrays, scalars and lines with a second value after the first are all invalid:
+
+```bash
+$ echo 'null' | vrk validate --schema '{"a":"number"}' --strict
+error: validate: line 1: line is not a JSON object
 $ echo $?
 1
 ```
