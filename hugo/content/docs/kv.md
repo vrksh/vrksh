@@ -161,6 +161,12 @@ vrk kv get --ns cache response
 # error: kv get: key not found
 ```
 
+A sub-second TTL rounds up to one second. A negative TTL is a usage error.
+
+### Database file safety
+
+kv creates the database as `0600`, tightens an existing file to `0600`, and refuses a symlink or a file owned by another user. Point `VRK_KV_PATH` at the real file, not a link.
+
 ### --dry-run
 
 Shows what `set` would do without writing:
