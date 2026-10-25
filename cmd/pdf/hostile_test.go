@@ -166,3 +166,24 @@ func TestControlChars(t *testing.T) {
 		t.Errorf("short: %q", got)
 	}
 }
+
+// Text drawn with render mode 3 or 7 (Tr) is invisible in a viewer, the usual
+// way to hide a prompt injection in a harmless-looking document. It's dropped.
+func TestInvisibleText(t *testing.T) {
+	stdout, stderr, code, _ := runHostile(t, "invisible.pdf", "--text")
+	if code != 0 || stdout != "Quarterly report.\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+	// Mode 7 hides too; 2 (fill and stroke) shows, and q/Q restores the mode.
+	data := writePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+		stream("", "BT /F1 12 Tf 72 720 Td 2 Tr (shown) Tj q 7 Tr ( hidden) Tj Q ( again) Tj ET"),
+	}, "")
+	stdout, stderr, code = runPdf(t, []string{"--text"}, data)
+	if code != 0 || stdout != "shown again\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}

@@ -195,6 +195,7 @@ type textState struct {
 	ctm, tm, tlm               matrix
 	font                       *font
 	tfs, th, tc, tw, tl, trise float64
+	render                     int64 // Tr; 3 and 7 draw nothing a reader can see
 }
 
 // walker interprets content streams and collects the glyphs that land
@@ -297,6 +298,11 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 			st.tm = translate(tx*st.th, 0).mul(st.tm)
 			end := scale.mul(st.tm).mul(st.ctm)
 
+			// Invisible text (Tr 3, or 7: clip only) is how a prompt
+			// injection hides in a document that looks harmless.
+			if st.render == 3 || st.render == 7 {
+				continue
+			}
 			x, y := start[4], start[5]
 			// Text outside the page box (printer's marks, proof slugs) isn't
 			// on the page. A couple of points of slack for rounding.
@@ -366,6 +372,8 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 			st.th = num(0) / 100
 		case op == "Ts" && len(args) == 1:
 			st.trise = num(0)
+		case op == "Tr" && len(args) == 1:
+			st.render = args[0].Int64()
 		case op == "Tf" && len(args) == 2:
 			name := args[0].Name()
 			fv := res.Key("Font").Key(name)
