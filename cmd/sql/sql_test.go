@@ -927,16 +927,60 @@ func TestPaddedNumbers(t *testing.T) {
 	}
 }
 
-func TestJSONInputRejected(t *testing.T) {
-	for _, in := range []string{"{\"a\":1}\n{\"a\":2}\n", "[{\"a\":1}]\n"} {
-		out, errOut, code := runSql(t, []string{"SELECT * FROM stdin"}, in)
-		if code != 1 || out != "" || !strings.Contains(errOut, "is JSON, not CSV") {
-			t.Errorf("%q: exit %d stdout %q stderr %q", in, code, out, errOut)
+func TestJSONLInput(t *testing.T) {
+	in := `{"id":1,"name":"ana","ok":true,"tags":["a","b"],"n":null}
+{"id":2,"name":"bo","ok":false,"extra":"x"}
+{"_vrk":"emit","count":2}
+`
+	out, errOut, code := runSql(t, []string{"SELECT * FROM stdin"}, in)
+	want := "id,name,ok,tags,n,extra\n1,ana,1,\"[\"\"a\"\",\"\"b\"\"]\",,\n2,bo,0,,,x\n"
+	if code != 0 || out != want {
+		t.Errorf("exit %d stdout %q stderr %q, want %q", code, out, errOut, want)
+	}
+	out, _, code = runSql(t, []string{"SELECT sum(id) FROM stdin WHERE ok"}, in)
+	if code != 0 || out != "sum(id)\n1\n" {
+		t.Errorf("bool filter: exit %d stdout %q", code, out)
+	}
+	out, _, code = runSql(t, []string{"SELECT json_extract(tags, '$[1]') AS t FROM stdin WHERE id = 1"}, in)
+	if code != 0 || out != "t\nb\n" {
+		t.Errorf("nested: exit %d stdout %q", code, out)
+	}
+}
+
+func TestJSONArrayAndFile(t *testing.T) {
+	f := writeCSV(t, t.TempDir(), "events.jsonl", `[{"a":1.5},{"a":2}]`)
+	out, errOut, code := runSql(t, []string{"SELECT sum(a) FROM events", f}, "")
+	if code != 0 || out != "sum(a)\n3.5\n" {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestJSONLErrors(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"{\"a\":1}\n{\"a\":\n", "line 2: record cut off"},
+		{"{\"a\":1}\n42\n", "line 2: want an object"},
+	}
+	for _, c := range cases {
+		out, errOut, code := runSql(t, []string{"SELECT * FROM stdin"}, c.in)
+		if code != 1 || out != "" || !strings.Contains(errOut, c.want) {
+			t.Errorf("%q: exit %d stdout %q stderr %q, want %q", c.in, code, out, errOut, c.want)
 		}
 	}
-	// A CSV cell that happens to be a JSON object is still CSV.
-	out, _, code := runSql(t, []string{"SELECT count(*) FROM stdin"}, "payload\n\"{\"\"a\"\":1}\"\n")
+	// Only a trailer means nothing matched upstream: like empty stdin, exit 0.
+	for _, args := range [][]string{{"SELECT count(*) FROM stdin"}, {"--json", "SELECT * FROM stdin"}} {
+		out, errOut, code := runSql(t, args, "{\"_vrk\":\"emit\",\"count\":0}\n")
+		if code != 0 || out != "" || errOut != "" {
+			t.Errorf("%v trailer only: exit %d stdout %q stderr %q", args, code, out, errOut)
+		}
+	}
+	f := writeCSV(t, t.TempDir(), "none.jsonl", "{\"_vrk\":\"emit\",\"count\":0}\n")
+	out, errOut, code := runSql(t, []string{"SELECT * FROM none JOIN users USING (id)", f, usersFile(t)}, "")
+	if code != 0 || out != "" || errOut != "" {
+		t.Errorf("trailer-only file: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	// A CSV header that starts with a bracket is still CSV.
+	out, _, code = runSql(t, []string{"SELECT count(*) FROM stdin"}, "[id],x\n1,2\n")
 	if code != 0 || out != "count(*)\n1\n" {
-		t.Errorf("exit %d stdout %q", code, out)
+		t.Errorf("bracket header: exit %d stdout %q", code, out)
 	}
 }

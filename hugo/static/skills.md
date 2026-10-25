@@ -414,7 +414,7 @@ Exit 2: Interactive TTY with no stdin
 echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
 ```
 
-## sql - SQL over CSV files - SQLite in memory, CSV or JSONL out
+## sql - SQL over CSV or JSONL - SQLite in memory, CSV or JSONL out
 
 | Flag          | Short | Description                                                            |
 |---------------|-------|------------------------------------------------------------------------|

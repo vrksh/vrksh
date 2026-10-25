@@ -68,6 +68,22 @@ b
 2
 ```
 
+### JSONL in
+
+JSONL works as input too, so you can query what other vrk tools print. Keys become columns in the order they first appear. A missing key or `null` is NULL, `true` and `false` are 1 and 0, and nested objects and arrays stay JSON text for `json_extract`. The `{"_vrk":...}` trailer that `--json` adds is skipped. If the trailer is all there is, because the tool upstream found nothing, it's treated like empty stdin: no output, exit 0.
+
+```bash
+$ printf '{"id":1,"ok":true,"tags":["a","b"]}\n{"id":2,"ok":false}\n' | vrk sql "SELECT id, json_extract(tags, '\$[0]') AS tag FROM stdin WHERE ok"
+id,tag
+1,a
+```
+
+```bash
+$ vrk pdf --json report.pdf | vrk sql 'SELECT page, length(text) AS chars FROM stdin ORDER BY chars DESC LIMIT 1'
+page,chars
+2,29
+```
+
 ### JSONL out (--json)
 
 ```bash

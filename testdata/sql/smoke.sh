@@ -202,6 +202,17 @@ assert_exit "empty stdin" 0
 assert_eq "empty stdin: no output" "" "$stdout"
 assert_eq "empty stdin: no stderr" "" "$stderr"
 
+printf '{"id":1,"ok":true}\n{"id":2,"ok":false}\n{"_vrk":"emit","count":2}\n' > "$TMP/in.jsonl"
+run "$TMP/in.jsonl" 'SELECT id FROM stdin WHERE ok'
+assert_exit "jsonl stdin" 0
+assert_eq "jsonl stdin: bool filter, trailer skipped" "id
+1" "$stdout"
+
+printf '{"a":1}\n{"a":\n' > "$TMP/bad.jsonl"
+run "$TMP/bad.jsonl" 'SELECT * FROM stdin'
+assert_exit "jsonl cut off" 1
+assert_contains "jsonl cut off: names the line" "line 2" "$stderr"
+
 run /dev/null --help
 assert_exit "--help" 0
 assert_contains "--help: names the tool" "vrk sql" "$stdout"

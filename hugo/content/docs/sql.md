@@ -19,7 +19,7 @@ Joining two CSVs or filtering one by a numeric column means a Python script, a p
 
 ## The solution
 
-`vrk sql` runs a SQL query over CSV files. Each file becomes a table named after its basename (`users.csv` is `users`), or `name=file.csv` names it, and piped CSV is the table `stdin` (or `-`). Column types are inferred: INTEGER or REAL when every non-empty value is a number (`N/A` and friends load as NULL), TEXT otherwise, so `007` stays `007` and `19.90` stays `19.90`. TSV and other delimiters work with `.tsv` or `--delimiter`. Output is CSV with a header row, or one JSON object per row with `--json`. ATTACH is blocked, so a query can't read or write other files.
+`vrk sql` runs a SQL query over CSV files. Each file becomes a table named after its basename (`users.csv` is `users`), or `name=file.csv` names it, and piped CSV is the table `stdin` (or `-`). Column types are inferred: INTEGER or REAL when every non-empty value is a number (`N/A` and friends load as NULL), TEXT otherwise, so `007` stays `007` and `19.90` stays `19.90`. TSV and other delimiters work with `.tsv` or `--delimiter`. JSONL works too, so the output of other vrk tools can be queried: keys become columns, `true`/`false` are 1/0, nested values stay JSON text for `json_extract`, and `{"_vrk":...}` trailers are skipped. Output is CSV with a header row, or one JSON object per row with `--json`. ATTACH is blocked, so a query can't read or write other files.
 
 ## Before and after
 
@@ -133,6 +133,22 @@ Files ending in `.tsv` are read as tab-separated. For anything else, `--delimite
 $ printf 'a;b\n1;2\n' | vrk sql -d ';' 'SELECT b FROM stdin'
 b
 2
+```
+
+### JSONL in
+
+JSONL works as input too, so you can query what other vrk tools print. Keys become columns in the order they first appear. A missing key or `null` is NULL, `true` and `false` are 1 and 0, and nested objects and arrays stay JSON text for `json_extract`. The `{"_vrk":...}` trailer that `--json` adds is skipped. If the trailer is all there is, because the tool upstream found nothing, it's treated like empty stdin: no output, exit 0.
+
+```bash
+$ printf '{"id":1,"ok":true,"tags":["a","b"]}\n{"id":2,"ok":false}\n' | vrk sql "SELECT id, json_extract(tags, '\$[0]') AS tag FROM stdin WHERE ok"
+id,tag
+1,a
+```
+
+```bash
+$ vrk pdf --json report.pdf | vrk sql 'SELECT page, length(text) AS chars FROM stdin ORDER BY chars DESC LIMIT 1'
+page,chars
+2,29
 ```
 
 ### JSONL out (--json)

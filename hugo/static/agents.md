@@ -27,7 +27,7 @@ One binary: `vrk`. Unix tools for AI pipelines.
 | `recase`      | naming convention converter - snake, camel, kebab, pascal, title   |
 | `sip`         | stream sampler - --first, --count, --every, --sample               |
 | `slug`        | URL/filename slug generator - --separator, --max, --json           |
-| `sql`         | SQL over CSV files - SQLite in memory, CSV or JSONL out            |
+| `sql`         | SQL over CSV or JSONL - SQLite in memory, CSV or JSONL out         |
 | `sse`         | SSE stream parser - text/event-stream to JSONL                     |
 | `throttle`    | rate limiter for pipes - --rate N/s or N/m                         |
 | `tok`         | Count tokens. Gate pipelines before they fail.                     |

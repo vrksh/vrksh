@@ -95,7 +95,7 @@
     },
     {
       "name": "sql",
-      "description": "SQL over CSV files - SQLite in memory, CSV or JSONL out"
+      "description": "SQL over CSV or JSONL - SQLite in memory, CSV or JSONL out"
     },
     {
       "name": "pct",

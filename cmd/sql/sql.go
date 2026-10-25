@@ -1,4 +1,4 @@
-// Package sql implements vrk sql - SQL over CSV files.
+// Package sql implements vrk sql - SQL over CSV and JSONL files.
 // Each CSV file becomes a table in an in-memory SQLite database, named after
 // the file. Piped CSV is the table "stdin". Results come out as CSV, or as
 // JSONL with --json.
@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -69,7 +70,7 @@ type table struct {
 func init() {
 	shared.Register(shared.ToolMeta{
 		Name:  "sql",
-		Short: "SQL over CSV files - SQLite in memory, CSV or JSONL out",
+		Short: "SQL over CSV or JSONL - SQLite in memory, CSV or JSONL out",
 		Flags: []shared.FlagMeta{
 			{Name: "query", Usage: "SQL query; every positional argument is then a CSV file"},
 			{Name: "no-header", Usage: "omit the header row from CSV output"},
@@ -185,9 +186,10 @@ func Run() int {
 		return fail(2, "sql: duplicate table name: stdin")
 	}
 
-	// Empty stdin drops its table. If the query then needs it, there is
-	// nothing to report: exit 0 with no output.
-	emptyStdin, ttyStdin := "", false
+	// Empty stdin drops its table, and so does JSONL with no records (a vrk
+	// --json run that found nothing prints only its trailer). If the query
+	// then needs one, there is nothing to report: exit 0 with no output.
+	empty, ttyStdin := map[string]bool{}, false
 	if stdinAt >= 0 {
 		var data []byte
 		if isTerminal(int(os.Stdin.Fd())) {
@@ -207,7 +209,7 @@ func Run() int {
 			}
 		}
 		if len(data) == 0 && !ttyStdin {
-			emptyStdin = tables[stdinAt].name
+			empty[strings.ToLower(tables[stdinAt].name)] = true
 		}
 		if len(data) == 0 {
 			tables = append(tables[:stdinAt], tables[stdinAt+1:]...)
@@ -250,11 +252,19 @@ func Run() int {
 	}
 
 	renamed := map[string]string{} // original header -> column name, where they differ
+	loaded := tables[:0]
 	for _, t := range tables {
-		if err := load(ctx, conn, t, !jsonFlag, renamed); err != nil {
+		err := load(ctx, conn, t, !jsonFlag, renamed)
+		if errors.Is(err, errNoRecords) {
+			empty[strings.ToLower(t.name)] = true
+			continue
+		}
+		if err != nil {
 			return fail(1, "%v", err)
 		}
+		loaded = append(loaded, t)
 	}
+	tables = loaded
 	// SQLite reads a double-quoted name that isn't a column as a string, so
 	// "First Name" would quietly select the text First Name on every row.
 	// An AS "First Name" alias is fine.
@@ -271,9 +281,9 @@ func Run() int {
 			switch {
 			case ttyStdin && strings.EqualFold(m[1], "stdin"):
 				return fail(2, "sql: query references stdin but nothing is piped")
-			case emptyStdin != "" && strings.EqualFold(m[1], emptyStdin):
+			case empty[strings.ToLower(m[1])]:
 				return 0
-			case len(tables) == 0 && emptyStdin == "":
+			case len(tables) == 0 && len(empty) == 0:
 				return fail(2, "sql: no input files; provide CSV file paths as arguments")
 			}
 			names := make([]string, len(tables))
@@ -303,7 +313,7 @@ func tableName(path string) string {
 	return nameRe.ReplaceAllString(name, "_")
 }
 
-// load creates table t from its CSV data in one transaction. warn reports
+// load creates table t from its CSV or JSONL data in one transaction. warn reports
 // mostly-numeric columns that had to be TEXT. Headers that sanitizing changed
 // are added to renamed.
 func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map[string]string) error {
@@ -322,56 +332,24 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 		}
 		return fmt.Errorf("sql: %s: line %d is not valid UTF-8; convert it first, e.g. iconv -f latin1 -t utf-8", t.source, bytes.Count(data[:i], []byte("\n"))+1)
 	}
-	if first, _, _ := bytes.Cut(bytes.TrimSpace(data), []byte("\n")); len(first) > 0 && (first[0] == '{' || first[0] == '[') && json.Valid(first) {
-		return fmt.Errorf("sql: %s is JSON, not CSV; sql reads CSV and TSV only", t.source)
-	}
-	// Old Mac line endings: encoding/csv only splits on \n.
-	if bytes.IndexByte(data, '\n') < 0 {
-		data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
-	}
-	r := csv.NewReader(bytes.NewReader(data))
-	r.Comma = t.comma
-	r.LazyQuotes = true
-	r.FieldsPerRecord = -1
-	parseErr := func(format string, args ...any) error {
-		return fmt.Errorf("sql: CSV parse error in %s: %s", t.source, fmt.Sprintf(format, args...))
-	}
-	header, err := r.Read()
-	if errors.Is(err, io.EOF) {
-		return parseErr("empty file, no header row")
+	var (
+		header []string
+		rows   [][]string
+		err    error
+	)
+	if isJSON(data) {
+		header, rows, err = readJSON(data, t.source)
+	} else {
+		header, rows, err = readCSV(data, t)
 	}
 	if err != nil {
-		return parseErr("%v", err)
+		return err
 	}
-
 	cols := sanitizeNames(header)
 	for i, h := range header {
 		if h != cols[i] {
 			renamed[h] = cols[i]
 		}
-	}
-	var rows [][]string
-	for {
-		rec, err := r.Read()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return parseErr("%v", err)
-		}
-		// Short rows are padded with NULLs; a long row is only an error when
-		// the extra fields hold something (a trailing comma is fine).
-		for len(rec) > len(cols) && rec[len(rec)-1] == "" {
-			rec = rec[:len(rec)-1]
-		}
-		if len(rec) > len(cols) {
-			line, _ := r.FieldPos(0)
-			return parseErr("line %d: %d fields, header has %d", line, len(rec), len(cols))
-		}
-		for len(rec) < len(cols) {
-			rec = append(rec, "")
-		}
-		rows = append(rows, rec)
 	}
 
 	types := make([]string, len(cols))
@@ -532,6 +510,149 @@ func formatFloat(x float64, scale int) string {
 		return strconv.FormatFloat(x, 'f', -1, 64)
 	}
 	return strconv.FormatFloat(x, 'g', -1, 64)
+}
+
+// readCSV parses delimited data into a header and rows the same width.
+func readCSV(data []byte, t table) (header []string, rows [][]string, err error) {
+	// Old Mac line endings: encoding/csv only splits on \n.
+	if bytes.IndexByte(data, '\n') < 0 {
+		data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
+	}
+	r := csv.NewReader(bytes.NewReader(data))
+	r.Comma = t.comma
+	r.LazyQuotes = true
+	r.FieldsPerRecord = -1
+	parseErr := func(format string, args ...any) error {
+		return fmt.Errorf("sql: CSV parse error in %s: %s", t.source, fmt.Sprintf(format, args...))
+	}
+	header, err = r.Read()
+	if errors.Is(err, io.EOF) {
+		return nil, nil, parseErr("empty file, no header row")
+	}
+	if err != nil {
+		return nil, nil, parseErr("%v", err)
+	}
+	for {
+		rec, err := r.Read()
+		if errors.Is(err, io.EOF) {
+			return header, rows, nil
+		}
+		if err != nil {
+			return nil, nil, parseErr("%v", err)
+		}
+		// Short rows are padded with NULLs; a long row is only an error when
+		// the extra fields hold something (a trailing comma is fine).
+		for len(rec) > len(header) && rec[len(rec)-1] == "" {
+			rec = rec[:len(rec)-1]
+		}
+		if len(rec) > len(header) {
+			line, _ := r.FieldPos(0)
+			return nil, nil, parseErr("line %d: %d fields, header has %d", line, len(rec), len(header))
+		}
+		for len(rec) < len(header) {
+			rec = append(rec, "")
+		}
+		rows = append(rows, rec)
+	}
+}
+
+// isJSON reports whether data is JSONL (the first line is an object) or a
+// JSON array. A CSV header that merely starts with { or [ is not.
+func isJSON(data []byte) bool {
+	data = bytes.TrimSpace(data)
+	first, _, _ := bytes.Cut(data, []byte("\n"))
+	return bytes.HasPrefix(first, []byte("{")) && json.Valid(first) ||
+		bytes.HasPrefix(data, []byte("[")) && json.Valid(data)
+}
+
+// errNoRecords is JSONL with nothing to load: only vrk trailers or {}.
+var errNoRecords = errors.New("sql: no records")
+
+// readJSON turns JSONL or a JSON array of objects into rows. Columns are the
+// keys in the order first seen; a missing key or null is NULL, true/false are
+// 1/0, and nested objects and arrays stay JSON text for json_extract.
+// Records with a "_vrk" key are vrk metadata trailers and are skipped.
+func readJSON(data []byte, source string) (header []string, rows [][]string, err error) {
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.UseNumber()
+	fail := func(err error) error {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			err = errors.New("record cut off")
+		}
+		line := bytes.Count(data[:d.InputOffset()], []byte("\n")) + 1
+		return fmt.Errorf("sql: JSON parse error in %s: line %d: %v", source, line, err)
+	}
+	if bytes.HasPrefix(bytes.TrimSpace(data), []byte("[")) {
+		if _, err := d.Token(); err != nil {
+			return nil, nil, fail(err)
+		}
+	}
+	index := map[string]int{}
+	for d.More() {
+		// Walk tokens, not a map, so columns keep the file's key order.
+		if t, err := d.Token(); err != nil {
+			return nil, nil, fail(err)
+		} else if t != json.Delim('{') {
+			return nil, nil, fail(fmt.Errorf("want an object, got %v", t))
+		}
+		var keys, vals []string
+		for d.More() {
+			t, err := d.Token()
+			if err != nil {
+				return nil, nil, fail(err)
+			}
+			key, _ := t.(string)
+			var raw json.RawMessage
+			if err := d.Decode(&raw); err != nil {
+				return nil, nil, fail(err)
+			}
+			keys, vals = append(keys, key), append(vals, jsonCell(raw))
+		}
+		if _, err := d.Token(); err != nil { // closing }
+			return nil, nil, fail(err)
+		}
+		if slices.Contains(keys, "_vrk") {
+			continue
+		}
+		row := make([]string, len(header))
+		for i, key := range keys {
+			c, ok := index[key]
+			if !ok {
+				c = len(header)
+				index[key] = c
+				header = append(header, key)
+				row = append(row, "")
+			}
+			row[c] = vals[i]
+		}
+		rows = append(rows, row)
+	}
+	if len(header) == 0 {
+		return nil, nil, errNoRecords
+	}
+	// Rows read before a later key appeared are short; pad them.
+	for i := range rows {
+		for len(rows[i]) < len(header) {
+			rows[i] = append(rows[i], "")
+		}
+	}
+	return header, rows, nil
+}
+
+func jsonCell(raw json.RawMessage) string {
+	switch raw[0] {
+	case 'n':
+		return ""
+	case 't':
+		return "1"
+	case 'f':
+		return "0"
+	case '"':
+		var s string
+		_ = json.Unmarshal(raw, &s)
+		return s
+	}
+	return string(raw) // number, object or array
 }
 
 func csvValue(v any, scale int) string {
@@ -702,6 +823,8 @@ func printUsage(fs *pflag.FlagSet) int {
 		"named after its basename (users.csv -> users), or name=file.csv names it.",
 		"- is stdin, as the table stdin (or name=-). Without -, piped CSV is read",
 		"when the query mentions stdin. .tsv files are tab-separated.",
+		"JSONL (or a JSON array of objects) works too: keys become columns, nested",
+		"values stay JSON text for json_extract, and vrk {\"_vrk\":...} trailers are skipped.",
 		"The first row is the header. Column types are inferred: INTEGER or REAL when",
 		"every non-empty value is a number (N/A, null, - load as NULL), TEXT otherwise",
 		"(so 007 stays 007). Empty cells are NULL.",

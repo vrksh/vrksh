@@ -2646,7 +2646,7 @@ vrk sql --no-header 'SELECT body FROM tickets' tickets.csv | vrk tok
 - **No such table without files is exit 2** - `vrk sql 'SELECT * FROM t'` means you forgot the file. With files given it is exit 1 with SQLite's message.
 - **ATTACH and VACUUM INTO are blocked** - they exit 1 with `too many attached databases - max 0`, so a query can't read or write other files.
 - **Multiple statements run, last result is printed** - `CREATE TABLE x AS SELECT ...; SELECT * FROM x` works. Statements like `DELETE` print nothing.
-- **CSV and TSV only, not JSONL** - input whose first line is a JSON object or array exits 1 with `sql: <file> is JSON, not CSV`, instead of loading the braces as a header.
+- **JSONL in works** - when the first line is a JSON object (or the input is a JSON array), keys become columns in first-seen order. A missing key or `null` is NULL, `true`/`false` are 1/0, nested objects and arrays are JSON text (`json_extract(tags, '$[0]')`). Records with a `_vrk` key (vrk trailers) are skipped, so `vrk pdf --json | vrk sql ...` just works. A bad line exits 1 and names it. Input with no records (only a trailer, from an upstream run that matched nothing) is treated like empty stdin: no output, exit 0.
 - **Input must be UTF-8** - a latin1 file exits 1 with the line number; convert it with `iconv -f latin1 -t utf-8` first. Old Mac `\r`-only line endings work.
 - **Numbers may be padded** - ` 42` and `42 ` load as INTEGER 42. Floats print without exponents unless they are tiny or huge (`1e-09`, `1e+300`).
 - **Short rows are padded with NULL** - a row with more non-empty fields than the header exits 1 and names the line. Trailing empty fields (a trailing comma) are dropped. Stray quotes inside fields are kept as-is.
