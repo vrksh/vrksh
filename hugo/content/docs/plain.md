@@ -127,6 +127,8 @@ done
 
 ## When it fails
 
+Input with more than 1000 back-to-back nesting openers (`[a](`, `- `, `> `) is not parsed as Markdown, since the parser goes quadratic on it. It comes back as plain text with only whitespace cleanup. Anything else that takes longer than 10 seconds to parse exits 1 with `plain: markdown too complex to parse within 10s`.
+
 No input:
 
 <!-- doccheck: skip (only fails on an interactive terminal, doccheck stdin is not a TTY) -->

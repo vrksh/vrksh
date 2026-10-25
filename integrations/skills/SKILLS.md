@@ -1203,6 +1203,7 @@ vrk grab https://example.com --text
 - **`plain` uses goldmark's AST** — it handles nested emphasis, reference-style links, and fenced code blocks correctly. Character-level regex strippers do not.
 - **Raw HTML embedded in markdown is dropped silently.** Block-level `<div>` and inline `<span>` tags and their content are not extracted. For HTML-heavy input, use `grab --text` instead (which runs the HTML extractor first, then `StripMarkdown`).
 - **Output whitespace may differ from input.** Consecutive blank lines are collapsed to one. Leading and trailing whitespace is trimmed.
+- **Deeply nested input comes back as plain text.** More than 1000 back-to-back nesting openers (`[a](`, `- `, `> `) is not real Markdown and makes the parser quadratic, so the text is returned with only whitespace cleanup. Any other input that takes longer than 10 seconds to parse exits 1 with `plain: markdown too complex to parse within 10s`.
 
 ---
 
