@@ -460,6 +460,54 @@ func TestStdinLargeNoRetryStreams(t *testing.T) {
 	}
 }
 
+// --- backoff overflow and validation ---
+
+func TestComputeDelayNoOverflow(t *testing.T) {
+	for _, base := range []time.Duration{time.Nanosecond, time.Second, time.Hour} {
+		for a := 0; a <= 200; a++ {
+			d := computeDelay(true, base, time.Minute, a)
+			if d <= 0 || d > time.Minute && base <= time.Minute {
+				t.Fatalf("base=%s attempt=%d capped delay %s out of range", base, a, d)
+			}
+			if u := computeDelay(true, base, 0, a); u < base {
+				t.Fatalf("base=%s attempt=%d uncapped delay %s went below base", base, a, u)
+			}
+		}
+	}
+}
+
+func TestNegativeBackoffIsUsageError(t *testing.T) {
+	for _, args := range [][]string{
+		{"--backoff", "-1s", "--", "true"},
+		{"--backoff", "exp:-1s", "--", "true"},
+		{"--backoff-max", "-1s", "--", "true"},
+	} {
+		_, stderr, code := runCoax(t, args, "")
+		if code != 2 {
+			t.Errorf("%v: expected exit 2, got %d (stderr %q)", args, code, stderr)
+		}
+	}
+}
+
+func TestSignalDuringBackoffStopsRetrying(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "log")
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
+	}()
+	start := time.Now()
+	_, _, code := runCoax(t, []string{"--times", "3", "--backoff", "5s", "--", "sh", "-c", "printf x >> " + log + "; exit 1"}, "")
+	if time.Since(start) > 2*time.Second {
+		t.Fatal("coax kept sleeping through the signal")
+	}
+	if code != 128+int(syscall.SIGTERM) {
+		t.Fatalf("expected code %d, got %d", 128+int(syscall.SIGTERM), code)
+	}
+	if n := readAttemptCount(t, log); n != 1 {
+		t.Fatalf("expected exactly 1 attempt, got %d", n)
+	}
+}
+
 // --- signals ---
 
 func TestChildKilledBySignalExitCode(t *testing.T) {
