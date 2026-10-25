@@ -38,13 +38,16 @@ flags:
     short: "-q"
     type: bool
     description: Suppress stderr output
+  - flag: --timeout
+    type: duration
+    description: Stop and exit 1 if loading and the query take longer, e.g. 30s (default none)
 exit_codes:
   - code: 0
     meaning: Success, including empty stdin when the query reads stdin
   - code: 1
-    meaning: SQL error, file not found, CSV parse error, empty file, or gzip file
+    meaning: SQL error, file not found, CSV parse error, empty file, gzip file, or --timeout reached
   - code: 2
-    meaning: No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, or unknown flag
+    meaning: No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, negative --timeout, or unknown flag
 og_image:
   headline: "CSV in, SQL out. No database."
   code: "vrk sql 'SELECT * FROM users' users.csv"

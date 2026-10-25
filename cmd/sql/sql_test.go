@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // runSql replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and returns
@@ -982,5 +983,50 @@ func TestJSONLErrors(t *testing.T) {
 	out, _, code = runSql(t, []string{"SELECT count(*) FROM stdin"}, "[id],x\n1,2\n")
 	if code != 0 || out != "count(*)\n1\n" {
 		t.Errorf("bracket header: exit %d stdout %q", code, out)
+	}
+}
+
+func TestStrayQuoteFailsInsteadOfSwallowing(t *testing.T) {
+	out, errOut, code := runSql(t, []string{"SELECT count(*) AS n FROM stdin", "-"}, "id,name\n1,\"x\"y\n2,Acme\n3,Foo\n4,Bar\n")
+	if code != 1 || out != "" || !strings.Contains(errOut, "line 2") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, _, code = runSql(t, []string{"--json", "SELECT 1 FROM stdin", "-"}, "id,name\n1,\"x\"y\n2,a\n")
+	if code != 1 || !strings.Contains(out, `"code":1`) {
+		t.Errorf("--json: exit %d stdout %q", code, out)
+	}
+	// Legit multi-line quoted fields still parse.
+	out, errOut, code = runSql(t, []string{"SELECT count(*) AS n FROM stdin", "-"}, "id,note\n1,\"two\nlines\"\n2,ok\n")
+	if code != 0 || out != "n\n2\n" {
+		t.Errorf("multi-line: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+func TestTimeout(t *testing.T) {
+	const runaway = "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c"
+	done := make(chan struct{})
+	var out, errOut string
+	var code int
+	go func() {
+		out, errOut, code = runSql(t, []string{"--timeout", "200ms", "--query", runaway}, "")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("--timeout 200ms did not stop a runaway query")
+	}
+	if code != 1 || out != "" || !strings.Contains(errOut, "sql: query timed out after 200ms") {
+		t.Errorf("exit %d stdout %q stderr %q", code, out, errOut)
+	}
+	out, _, code = runSql(t, []string{"--json", "--timeout", "200ms", "--query", runaway}, "")
+	if code != 1 || !strings.Contains(out, "timed out") {
+		t.Errorf("--json: exit %d stdout %q", code, out)
+	}
+	for _, bad := range []string{"soon", "-1s"} {
+		_, _, code = runSql(t, []string{"--timeout", bad, "--query", "SELECT 1"}, "")
+		if code != 2 {
+			t.Errorf("--timeout %s: exit %d, want 2", bad, code)
+		}
 	}
 }

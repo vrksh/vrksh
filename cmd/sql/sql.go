@@ -27,6 +27,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/spf13/pflag"
@@ -76,6 +77,7 @@ func init() {
 			{Name: "no-header", Usage: "omit the header row from CSV output"},
 			{Name: "delimiter", Shorthand: "d", Usage: `input field separator, one character or \t (default "," or tab for .tsv)`},
 			{Name: "json", Shorthand: "j", Usage: `one JSON object per row, then {"_vrk":"sql","count":N}`},
+			{Name: "timeout", Usage: "stop and exit 1 if loading and the query take longer, e.g. 30s (default none)"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 		},
 	})
@@ -88,11 +90,13 @@ func Run() int {
 
 	var queryFlag, delimFlag string
 	var noHeader, jsonFlag, quietFlag bool
+	var timeout time.Duration
 	fs.StringVar(&queryFlag, "query", "", "SQL query; every positional argument is then a CSV file")
 	fs.BoolVar(&noHeader, "no-header", false, "omit the header row from CSV output")
 	fs.StringVarP(&delimFlag, "delimiter", "d", "", `input field separator, one character or \t (default "," or tab for .tsv)`)
 	fs.BoolVarP(&jsonFlag, "json", "j", false, `one JSON object per row, then {"_vrk":"sql","count":N}`)
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
+	fs.DurationVar(&timeout, "timeout", 0, "stop and exit 1 if loading and the query take longer, e.g. 30s (default none)")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -112,6 +116,9 @@ func Run() int {
 			return shared.UsageErrorf("%s", msg)
 		}
 		return shared.Errorf("%s", msg)
+	}
+	if timeout < 0 {
+		return fail(2, "sql: --timeout must not be negative")
 	}
 
 	query, files := queryFlag, fs.Args()
@@ -235,6 +242,12 @@ func Run() int {
 	}
 
 	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	timedOut := func() bool { return errors.Is(ctx.Err(), context.DeadlineExceeded) }
 	db, err := dbsql.Open("sqlite", ":memory:")
 	if err != nil {
 		return fail(1, "sql: opening database: %v", err)
@@ -259,6 +272,9 @@ func Run() int {
 			empty[strings.ToLower(t.name)] = true
 			continue
 		}
+		if err != nil && timedOut() {
+			return fail(1, "sql: query timed out after %s", timeout)
+		}
 		if err != nil {
 			return fail(1, "%v", err)
 		}
@@ -275,8 +291,18 @@ func Run() int {
 		}
 	}
 
-	out, err := runQuery(ctx, conn, query, jsonFlag, noHeader)
+	out := &spillWriter{out: os.Stdout}
+	err = runQuery(ctx, conn, query, jsonFlag, noHeader, out)
+	if err == nil {
+		err = out.Flush()
+	}
+	if out.err != nil {
+		return shared.Errorf("sql: writing output: %v", out.err)
+	}
 	if err != nil {
+		if timedOut() {
+			return fail(1, "sql: query timed out after %s", timeout)
+		}
 		if m := noTableRe.FindStringSubmatch(err.Error()); m != nil {
 			switch {
 			case ttyStdin && strings.EqualFold(m[1], "stdin"):
@@ -297,10 +323,43 @@ func Run() int {
 		}
 		return fail(1, "sql: %v", err)
 	}
-	if _, err := os.Stdout.Write(out); err != nil {
-		return shared.Errorf("sql: writing output: %v", err)
-	}
 	return 0
+}
+
+// maxBuffered is how much output is held back before streaming starts.
+// SQLite can fail partway through a result set; up to here stdout stays
+// empty on error, past it a runaway query streams instead of eating memory.
+const maxBuffered = 1 << 20
+
+// spillWriter buffers up to maxBuffered bytes, then writes straight through.
+// The first write error sticks in err and drops everything after it.
+type spillWriter struct {
+	buf bytes.Buffer
+	out io.Writer
+	err error
+}
+
+func (w *spillWriter) Write(p []byte) (int, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+	if w.buf.Len()+len(p) <= maxBuffered {
+		return w.buf.Write(p)
+	}
+	if err := w.Flush(); err != nil {
+		return 0, err
+	}
+	_, w.err = w.out.Write(p)
+	return len(p), w.err
+}
+
+// Flush writes out whatever is still buffered.
+func (w *spillWriter) Flush() error {
+	if w.err == nil && w.buf.Len() > 0 {
+		_, w.err = w.out.Write(w.buf.Bytes())
+		w.buf.Reset()
+	}
+	return w.err
 }
 
 // tableName is the file's basename without its last extension, sanitized.
@@ -405,22 +464,21 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warn bool, renamed map
 	return nil
 }
 
-// runQuery runs query and returns the formatted output. Rows are buffered:
-// SQLite can fail partway through a result set, and stdout must stay empty
-// on error.
-func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHeader bool) ([]byte, error) {
+// runQuery runs query and writes the formatted output to out. It stops at
+// the first write error.
+func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHeader bool, out *spillWriter) error {
 	rows, err := conn.QueryContext(ctx, query)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = rows.Close() }()
 	cols, err := rows.Columns()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	colTypes, err := rows.ColumnTypes()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// A column read straight from a REAL(n) table column prints n decimals.
 	scales := make([]int, len(cols))
@@ -432,11 +490,10 @@ func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHe
 	}
 	// Statements like DELETE have no result columns: nothing to print.
 	if len(cols) == 0 {
-		return nil, rows.Err()
+		return rows.Err()
 	}
 
-	var buf bytes.Buffer
-	w := csv.NewWriter(&buf)
+	w := csv.NewWriter(out)
 	// Repeated names get _1, _2 in both formats, so they agree.
 	names := dedupe(cols)
 	keys := make([]string, len(cols))
@@ -445,7 +502,7 @@ func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHe
 			keys[i] = jsonString(k)
 		}
 	} else if !noHeader {
-		writeCSVRow(w, &buf, names)
+		writeCSVRow(w, out, names)
 	}
 
 	vals := make([]any, len(cols))
@@ -457,44 +514,47 @@ func runQuery(ctx context.Context, conn *dbsql.Conn, query string, jsonOut, noHe
 	count := 0
 	for rows.Next() {
 		if err := rows.Scan(ptrs...); err != nil {
-			return nil, err
+			return err
+		}
+		if out.err != nil {
+			return out.err
 		}
 		count++
 		if jsonOut {
-			buf.WriteByte('{')
+			line := []byte{'{'}
 			for i, v := range vals {
 				if i > 0 {
-					buf.WriteByte(',')
+					line = append(line, ',')
 				}
-				buf.WriteString(keys[i])
-				buf.WriteByte(':')
-				buf.WriteString(jsonValue(v, scales[i]))
+				line = append(line, keys[i]...)
+				line = append(line, ':')
+				line = append(line, jsonValue(v, scales[i])...)
 			}
-			buf.WriteString("}\n")
+			_, _ = out.Write(append(line, "}\n"...))
 			continue
 		}
 		for i, v := range vals {
 			cells[i] = csvValue(v, scales[i])
 		}
-		writeCSVRow(w, &buf, cells)
+		writeCSVRow(w, out, cells)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return err
 	}
 	if jsonOut {
-		fmt.Fprintf(&buf, "{\"_vrk\":\"sql\",\"count\":%d}\n", count)
+		_, _ = fmt.Fprintf(out, "{\"_vrk\":\"sql\",\"count\":%d}\n", count)
 	}
-	return buf.Bytes(), nil
+	return out.err
 }
 
 // writeCSVRow writes one record. A lone empty field is written as "" so it
 // doesn't come out as a blank line, which CSV readers skip.
-func writeCSVRow(w *csv.Writer, buf *bytes.Buffer, rec []string) {
+// Write errors stick in out and are checked by the caller.
+func writeCSVRow(w *csv.Writer, out *spillWriter, rec []string) {
 	if len(rec) == 1 && rec[0] == "" {
-		buf.WriteString("\"\"\n")
+		_, _ = out.Write([]byte("\"\"\n"))
 		return
 	}
-	// Writes into a bytes.Buffer can't fail.
 	_ = w.Write(rec)
 	w.Flush()
 }
@@ -518,19 +578,44 @@ func readCSV(data []byte, t table) (header []string, rows [][]string, err error)
 	if bytes.IndexByte(data, '\n') < 0 {
 		data = bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
 	}
+	header, rows, err = scanCSV(data, t, false)
+	var pe *csv.ParseError
+	if !errors.As(err, &pe) || !errors.Is(pe.Err, csv.ErrQuote) && !errors.Is(pe.Err, csv.ErrBareQuote) {
+		return header, rows, err
+	}
+	// A stray quote like 5" screen is common and lazy parsing keeps it. But
+	// in "x"y the lazy parser runs on to the next quote, swallowing whole
+	// lines into one field. A field that kept a stray quote and spans lines
+	// is that, so fail rather than load the wrong rows.
+	header, rows, err = scanCSV(data, t, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, rec := range append([][]string{header}, rows...) {
+		for _, f := range rec {
+			if strings.Contains(f, "\n") && strings.Contains(f, `"`) {
+				return nil, nil, fmt.Errorf("sql: CSV parse error in %s: line %d: stray quote in a quoted field; quotes inside one must be doubled (\"\")", t.source, pe.StartLine)
+			}
+		}
+	}
+	return header, rows, nil
+}
+
+// scanCSV is one pass of encoding/csv over data, strict or lazy about quotes.
+func scanCSV(data []byte, t table, lazy bool) (header []string, rows [][]string, err error) {
 	r := csv.NewReader(bytes.NewReader(data))
 	r.Comma = t.comma
-	r.LazyQuotes = true
+	r.LazyQuotes = lazy
 	r.FieldsPerRecord = -1
 	parseErr := func(format string, args ...any) error {
-		return fmt.Errorf("sql: CSV parse error in %s: %s", t.source, fmt.Sprintf(format, args...))
+		return fmt.Errorf("sql: CSV parse error in %s: "+format, append([]any{t.source}, args...)...)
 	}
 	header, err = r.Read()
 	if errors.Is(err, io.EOF) {
 		return nil, nil, parseErr("empty file, no header row")
 	}
 	if err != nil {
-		return nil, nil, parseErr("%v", err)
+		return nil, nil, parseErr("%w", err)
 	}
 	for {
 		rec, err := r.Read()
@@ -538,7 +623,7 @@ func readCSV(data []byte, t table) (header []string, rows [][]string, err error)
 			return header, rows, nil
 		}
 		if err != nil {
-			return nil, nil, parseErr("%v", err)
+			return nil, nil, parseErr("%w", err)
 		}
 		// Short rows are padded with NULLs; a long row is only an error when
 		// the extra fields hold something (a trailing comma is fine).

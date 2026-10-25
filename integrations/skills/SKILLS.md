@@ -2570,6 +2570,7 @@ Input: the query is the first positional argument (or `--query`), the rest are C
 | `--delimiter` | `-d` | Input field separator: one character, or `\t` / `tab`. Default `,`, or tab for `.tsv` files |
 | `--json` | `-j` | One JSON object per row (keys in column order), then `{"_vrk":"sql","count":N}` |
 | `--quiet` | `-q` | Suppress stderr output |
+| `--timeout` | | Stop and exit 1 (`sql: query timed out after 30s`) if loading and the query take longer. Go duration: `500ms`, `30s`, `2m`. Default none |
 
 ### Type inference
 
@@ -2653,7 +2654,7 @@ vrk sql --no-header 'SELECT body FROM tickets' tickets.csv | vrk tok
 - **JSONL in works** - when the first line is a JSON object (or the input is a JSON array), keys become columns in first-seen order. A missing key or `null` is NULL, `true`/`false` are 1/0, nested objects and arrays are JSON text (`json_extract(tags, '$[0]')`). Records with a `_vrk` key (vrk trailers) are skipped, so `vrk pdf --json | vrk sql ...` just works. A bad line exits 1 and names it. Input with no records (only a trailer, from an upstream run that matched nothing) is treated like empty stdin: no output, exit 0.
 - **Input must be UTF-8** - a latin1 file exits 1 with the line number; convert it with `iconv -f latin1 -t utf-8` first. Old Mac `\r`-only line endings work.
 - **Numbers may be padded** - ` 42` and `42 ` load as INTEGER 42. Floats print without exponents unless they are tiny or huge (`1e-09`, `1e+300`).
-- **Short rows are padded with NULL** - a row with more non-empty fields than the header exits 1 and names the line. Trailing empty fields (a trailing comma) are dropped. Stray quotes inside fields are kept as-is.
+- **Short rows are padded with NULL** - a row with more non-empty fields than the header exits 1 and names the line. Trailing empty fields (a trailing comma) are dropped. Stray quotes inside unquoted fields (`5" screen`) are kept as-is. A stray quote inside a quoted field (`"x"y`) exits 1 with its line number instead of swallowing the lines after it; double quotes inside a quoted field (`""`).
 - **N/A becomes NULL in number columns** - `SELECT *` prints it as an empty cell. In TEXT columns it stays `N/A`.
 - **Mixed decimal places lose trailing zeros** - a column with `1.50` and `2.125` is plain REAL, so `1.50` prints as `1.5`.
 - **Gzip files exit 1** - decompress first: `gunzip -c f.csv.gz | vrk sql 'SELECT ... FROM stdin' -`.
@@ -2666,6 +2667,7 @@ vrk sql --no-header 'SELECT body FROM tickets' tickets.csv | vrk tok
 These are not pipeline tools — they support discovery and integration.
 
 ---
+- **Output is held back up to 1 MiB, then streamed.** Below that, stdout is empty on error. A bigger result that fails partway leaves the rows already written; under `--json` the missing `_vrk` trailer marks it incomplete. A runaway query (a recursive CTE with no stop) streams until killed, so pipe it into `head` or set `--timeout`.
 
 ## mcp — MCP Server (Discovery Only)
 

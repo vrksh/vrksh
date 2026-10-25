@@ -416,17 +416,18 @@ echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
 
 ## sql - SQL over CSV or JSONL - SQLite in memory, CSV or JSONL out
 
-| Flag          | Short | Description                                                            |
-|---------------|-------|------------------------------------------------------------------------|
-| `--query`     |       | SQL query; every positional argument is then a CSV file                |
-| `--no-header` |       | Leave the header row out of CSV output                                 |
-| `--delimiter` | -d    | Input field separator, one character or \t (default , or tab for .tsv) |
-| `--json`      | -j    | One JSON object per row, then a metadata trailer                       |
-| `--quiet`     | -q    | Suppress stderr output                                                 |
+| Flag          | Short | Description                                                                   |
+|---------------|-------|-------------------------------------------------------------------------------|
+| `--query`     |       | SQL query; every positional argument is then a CSV file                       |
+| `--no-header` |       | Leave the header row out of CSV output                                        |
+| `--delimiter` | -d    | Input field separator, one character or \t (default , or tab for .tsv)        |
+| `--json`      | -j    | One JSON object per row, then a metadata trailer                              |
+| `--quiet`     | -q    | Suppress stderr output                                                        |
+| `--timeout`   |       | Stop and exit 1 if loading and the query take longer, e.g. 30s (default none) |
 
 Exit 0: Success, including empty stdin when the query reads stdin
-Exit 1: SQL error, file not found, CSV parse error, empty file, or gzip file
-Exit 2: No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, or unknown flag
+Exit 1: SQL error, file not found, CSV parse error, empty file, gzip file, or --timeout reached
+Exit 2: No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, negative --timeout, or unknown flag
 
 ```bash
 vrk sql --json 'SELECT * FROM users WHERE age > 25' users.csv | jq -c 'select(.id)'

@@ -223,6 +223,21 @@ assert_exit "--quiet error" 1
 assert_eq "--quiet: stderr empty" "" "$stderr"
 
 echo ""
+# --- stray quotes and runaway queries ---
+
+printf 'id,name\n1,"x"y\n2,Acme\n3,Foo\n' > "$TMP/stray.csv"
+run "$TMP/stray.csv" 'SELECT count(*) FROM stdin' -
+assert_exit "stray quote in a quoted field" 1
+assert_contains "stray quote: names the line" "line 2" "$stderr"
+assert_eq "stray quote: stdout empty" "" "$stdout"
+
+run /dev/null --timeout 200ms --query 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c'
+assert_exit "--timeout stops a runaway query" 1
+assert_contains "--timeout: message" "timed out after 200ms" "$stderr"
+
+got="$("$VRK" sql --query 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT x FROM c' < /dev/null | head -n 3 | tr '\n' ' ' || true)"
+assert_eq "runaway query streams into head" "x 1 2 " "$got"
+
 echo "---"
 echo "Results: $PASS passed, $FAIL failed"
 echo ""

@@ -46,21 +46,22 @@ vrk sql --json 'SELECT * FROM users WHERE age > 25' users.csv | jq -c 'select(.i
 
 ## Exit codes
 
-| Code | Meaning                                                                                                                     |
-|------|-----------------------------------------------------------------------------------------------------------------------------|
-| 0    | Success, including empty stdin when the query reads stdin                                                                   |
-| 1    | SQL error, file not found, CSV parse error, empty file, or gzip file                                                        |
-| 2    | No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, or unknown flag |
+| Code | Meaning                                                                                                                                         |
+|------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0    | Success, including empty stdin when the query reads stdin                                                                                       |
+| 1    | SQL error, file not found, CSV parse error, empty file, gzip file, or --timeout reached                                                         |
+| 2    | No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, negative --timeout, or unknown flag |
 
 ## Flags
 
-| Flag          | Short | Type   | Description                                                            |
-|---------------|-------|--------|------------------------------------------------------------------------|
-| `--query`     |       | string | SQL query; every positional argument is then a CSV file                |
-| `--no-header` |       | bool   | Leave the header row out of CSV output                                 |
-| `--delimiter` | -d    | string | Input field separator, one character or \t (default , or tab for .tsv) |
-| `--json`      | -j    | bool   | One JSON object per row, then a metadata trailer                       |
-| `--quiet`     | -q    | bool   | Suppress stderr output                                                 |
+| Flag          | Short | Type     | Description                                                                   |
+|---------------|-------|----------|-------------------------------------------------------------------------------|
+| `--query`     |       | string   | SQL query; every positional argument is then a CSV file                       |
+| `--no-header` |       | bool     | Leave the header row out of CSV output                                        |
+| `--delimiter` | -d    | string   | Input field separator, one character or \t (default , or tab for .tsv)        |
+| `--json`      | -j    | bool     | One JSON object per row, then a metadata trailer                              |
+| `--quiet`     | -q    | bool     | Suppress stderr output                                                        |
+| `--timeout`   |       | duration | Stop and exit 1 if loading and the query take longer, e.g. 30s (default none) |
 
 
 <!-- notes - edit in notes/sql.notes.md -->
@@ -228,4 +229,11 @@ ATTACH is blocked, so a query can't open other database files:
 ```bash
 $ vrk sql "ATTACH DATABASE 'other.db' AS o"
 error: sql: SQL logic error: too many attached databases - max 0 (1)
+```
+
+A query that never ends, like a recursive CTE with no stop condition, can be cut off with `--timeout`:
+
+```bash
+$ vrk sql --timeout 200ms --query 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c'
+error: sql: query timed out after 200ms
 ```

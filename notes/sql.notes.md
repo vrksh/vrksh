@@ -162,3 +162,10 @@ ATTACH is blocked, so a query can't open other database files:
 $ vrk sql "ATTACH DATABASE 'other.db' AS o"
 error: sql: SQL logic error: too many attached databases - max 0 (1)
 ```
+
+A query that never ends, like a recursive CTE with no stop condition, can be cut off with `--timeout`:
+
+```bash
+$ vrk sql --timeout 200ms --query 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c'
+error: sql: query timed out after 200ms
+```
