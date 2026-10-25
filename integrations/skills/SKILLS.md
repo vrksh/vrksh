@@ -1736,7 +1736,7 @@ Input: positional argument or stdin, or one or more `--file` paths.
 | `--compare` | none | Compare hashes of all `--file` inputs; outputs `match: true` or `match: false`; exits 0 either way |
 | `--hmac` | none | Compute HMAC instead of plain hash; requires `--key` |
 | `--key <secret>` | `-k` | HMAC secret key |
-| `--verify <hex>` | none | Compare computed HMAC against this hex string or `sha256:<hex>` (the form digest prints); exits 0 on match, 1 on mismatch (constant-time). A prefix naming a different algorithm than `--algo` exits 2 |
+| `--verify <hex>` | none | Compare computed HMAC against this hex string or `sha256:<hex>` (the form digest prints); exits 0 on match, 1 on mismatch (constant-time). An empty value (`''` or `sha256:`) is a mismatch. A prefix naming a different algorithm than `--algo` exits 2. Not allowed with `--file` (exit 2) |
 | `--json` | `-j` | Emit JSON object with metadata |
 
 ### --json output shapes
@@ -1754,8 +1754,8 @@ Input: positional argument or stdin, or one or more `--file` paths.
 | Code | Meaning |
 |------|---------|
 | 0 | Success — hash produced, `--compare` result (match or mismatch), `--hmac --verify` match |
-| 1 | Runtime error — `--hmac --verify` mismatch, file not found, I/O error |
-| 2 | Usage error — interactive terminal with no `--file`; unknown flag; unknown `--algo`; `--hmac` without `--key`; `--verify` without `--hmac`; `--compare` with fewer than 2 `--file` values; `--bare` + `--json` together |
+| 1 | Runtime error — `--hmac --verify` mismatch (including an empty `--verify`), file not found, I/O error |
+| 2 | Usage error — interactive terminal with no `--file`; unknown flag; unknown `--algo`; `--hmac` without `--key`; `--verify` without `--hmac`; `--verify` with `--file`; `--compare` with fewer than 2 `--file` values; `--bare` + `--json` together |
 
 ### Examples
 
@@ -1804,6 +1804,7 @@ echo 'hello' | vrk digest | vrk kv set last_hash
 - **`--file` and `printf`-stdin produce identical hashes** — both stream bytes verbatim with no modification. `echo`-stdin and `--file` will differ if the file does not end with `\n`.
 - **`--compare` exits 0 for both match and mismatch** — the result is informational (stdout says `match: true`/`match: false`). The caller decides what to do. Use the stdout content, not the exit code, to detect mismatches.
 - **`--verify` uses constant-time comparison** — `hmac.Equal` prevents timing attacks. Never use `==` to compare HMACs.
+- **`--verify` fails closed** - `--verify "sha256:$SIG"` with `SIG` unset is a mismatch (exit 1, nothing on stdout), so a request with a dropped signature header is rejected. `--verify` checks stdin or a positional argument only; with `--file` it exits 2. Pipe the file in instead: `vrk digest --hmac -k "$K" --verify "$SIG" < body`.
 - **`--bare` and `--json` are mutually exclusive** — combining them exits 2 with a clear error.
 - **`input_bytes` in JSON output counts bytes actually hashed** — for `echo 'hello'`, `input_bytes` is 6 (the newline is included).
 - **MD5 is available but not recommended for security** — offer it only when compatibility with existing MD5 checksums is required.

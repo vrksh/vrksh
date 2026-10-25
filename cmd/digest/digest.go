@@ -111,8 +111,12 @@ func Run() int {
 		return shared.UsageErrorf("digest: --hmac requires --key")
 	}
 
+	// fs.Changed, not verifyFlag != "": an empty --verify must fail, not
+	// quietly fall through to printing the MAC.
+	verifySet := fs.Changed("verify")
+
 	// --verify requires --hmac.
-	if verifyFlag != "" && !hmacFlag {
+	if verifySet && !hmacFlag {
 		if jsonFlag {
 			return shared.PrintJSONError(map[string]any{
 				"error": "digest: --verify requires --hmac",
@@ -132,6 +136,22 @@ func Run() int {
 			return shared.UsageErrorf("%s", msg)
 		}
 		verifyFlag = verifyFlag[i+1:]
+	}
+
+	if verifySet && len(files) > 0 {
+		msg := "digest: --verify works on stdin or a positional argument, not --file"
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": msg, "code": 2})
+		}
+		return shared.UsageErrorf("%s", msg)
+	}
+
+	// An empty expected MAC (say, a missing signature header) is a mismatch.
+	if verifySet && verifyFlag == "" {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": "digest: hmac mismatch: --verify is empty", "code": 1})
+		}
+		return shared.Errorf("digest: hmac mismatch: --verify is empty")
 	}
 
 	// --compare requires at least two --file values.
@@ -197,7 +217,7 @@ func Run() int {
 	hexHash := hex.EncodeToString(computed)
 
 	// --verify: constant-time comparison via hmac.Equal.
-	if verifyFlag != "" {
+	if verifySet {
 		expected, err := hex.DecodeString(verifyFlag)
 		if err != nil {
 			if jsonFlag {

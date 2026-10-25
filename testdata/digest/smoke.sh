@@ -261,6 +261,19 @@ assert_exit "--verify different key exits 1" 1 "$ec"
 ec=$(set +e; echo 'x' | $VRK digest --verify "$HMAC_HEX" >/dev/null 2>&1; echo $?)
 assert_exit "--verify without --hmac exits 2" 2 "$ec"
 
+# Empty expected MAC (unset $SIG) must fail closed with nothing on stdout
+for v in '' 'sha256:'; do
+  out=$(set +e; echo 'payload' | $VRK digest --hmac --key mysecret --verify "$v" 2>/dev/null; true)
+  ec=$(set +e; echo 'payload' | $VRK digest --hmac --key mysecret --verify "$v" >/dev/null 2>&1; echo $?)
+  assert_exit "--verify '$v' exits 1" 1 "$ec"
+  assert_eq "--verify '$v' prints nothing" "" "$out"
+done
+
+# --verify with --file is rejected instead of silently ignored
+printf 'payload\n' > "$TMPDIR/verify.txt"
+ec=$(set +e; $VRK digest --hmac --key mysecret --verify "$HMAC_HEX" --file "$TMPDIR/verify.txt" >/dev/null 2>&1; echo $?)
+assert_exit "--verify with --file exits 2" 2 "$ec"
+
 # ---------------------------------------------------------------------------
 # Section 11 — mutual exclusion and usage errors
 # ---------------------------------------------------------------------------

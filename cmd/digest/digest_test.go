@@ -569,3 +569,40 @@ func TestHMACVerifyAlgoMismatch(t *testing.T) {
 		t.Errorf("stderr = %q", stderr)
 	}
 }
+
+// An empty expected MAC (a dropped signature header) must never pass.
+func TestHMACVerifyEmptyFailsClosed(t *testing.T) {
+	for _, v := range []string{"", "sha256:"} {
+		stdout, _, code := runDigest(t, []string{"--hmac", "--key", "k", "--verify", v}, "payload\n")
+		if code != 1 {
+			t.Errorf("--verify %q: exit %d, want 1", v, code)
+		}
+		if stdout != "" {
+			t.Errorf("--verify %q: stdout = %q, want empty", v, stdout)
+		}
+		stdout, stderr, code := runDigest(t, []string{"--hmac", "--key", "k", "--verify", v, "--json"}, "payload\n")
+		if code != 1 || stderr != "" || !strings.Contains(stdout, `"code":1`) {
+			t.Errorf("--verify %q --json: exit %d stdout %q stderr %q", v, code, stdout, stderr)
+		}
+	}
+}
+
+// An empty --verify without --hmac is still a usage error, not a silent hash.
+func TestVerifyEmptyWithoutHMAC(t *testing.T) {
+	_, _, code := runDigest(t, []string{"--verify", ""}, "hello\n")
+	if code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+}
+
+// --verify used to be dropped silently with --file; it is now a usage error.
+func TestVerifyWithFileRejected(t *testing.T) {
+	path := writeTempFile(t, "payload\n")
+	stdout, _, code := runDigest(t, []string{"--hmac", "--key", "k", "--verify", "sha256:deadbeef", "--file", path}, "")
+	if code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+}

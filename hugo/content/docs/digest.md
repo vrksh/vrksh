@@ -130,7 +130,7 @@ $ echo $?
 0
 ```
 
-`--verify` accepts the `sha256:<hex>` form that digest prints, or bare hex. If the prefix names a different algorithm than `--algo`, it exits 2.
+`--verify` accepts the `sha256:<hex>` form that digest prints, or bare hex. If the prefix names a different algorithm than `--algo`, it exits 2. An empty value (an unset `$SIG`, or just `sha256:`) is a mismatch and exits 1, so a missing signature header never passes. `--verify` reads stdin or a positional argument; combined with `--file` it exits 2.
 
 The `--verify` flag uses constant-time comparison to prevent timing attacks.
 
