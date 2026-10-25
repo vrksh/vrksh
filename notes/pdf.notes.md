@@ -19,6 +19,8 @@ A word split across lines, like `trans-` and `former`, is joined back into `tran
 
 `--as-printed` turns off both: headers, footers, page numbers and hyphenated line breaks come through as they are on the page. Use it when you need the printed page numbers, say for citations, or when a real line got dropped.
 
+Text a viewer never shows is left out: glyphs drawn with render mode 3 or 7 (`Tr`), the usual way to hide instructions for a model in a document that looks harmless, and anything outside the page box. Control characters are dropped too, so a PDF can't send terminal escapes or fake a page break with a form feed of its own.
+
 Most two-column papers already read in order. When a page is written row by row across two columns and no text crosses the gutter, the left column comes out first.
 
 Without `--pages` you get every page, with a form feed (`\f`) on its own line between pages. A PDF with three pages has two form feeds, even if a page is empty.
@@ -111,6 +113,8 @@ $ echo $?
 ```
 
 A page the reader chokes on doesn't sink the file. It warns on stderr and keeps whatever text it read before the error; the other pages come out as usual. With `--json` that page's record gets an `"error"` field. Only when no page has any text does it exit 1.
+
+Hostile files stop at a budget instead of hanging the pipeline. A page stops after 1,000,000 glyphs or 10,000 Form XObjects, and the whole document after 20,000,000 glyphs; the page that hits a budget warns and keeps what it read. Input is capped at 512 MiB, and the path must be a regular file, so `/dev/zero` or a FIFO exits 1 instead of reading forever.
 
 A page past the end:
 

@@ -172,6 +172,40 @@ run /dev/null --text "$FIX/form_bomb.pdf"
 assert_exit "form bomb" 0
 assert_contains "form bomb: budget warning" "exceeds the per-page" "$stderr"
 
+# From the 2026-10 security review: stack overflows (exit 2 with a goroutine
+# dump), hangs and multi-GB allocations. Each now exits 0 or 1 fast.
+run /dev/null --json "$FIX/objstm_cycle.pdf"
+assert_exit "object stream loop" 1
+assert_contains "object stream loop: JSON error" '"error":"pdf: corrupt PDF: object stream loop"' "$stdout"
+assert_eq "object stream loop: stderr empty" "" "$stderr"
+
+for f in objstm_lenself objstm_hugeN xs_index_huge xref_start_1000000000 xs_size_1099511627776 contents_arr_20000 cr_tail; do
+  run /dev/null --json "$FIX/$f.pdf"
+  assert_exit "$f" 1
+  assert_eq "$f: no runtime error" "0" "$(grep -c 'runtime error' "$TMP/out" || true)"
+done
+
+for f in pred_cols_1000000000000 pred_cols_-5 operands_10 array_10 litstr_10 w_form type0_w_200; do
+  run /dev/null --text "$FIX/$f.pdf"
+  if [ "$code" -le 1 ]; then ok "$f (exit $code)"; else fail "$f" "exit $code: $stderr"; fi
+done
+
+run /dev/null --text "$FIX/invisible.pdf"
+assert_eq "Tr 3 text dropped" "Quarterly report." "$stdout"
+
+run /dev/null --text "$FIX/ansi_win.pdf"
+assert_eq "no escapes in text" "0" "$(tr -d '\n\t\f' < "$TMP/out" | LC_ALL=C grep -c '[[:cntrl:]]' || true)"
+
+run /dev/null --text "$FIX/hexerr.pdf"
+assert_eq "no escapes in warnings" "0" "$(tr -d '\n\t\f' < "$TMP/err" | LC_ALL=C grep -c '[[:cntrl:]]' || true)"
+
+run /dev/null --text "$FIX/formfeed.pdf"
+assert_eq "form feed in a string is not a page break" "0" "$(tr -cd '\f' < "$TMP/out" | wc -c | tr -d ' ')"
+
+run /dev/null --json /dev/zero
+assert_exit "/dev/zero" 1
+assert_contains "/dev/zero: refused" "not a regular file" "$stdout"
+
 # --- empty input and help ---
 
 run /dev/null
