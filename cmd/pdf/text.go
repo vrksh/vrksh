@@ -80,19 +80,22 @@ func loadFont(f lpdf.Font) *font {
 		if dw := desc.Key("DW"); !dw.IsNull() {
 			ft.dw = dw.Float64()
 		}
-		// /W is a mix of "c [w1 w2 ...]" and "cFirst cLast w".
+		// /W is a mix of "c [w1 w2 ...]" and "cFirst cLast w". Codes are
+		// two bytes, so more than 65,536 writes only repeat codes; stop
+		// there so a few hundred full ranges can't cost millions.
 		w := desc.Key("W")
-		for i := 0; i+1 < w.Len(); {
+		n := 0
+		for i := 0; i+1 < w.Len() && n <= 0xffff; {
 			first := int(w.Index(i).Int64())
 			if next := w.Index(i + 1); next.Kind() == lpdf.Array {
-				for j := 0; j < next.Len(); j++ {
+				for j := 0; j < next.Len() && n <= 0xffff; j, n = j+1, n+1 {
 					ft.widths[first+j] = next.Index(j).Float64()
 				}
 				i += 2
 				continue
 			}
 			last, wv := int(w.Index(i+1).Int64()), w.Index(i+2).Float64()
-			for c := first; c <= last && c-first <= 0xffff; c++ {
+			for c := first; c <= last && n <= 0xffff; c, n = c+1, n+1 {
 				ft.widths[c] = wv
 			}
 			i += 3
@@ -194,13 +197,24 @@ type walker struct {
 	forms int        // Form XObjects run so far
 	box   [4]float64 // llx lly urx ury
 	clip  bool
+	fonts map[fontKey]*font
+}
+
+// fontKey names a font within a page walk. Font names are local to a
+// resource dictionary, so the name alone isn't enough; the object holding
+// the font tells dictionaries apart. A form drawn 10,000 times then loads
+// its fonts once instead of once per run.
+type fontKey struct {
+	id   uint32
+	gen  uint16
+	name string
 }
 
 // pageGlyphs returns a page's glyphs in drawing order. The interpreter can
 // panic on a broken stream; that comes back as err, along with the glyphs
 // read before it.
 func pageGlyphs(p lpdf.Page) (gs []glyph, err error) {
-	w := &walker{st: textState{ctm: identity, tm: identity, tlm: identity, th: 1}}
+	w := &walker{st: textState{ctm: identity, tm: identity, tlm: identity, th: 1}, fonts: map[fontKey]*font{}}
 	defer func() {
 		if r := recover(); r != nil {
 			if e, ok := r.(error); ok && e == errBudget {
@@ -241,10 +255,6 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 	if contents.IsNull() {
 		return
 	}
-	// Font names are local to a resource dictionary, so each stream gets its
-	// own cache.
-	fonts := map[string]*font{}
-
 	show := func(s string) {
 		st := &w.st
 		f := st.font
@@ -342,13 +352,15 @@ func (w *walker) run(contents, res lpdf.Value, depth int) {
 			st.trise = num(0)
 		case op == "Tf" && len(args) == 2:
 			name := args[0].Name()
-			if _, ok := fonts[name]; !ok {
-				fonts[name] = nil
-				if fv := res.Key("Font").Key(name); !fv.IsNull() {
-					fonts[name] = loadFont(lpdf.Font{V: fv})
-				}
+			fv := res.Key("Font").Key(name)
+			id, gen := fv.ObjectID()
+			k := fontKey{id, gen, name}
+			f, ok := w.fonts[k]
+			if !ok && !fv.IsNull() {
+				f = loadFont(lpdf.Font{V: fv})
 			}
-			st.font, st.tfs = fonts[name], num(1)
+			w.fonts[k] = f
+			st.font, st.tfs = f, num(1)
 		case op == "Tj" && len(args) == 1:
 			show(args[0].RawString())
 		case op == "'" && len(args) == 1:

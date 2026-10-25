@@ -511,6 +511,10 @@ type Value struct {
 	data interface{}
 }
 
+// ObjectID returns the number and generation of the indirect object v was
+// read from: v itself, or the object holding it when v is a direct value.
+func (v Value) ObjectID() (uint32, uint16) { return v.ptr.id, v.ptr.gen }
+
 // IsNull reports whether the value is a null. It is equivalent to Kind() == Null.
 func (v Value) IsNull() bool {
 	return v.data == nil
