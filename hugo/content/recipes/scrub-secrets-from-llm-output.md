@@ -1,9 +1,9 @@
 ---
 title: "Scrub secrets from LLM output"
 meta_title: "Scrub secrets from LLM output - vrk pipeline recipe"
-description: "Catches secrets the model echoes back before they reach storage - one leaked API key in kv is a breach. Mask any accidentally leaked secrets before ..."
-why: "Catches secrets the model echoes back before they reach storage - one leaked API key in kv is a breach."
-body: "Mask any accidentally leaked secrets before storing a result."
+description: "A model can echo a secret back, and mask removes it before it reaches storage. Redact secrets from an LLM response before the pipeline stores it in ..."
+why: "A model can echo a secret back, and mask removes it before it reaches storage."
+body: "Redact secrets from an LLM response before the pipeline stores it in kv."
 slug: "scrub-secrets-from-llm-output"
 steps:
   - |-
@@ -20,7 +20,7 @@ tags:
 
 LLMs echo things back. If your input contains an API key, a password, or a bearer token, the model might include it in the response. If that response goes into a key-value store, a log file, or a downstream API, you've leaked a secret.
 
-This is not hypothetical. Models trained on code regularly reproduce credential patterns. If you feed deployment logs into an LLM for analysis, any secrets in those logs can appear in the output.
+Models trained on code regularly reproduce credential patterns. If you feed deployment logs into an LLM for analysis, any secrets in those logs can appear in the output.
 
 ## How the pipeline works
 

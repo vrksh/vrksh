@@ -50,7 +50,7 @@ assert_stdout_equals() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"
@@ -258,6 +258,26 @@ exit_code=0; echo "[a](https://example.com)" | "$VRK" links --quiet > /dev/null 
 assert_exit            "--quiet success: exit 0"              0               "$exit_code"
 assert_stdout_contains "--quiet success: stdout has url"      "example.com"  "$stdout"
 assert_stderr_empty    "--quiet success: no stderr"                           "$stderr"
+
+# ------------------------------------------------------------
+# hostile input: control chars, one long line of URLs
+# ------------------------------------------------------------
+echo ""
+echo "--- hostile input ---"
+
+stdout=$(printf 'https://x.example/\033]52;c;eA==\007p\n' | "$VRK" links --bare)
+case "$stdout" in *$'\033'*|*$'\007'*) bad=1 ;; *) bad=0 ;; esac
+assert_exit            "--bare: control chars stripped"       0               "$bad"
+
+big=$(mktemp)
+python3 -I -c "import sys;sys.stdout.write('http://a '*200000)" > "$big"
+start=$(date +%s)
+n=$("$VRK" links --bare < "$big" | wc -l | tr -d ' ')
+took=$(( $(date +%s) - start ))
+rm -f "$big"
+assert_stdout_contains "200000 URLs on one line: all found"  "200000"        "$n"
+[ "$took" -le 3 ] && slow=0 || slow=1
+assert_exit            "200000 URLs on one line: under 3s"    0               "$slow"
 
 # ------------------------------------------------------------
 # Summary

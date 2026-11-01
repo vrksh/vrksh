@@ -10,9 +10,9 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -36,31 +36,60 @@ var errTooManyRedirects = errors.New("too many redirects (> 5)")
 
 // errInternalAddress is returned by the SSRF-safe dialer when the resolved
 // address falls within a private, loopback, or link-local range.
-var errInternalAddress = errors.New("grab: request to internal network address is blocked (use --allow-internal to override)")
+var errInternalAddress = errors.New("grab: request to internal network address is blocked (use --allow-internal with VRK_ALLOW_INTERNAL=1 to override)")
 
 // defaultMaxSize is the default response body size limit (10MB).
 const defaultMaxSize = 10 * 1024 * 1024
 
-// isInternalIP returns true if ip is loopback, private, or link-local.
+// blockedPrefixes are the special-purpose ranges (RFC 6890 and friends) on top
+// of what IsGlobalUnicast already rules out: private, CGNAT (100.64/10, where
+// Alibaba metadata and Tailscale peers live), benchmarking, documentation,
+// reserved, IPv4-compatible, NAT64 local-use, discard, Teredo and ULA.
+var blockedPrefixes = func() []netip.Prefix {
+	var ps []netip.Prefix
+	for _, s := range []string{
+		"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+		"172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24", "192.168.0.0/16", "198.18.0.0/15",
+		"198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+		"::/96", "64:ff9b:1::/48", "100::/64", "2001::/32", "2001:db8::/32", "fc00::/7",
+		"fe80::/10", "ff00::/8",
+	} {
+		ps = append(ps, netip.MustParsePrefix(s))
+	}
+	return ps
+}()
+
+var (
+	nat64  = netip.MustParsePrefix("64:ff9b::/96")
+	sixTo4 = netip.MustParsePrefix("2002::/16")
+)
+
+// isInternalIP returns true if ip is loopback, private, link-local or any other
+// address that should never be reached from an untrusted URL.
 func isInternalIP(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+	a, ok := netip.AddrFromSlice(ip)
+	if !ok {
 		return true
 	}
-	// RFC 1918 and RFC 6598 private ranges.
-	privateRanges := []struct {
-		network string
-	}{
-		{"10.0.0.0/8"},
-		{"172.16.0.0/12"},
-		{"192.168.0.0/16"},
-		{"169.254.0.0/16"},
-		{"fc00::/7"},
+	a = a.Unmap()
+	if !a.IsGlobalUnicast() {
+		return true
 	}
-	for _, r := range privateRanges {
-		_, cidr, _ := net.ParseCIDR(r.network)
-		if cidr.Contains(ip) {
+	for _, p := range blockedPrefixes {
+		if p.Contains(a) {
 			return true
 		}
+	}
+	// NAT64 and 6to4 addresses carry an IPv4 address inside: 64:ff9b::7f00:1
+	// reaches 127.0.0.1 through a NAT64 gateway. Check the embedded one rather
+	// than blocking the prefix, since on IPv6-only networks DNS64 puts every
+	// public IPv4 site under 64:ff9b::/96.
+	b := a.As16()
+	switch {
+	case nat64.Contains(a):
+		return isInternalIP(net.IP(b[12:16]))
+	case sixTo4.Contains(a):
+		return isInternalIP(net.IP(b[2:6]))
 	}
 	return false
 }
@@ -139,7 +168,7 @@ func init() {
 			{Name: "json", Shorthand: "j", Usage: "emit JSON envelope with metadata"},
 			{Name: "quiet", Shorthand: "q", Usage: "suppress stderr output"},
 			{Name: "max-size", Usage: "max response body size in bytes (default 10MB)"},
-			{Name: "allow-internal", Usage: "allow requests to private/loopback addresses"},
+			{Name: "allow-internal", Usage: "allow requests to private/loopback addresses (needs VRK_ALLOW_INTERNAL=1)"},
 		},
 	})
 }
@@ -157,7 +186,7 @@ func Run() int {
 	fs.BoolVarP(&jsonFlag, "json", "j", false, "emit JSON envelope with metadata")
 	fs.BoolVarP(&quietFlag, "quiet", "q", false, "suppress stderr output")
 	fs.IntVar(&maxSize, "max-size", defaultMaxSize, "max response body size in bytes")
-	fs.BoolVar(&allowInternal, "allow-internal", false, "allow requests to private/loopback addresses")
+	fs.BoolVar(&allowInternal, "allow-internal", false, "allow requests to private/loopback addresses (needs VRK_ALLOW_INTERNAL=1)")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -203,18 +232,30 @@ func Run() int {
 		}
 	}
 
+	// The SSRF guard is there because a model picks the URL, and the same model
+	// can pass --allow-internal. So the flag only counts when whoever runs vrk
+	// has also set VRK_ALLOW_INTERNAL=1 in the environment.
+	if allowInternal && os.Getenv("VRK_ALLOW_INTERNAL") != "1" {
+		return emitError(jsonFlag, 2, "", 0, "grab: --allow-internal needs VRK_ALLOW_INTERNAL=1 in the environment")
+	}
+
 	// Validate URL — invalid format is a usage error (exit 2).
 	u, err := url.Parse(rawURL)
 	if err != nil || (u.Scheme == "" && u.Host == "") {
+		if err == nil {
+			rawURL = u.Redacted()
+		}
 		return emitError(jsonFlag, 2, rawURL, 0, "grab: invalid URL %q: must be an absolute http or https URL", rawURL)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return emitError(jsonFlag, 2, rawURL, 0, "grab: invalid URL %q: scheme must be http or https, got %q", rawURL, u.Scheme)
+		return emitError(jsonFlag, 2, u.Redacted(), 0, "grab: invalid URL %q: scheme must be http or https, got %q", u.Redacted(), u.Scheme)
 	}
 
 	// Strip fragment — it is client-only and not sent to the server.
 	u.Fragment = ""
 	cleanURL := u.String()
+	// shownURL is what we print: the password in user:pass@ becomes ***.
+	shownURL := u.Redacted()
 
 	// Build a cookie-free HTTP client with redirect cap.
 	// When --allow-internal is not set, use a custom transport with a DialContext
@@ -232,6 +273,9 @@ func Run() int {
 			if len(via) >= 5 {
 				return errTooManyRedirects
 			}
+			// Go sets Referer to the previous URL, which hands any ?token= in
+			// it to whatever host the redirect points at.
+			req.Header.Del("Referer")
 			return nil
 		},
 	}
@@ -246,27 +290,31 @@ func Run() int {
 	if err != nil {
 		// Detect our sentinel so the message is human-readable, not Go internals.
 		if errors.Is(err, errTooManyRedirects) {
-			return emitError(jsonFlag, 1, cleanURL, 0, "grab: too many redirects (> 5)")
+			return emitError(jsonFlag, 1, shownURL, 0, "grab: too many redirects (> 5)")
 		}
-		return emitError(jsonFlag, 1, cleanURL, 0, "grab: fetch failed: %v", err)
+		return emitError(jsonFlag, 1, shownURL, 0, "grab: fetch failed: %v", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode >= 400 {
-		return emitError(jsonFlag, 1, cleanURL, resp.StatusCode,
+		return emitError(jsonFlag, 1, shownURL, resp.StatusCode,
 			"grab: HTTP %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(maxSize)))
 	if err != nil {
-		return emitError(jsonFlag, 1, cleanURL, 0, "grab: reading response body: %v", err)
+		return emitError(jsonFlag, 1, shownURL, 0, "grab: reading response body: %v", err)
 	}
 	if len(body) >= maxSize {
-		return emitError(jsonFlag, 1, cleanURL, resp.StatusCode, "grab: response body exceeded %d byte limit for %s", maxSize, cleanURL)
+		return emitError(jsonFlag, 1, shownURL, resp.StatusCode, "grab: response body exceeded %d byte limit for %s", maxSize, shownURL)
 	}
 
 	fetchedAt := time.Now().Unix()
-	finalURL := resp.Request.URL.String()
+	// Resolve relative links against the final URL without its user:pass@,
+	// or every link in the output would carry the credentials.
+	base := *resp.Request.URL
+	base.User = nil
+	finalURL := resp.Request.URL.Redacted()
 
 	// --raw: emit bytes as-is regardless of content type.
 	if rawFlag {
@@ -294,6 +342,11 @@ func Run() int {
 				TokenEstimate: toks,
 			})
 		}
+		// Non-HTML bodies stay byte-exact in a pipe, but a terminal must not
+		// get the server's escape sequences (OSC 52 clipboard writes and such).
+		if isTerminal(int(os.Stdout.Fd())) {
+			body = []byte(shared.StripControls(string(body)))
+		}
 		if _, err := os.Stdout.Write(body); err != nil {
 			return shared.Errorf("grab: writing output: %v", err)
 		}
@@ -309,13 +362,12 @@ func Run() int {
 	title := extractTitle(doc)
 	mainNode := findMainContent(doc)
 
-	base, _ := url.Parse(finalURL)
-
-	var content string
+	content, err := renderMarkdown(mainNode, &base, 4*max(maxSize, defaultMaxSize))
+	if err != nil {
+		return emitError(jsonFlag, 1, shownURL, resp.StatusCode, "grab: %v", err)
+	}
 	if textFlag {
-		content = plaintext.StripMarkdown(renderMarkdown(mainNode, base))
-	} else {
-		content = renderMarkdown(mainNode, base)
+		content = plaintext.StripMarkdown(content)
 	}
 
 	if jsonFlag {
@@ -360,7 +412,7 @@ func Flags() *pflag.FlagSet {
 	fs.BoolP("json", "j", false, "emit JSON envelope with metadata")
 	fs.BoolP("quiet", "q", false, "suppress stderr output")
 	fs.Int("max-size", defaultMaxSize, "max response body size in bytes")
-	fs.Bool("allow-internal", false, "allow requests to private/loopback addresses")
+	fs.Bool("allow-internal", false, "allow requests to private/loopback addresses (needs VRK_ALLOW_INTERNAL=1)")
 	return fs
 }
 
@@ -407,7 +459,7 @@ func extractTitle(doc *html.Node) string {
 		}
 		if n.Type == html.ElementNode && n.DataAtom == atom.Title {
 			if n.FirstChild != nil && n.FirstChild.Type == html.TextNode {
-				title = strings.TrimSpace(n.FirstChild.Data)
+				title = strings.TrimSpace(shared.StripControls(n.FirstChild.Data))
 			}
 			return
 		}
@@ -477,16 +529,90 @@ func resolveURL(base *url.URL, href string) string {
 	return base.ResolveReference(ref).String()
 }
 
-// renderMarkdown converts an HTML subtree to Markdown.
-func renderMarkdown(root *html.Node, base *url.URL) string {
-	var sb strings.Builder
-	renderMdNode(root, &sb, false, base)
-	// Collapse runs of 3+ newlines to 2.
-	result := collapseNewlines(sb.String())
-	return strings.TrimSpace(result)
+// maxQuoteDepth caps the "> " prefix. x/net/html allows 512 open elements, and
+// 512 levels of "> " on every line is how a small page became gigabytes.
+const maxQuoteDepth = 8
+
+// mdWriter collects the rendered markdown. Blockquote prefixes are written as
+// each line starts, so nested quotes cost one pass instead of a re-render per
+// level. Newlines are held back and collapsed to at most two (one blank line),
+// and every piece of text goes through StripControls so a page can't put
+// terminal escapes in the output.
+type mdWriter struct {
+	sb        strings.Builder
+	depth     int // blockquote depth for the next line
+	lineDepth int // depth of the last line written
+	nl        int // newlines waiting to be written
+	limit     int
+	over      bool
 }
 
-func renderMdNode(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) {
+func (w *mdWriter) WriteString(s string) {
+	for {
+		i := strings.IndexByte(s, '\n')
+		if i < 0 {
+			w.text(s)
+			return
+		}
+		w.text(s[:i])
+		w.nl++
+		s = s[i+1:]
+	}
+}
+
+func quotePrefix(depth int) string {
+	return strings.Repeat("> ", min(depth, maxQuoteDepth))
+}
+
+func (w *mdWriter) text(s string) {
+	s = shared.StripControls(s)
+	if s == "" || w.over {
+		return
+	}
+	if w.nl > 0 || w.sb.Len() == 0 {
+		if w.sb.Len() > 0 {
+			w.sb.WriteByte('\n')
+			if w.nl > 1 {
+				// A blank line stays inside the quote only if both sides are.
+				w.sb.WriteString(strings.TrimSuffix(quotePrefix(min(w.lineDepth, w.depth)), " "))
+				w.sb.WriteByte('\n')
+			}
+		}
+		w.sb.WriteString(quotePrefix(w.depth))
+		w.lineDepth = w.depth
+		w.nl = 0
+	}
+	w.sb.WriteString(s)
+	if w.sb.Len() > w.limit {
+		w.over = true
+	}
+}
+
+// writeSpace adds one space unless the output is empty or already ends in whitespace.
+func (w *mdWriter) writeSpace() {
+	s := w.sb.String()
+	if s == "" || w.nl > 0 {
+		return
+	}
+	switch s[len(s)-1] {
+	case ' ', '\t':
+		return
+	}
+	w.sb.WriteString(" ")
+}
+
+// renderMarkdown converts an HTML subtree to Markdown, failing once the output
+// passes limit bytes.
+func renderMarkdown(root *html.Node, base *url.URL, limit int) (string, error) {
+	w := &mdWriter{limit: limit}
+	renderMdNode(root, w, false, base)
+	if w.over {
+		return "", fmt.Errorf("rendered output exceeds %d bytes", limit)
+	}
+	return strings.TrimSpace(w.sb.String()), nil
+}
+
+func renderMdNode(n *html.Node, sb *mdWriter, inPre bool, base *url.URL) {
 	if n.Type == html.ElementNode && skipTags[n.DataAtom] {
 		return
 	}
@@ -500,7 +626,7 @@ func renderMdNode(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) 
 			// between the closing ** and "word".
 			fields := strings.Fields(n.Data)
 			if len(fields) == 0 || strings.TrimLeftFunc(n.Data, unicode.IsSpace) != n.Data {
-				writeSpace(sb)
+				sb.writeSpace()
 			}
 			if len(fields) > 0 {
 				sb.WriteString(strings.Join(fields, " "))
@@ -552,12 +678,12 @@ func renderMdNode(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) 
 		sb.WriteString("\n")
 	case atom.A:
 		href := resolveURL(base, getAttr(n, "href"))
-		var inner strings.Builder
-		renderChildrenMd(n, &inner, false, base)
+		inner := &mdWriter{limit: sb.limit}
+		renderChildrenMd(n, inner, false, base)
 		// Collapse newlines/whitespace so link text never spans multiple lines.
-		text := strings.Join(strings.Fields(inner.String()), " ")
+		text := strings.Join(strings.Fields(inner.sb.String()), " ")
 		if href != "" && text != "" {
-			fmt.Fprintf(sb, "[%s](%s)", text, href)
+			sb.WriteString(fmt.Sprintf("[%s](%s)", text, href))
 		} else if text != "" {
 			sb.WriteString(text)
 		}
@@ -582,15 +708,11 @@ func renderMdNode(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) 
 		renderChildrenMd(n, sb, true, base)
 		sb.WriteString("\n```\n\n")
 	case atom.Blockquote:
-		var inner strings.Builder
-		renderChildrenMd(n, &inner, false, base)
 		sb.WriteString("\n\n")
-		for _, line := range strings.Split(strings.TrimSpace(inner.String()), "\n") {
-			sb.WriteString("> ")
-			sb.WriteString(line)
-			sb.WriteString("\n")
-		}
-		sb.WriteString("\n")
+		sb.depth++
+		renderChildrenMd(n, sb, false, base)
+		sb.depth--
+		sb.WriteString("\n\n")
 	case atom.Ul, atom.Ol:
 		sb.WriteString("\n\n")
 		renderChildrenMd(n, sb, false, base)
@@ -602,36 +724,15 @@ func renderMdNode(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) 
 		alt := getAttr(n, "alt")
 		src := resolveURL(base, getAttr(n, "src"))
 		if alt != "" {
-			fmt.Fprintf(sb, "![%s](%s)", alt, src)
+			sb.WriteString(fmt.Sprintf("![%s](%s)", alt, src))
 		}
 	default:
 		renderChildrenMd(n, sb, inPre, base)
 	}
 }
 
-// writeSpace adds one space unless the output is empty or already ends in whitespace.
-func writeSpace(sb *strings.Builder) {
-	s := sb.String()
-	if s == "" {
-		return
-	}
-	switch s[len(s)-1] {
-	case ' ', '\n', '\t':
-		return
-	}
-	sb.WriteString(" ")
-}
-
-func renderChildrenMd(n *html.Node, sb *strings.Builder, inPre bool, base *url.URL) {
+func renderChildrenMd(n *html.Node, sb *mdWriter, inPre bool, base *url.URL) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		renderMdNode(c, sb, inPre, base)
 	}
-}
-
-// reThreeNewlines matches runs of three or more consecutive newlines.
-var reThreeNewlines = regexp.MustCompile(`\n{3,}`)
-
-// collapseNewlines reduces runs of 3+ consecutive newlines to exactly 2.
-func collapseNewlines(s string) string {
-	return reThreeNewlines.ReplaceAllString(s, "\n\n")
 }

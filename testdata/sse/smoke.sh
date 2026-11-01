@@ -78,7 +78,7 @@ assert_stderr_empty() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (stdout contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"
@@ -87,7 +87,7 @@ assert_stdout_contains() {
 
 assert_stdout_not_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     fail "$desc" "stdout must NOT contain '$pattern' but did: $actual"
   else
     ok "$desc (stdout does not contain '$pattern')"
@@ -413,6 +413,19 @@ exit_code=$(set +e; printf 'event: first\nevent: last\ndata: {"a":1}\n\n' | "$VR
 assert_exit "last event wins: exit 0" 0 "$exit_code"
 assert_stdout_contains     "last event wins: last emitted" '"last"'  "$stdout"
 assert_stdout_not_contains "last event wins: first dropped" '"first"' "$stdout"
+
+# ------------------------------------------------------------
+# An event that never ends is capped, not buffered until OOM
+# ------------------------------------------------------------
+flood=$(mktemp)
+python3 -I -c "import sys
+line=b'data: '+b'A'*1018+b'\\n'
+sys.stdout.buffer.write(line*70000)" > "$flood"
+stderr=$("$VRK" sse < "$flood" 2>&1 >/dev/null || true)
+exit_code=$(set +e; "$VRK" sse < "$flood" >/dev/null 2>&1; echo $?)
+rm -f "$flood"
+assert_exit "unterminated 70 MB event: exit 1" 1 "$exit_code"
+assert_stdout_contains "unterminated event: error names the cap" "exceeds 64 MiB" "$stderr"
 
 # ------------------------------------------------------------
 # Summary

@@ -46,7 +46,7 @@ for tool in $tools; do
   fi
 
   # 5. Per-tool skill file in hugo/static/skills/<tool>.md (skip meta tools)
-  if ! echo "$meta_tools" | grep -qw "$tool"; then
+  if ! <<<"$meta_tools" grep -qw "$tool"; then
     if [ ! -f "$ROOT/hugo/static/skills/${tool}.md" ]; then
       echo "MISSING  hugo/static/skills/${tool}.md"
       missing=$((missing + 1))

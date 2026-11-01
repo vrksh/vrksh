@@ -49,13 +49,13 @@ OUT=$("$VRK" mcp --list 2>/dev/null) || true
 RC=$?
 assert_exit "test 1: --list exits 0" 0 "$RC"
 
-if echo "$OUT" | grep -q "tok"; then
+if <<<"$OUT" grep -q "tok"; then
   ok "test 1: --list output contains 'tok'"
 else
   fail "test 1: --list output contains 'tok'" "got: $OUT"
 fi
 
-if echo "$OUT" | grep -q "jwt"; then
+if <<<"$OUT" grep -q "jwt"; then
   ok "test 1: --list output contains 'jwt'"
 else
   fail "test 1: --list output contains 'jwt'" "got: $OUT"
@@ -99,13 +99,13 @@ fi
 RESP=$(printf '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
   | "$VRK" mcp 2>/dev/null)
 
-if echo "$RESP" | grep -q "vrk_tok"; then
+if <<<"$RESP" grep -q "vrk_tok"; then
   ok "test 4: tools/list contains vrk_tok"
 else
   fail "test 4: tools/list contains vrk_tok" "response: $RESP"
 fi
 
-if echo "$RESP" | grep -q "vrk_jwt"; then
+if <<<"$RESP" grep -q "vrk_jwt"; then
   ok "test 4: tools/list contains vrk_jwt"
 else
   fail "test 4: tools/list contains vrk_jwt" "response: $RESP"

@@ -1,10 +1,10 @@
 name: kv
-tagline: key-value store - SQLite-backed, namespaces, TTL, atomic counters.
-meta_description: "Persistent key-value store for pipelines. SQLite-backed, with namespaces, TTL, and atomic counters."
+tagline: key-value store - SQLite-backed, namespaces, TTL, atomic counters
+meta_description: "vrk kv is a persistent key-value store for shell pipelines. It uses SQLite and supports namespaces, TTL, and atomic counters."
 meta_lead: "vrk kv is a persistent key-value store backed by SQLite with namespaces, TTL, and atomic counters."
 og_title: "vrk kv - SQLite key-value store for shell pipelines"
 description: |
-  `vrk kv` is a persistent key-value store backed by SQLite. Namespaces isolate different pipelines. TTL handles automatic expiry. Atomic `incr`/`decr` is safe under concurrent access. The database lives at `~/.vrk.db` (override with `VRK_KV_PATH`). No server, no config.
+  `vrk kv` is a persistent key-value store backed by SQLite. Namespaces keep pipelines apart. A TTL expires keys automatically. Atomic `incr` and `decr` are safe under concurrent access. The database lives at `~/.vrk.db`. Set `VRK_KV_PATH` to change the path. It needs no server and no config.
 problem: >
   A pipeline needs to remember state between runs: a cursor position, a processed
   count, a last-run timestamp. Writing to a flat file works until two cron jobs

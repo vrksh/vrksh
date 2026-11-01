@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // runLinks replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and returns
@@ -563,5 +564,33 @@ func TestQuietDoesNotAffectStdout(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "example.com") {
 		t.Errorf("stdout = %q, want link record containing example.com", stdout)
+	}
+}
+
+// TestManyURLsOneLineLinear: overlap checking used to scan every consumed
+// range per match, so one long line of URLs took minutes.
+func TestManyURLsOneLineLinear(t *testing.T) {
+	line := strings.Repeat("http://a ", 200000)
+	start := time.Now()
+	got := extractFromLine(line, 1, nil)
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("took %v, want under 2s", d)
+	}
+	if len(got) != 200000 {
+		t.Errorf("got %d links, want 200000", len(got))
+	}
+}
+
+func TestControlCharsStripped(t *testing.T) {
+	in := "[a\x1b[31m\x07b](https://x.example/\x1b[31mp)\n<a href=\"https://y.example/\u009bq\">t\x1bu</a>\n"
+	stdout, _, code := runLinks(t, nil, in)
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if strings.Contains(stdout, `\u001b`) || strings.Contains(stdout, `\u0007`) || strings.Contains(stdout, "\u009b") {
+		t.Errorf("control chars survived: %q", stdout)
+	}
+	if !strings.Contains(stdout, "a[31mb") || !strings.Contains(stdout, "tu") {
+		t.Errorf("text lost: %q", stdout)
 	}
 }

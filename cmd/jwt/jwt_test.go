@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vrksh/vrksh/internal/shared"
 )
@@ -53,14 +54,11 @@ func runJWT(t *testing.T, args []string, stdinContent string) (stdout, stderr st
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
 	}
-	if stdinContent != "" {
-		if _, err := stdinW.WriteString(stdinContent); err != nil {
-			t.Fatalf("write stdin: %v", err)
-		}
-	}
-	if err := stdinW.Close(); err != nil {
-		t.Fatalf("close stdin write end: %v", err)
-	}
+	// Write in a goroutine so stdin bigger than the pipe buffer can't deadlock.
+	go func() {
+		_, _ = io.WriteString(stdinW, stdinContent)
+		_ = stdinW.Close()
+	}()
 	os.Stdin = stdinR
 
 	stdoutR, stdoutW, err := os.Pipe()
@@ -75,21 +73,21 @@ func runJWT(t *testing.T, args []string, stdinContent string) (stdout, stderr st
 	}
 	os.Stderr = stderrW
 
+	// Drain while Run executes so output bigger than the pipe buffer can't deadlock.
+	var outBuf, errBuf bytes.Buffer
+	outDone, errDone := make(chan struct{}), make(chan struct{})
+	go func() { _, _ = io.Copy(&outBuf, stdoutR); close(outDone) }()
+	go func() { _, _ = io.Copy(&errBuf, stderrR); close(errDone) }()
+
 	os.Args = append([]string{"jwt"}, args...)
 
 	code = Run()
 
-	// Close write ends before reading so io.Copy sees EOF.
+	// Close write ends so the drain goroutines see EOF.
 	_ = stdoutW.Close()
 	_ = stderrW.Close()
-
-	var outBuf, errBuf bytes.Buffer
-	if _, err := io.Copy(&outBuf, stdoutR); err != nil {
-		t.Fatalf("read stdout: %v", err)
-	}
-	if _, err := io.Copy(&errBuf, stderrR); err != nil {
-		t.Fatalf("read stderr: %v", err)
-	}
+	<-outDone
+	<-errDone
 	_ = stdoutR.Close()
 	_ = stderrR.Close()
 
@@ -728,5 +726,79 @@ func TestTTYNoInputJSON(t *testing.T) {
 	}
 	if obj["code"] != float64(2) {
 		t.Errorf("JSON code = %v, want 2", obj["code"])
+	}
+}
+
+// TestUnusableTimeClaimsFailClosed: a time claim that is present but unusable
+// (string, null, out of int64 range on the low side) must not let an expired
+// or not-yet-valid token through. Fractions and exponents are real
+// NumericDates and are compared as such.
+func TestUnusableTimeClaimsFailClosed(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload string
+		flag    string
+	}{
+		{"float exp", `{"sub":"x","exp":1000000000.5}`, "--expired"},
+		{"exponent exp", `{"sub":"x","exp":1e9}`, "--expired"},
+		{"string exp", `{"sub":"x","exp":"9999999999"}`, "--expired"},
+		{"huge negative exp", `{"sub":"x","exp":-99999999999999999999}`, "--expired"},
+		{"float exp valid", `{"sub":"x","exp":1000000000.5}`, "--valid"},
+		{"string exp valid", `{"sub":"x","exp":"9999999999"}`, "--valid"},
+		{"float nbf in 2100", `{"sub":"x","nbf":4102444800.0}`, "--valid"},
+		{"float iat in 2100", `{"sub":"x","iat":4102444800.0}`, "--valid"},
+		{"null nbf", `{"sub":"x","nbf":null}`, "--valid"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, code := runJWT(t, []string{tc.flag, buildJWT(tc.payload)}, "")
+			if code != 1 {
+				t.Errorf("exit = %d, want 1", code)
+			}
+			out, stderr, code := runJWT(t, []string{tc.flag, "--json", buildJWT(tc.payload)}, "")
+			if code != 1 || stderr != "" {
+				t.Errorf("--json: exit = %d stderr = %q, want 1 and empty", code, stderr)
+			}
+			if !strings.Contains(out, `"expired":true`) && !strings.Contains(out, `"error"`) {
+				t.Errorf("--json output = %q, want expired:true or an error", out)
+			}
+			out, _, code = runJWT(t, []string{"--json", buildJWT(tc.payload)}, "")
+			if code != 0 || !strings.Contains(out, `"valid":false`) {
+				t.Errorf("envelope: exit %d out %q, want valid:false", code, out)
+			}
+		})
+	}
+}
+
+// TestFloatAndHugeFutureExpStillValid: a future NumericDate with a fraction,
+// or one past int64, is a real future time and must pass.
+func TestFloatAndHugeFutureExpStillValid(t *testing.T) {
+	for _, p := range []string{`{"exp":4102444800.5}`, `{"exp":99999999999999999999}`} {
+		if _, stderr, code := runJWT(t, []string{"--valid", buildJWT(p)}, ""); code != 0 {
+			t.Errorf("%s: exit %d stderr %q, want 0", p, code, stderr)
+		}
+	}
+}
+
+// TestExpiredAtExactExp: RFC 7519 says a token must not be accepted on or
+// after exp.
+func TestExpiredAtExactExp(t *testing.T) {
+	orig := now
+	now = func() time.Time { return time.Unix(2000000000, 0) }
+	t.Cleanup(func() { now = orig })
+	tok := buildJWT(`{"exp":2000000000}`)
+	if _, _, code := runJWT(t, []string{"--expired", tok}, ""); code != 1 {
+		t.Errorf("--expired at exp: exit %d, want 1", code)
+	}
+	if _, _, code := runJWT(t, []string{"--valid", tok}, ""); code != 1 {
+		t.Errorf("--valid at exp: exit %d, want 1", code)
+	}
+}
+
+// TestEnvelopeSaysSignatureNotVerified: "valid" only covers time claims.
+func TestEnvelopeSaysSignatureNotVerified(t *testing.T) {
+	out, _, code := runJWT(t, []string{"--json", validJWT}, "")
+	if code != 0 || !strings.Contains(out, `"signature_verified":false`) {
+		t.Errorf("exit %d out %q, want signature_verified:false", code, out)
 	}
 }

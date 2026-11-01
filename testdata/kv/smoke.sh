@@ -75,7 +75,7 @@ assert_stderr_empty() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (stdout contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"

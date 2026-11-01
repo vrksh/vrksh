@@ -32,10 +32,10 @@ complete_bash() {
 echo "vrk completions - smoke tests"
 
 out=$(complete_bash to)
-if printf '%s\n' "$out" | grep -qx tok; then ok "bash: 'vrk to' completes tok"; else fail "bash: tool name" "got: $out"; fi
+if <<<"$out" grep -qx tok; then ok "bash: 'vrk to' completes tok"; else fail "bash: tool name" "got: $out"; fi
 
 out=$(complete_bash tok --j)
-if printf '%s\n' "$out" | grep -qx -- --json; then ok "bash: 'vrk tok --j' completes --json"; else fail "bash: flag" "got: $out"; fi
+if <<<"$out" grep -qx -- --json; then ok "bash: 'vrk tok --j' completes --json"; else fail "bash: flag" "got: $out"; fi
 
 set +e
 "$VRK" completions bash | bash -n; rc=$?

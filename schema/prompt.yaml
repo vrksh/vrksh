@@ -1,15 +1,15 @@
 name: prompt
-tagline: LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain.
-meta_description: "Pipe text to Claude or GPT from your terminal. Schema validation, retries, deterministic output."
-meta_lead: "vrk prompt pipes text to Claude or GPT and prints the response to stdout with zero boilerplate."
+tagline: LLM prompt - Anthropic/OpenAI, --schema, --retry, --explain
+meta_description: "vrk prompt sends text to Claude or GPT and prints the reply. It can check the reply against a --schema and retry on a mismatch."
+meta_lead: "vrk prompt pipes text to Claude or GPT and prints the response to stdout."
 og_title: "vrk prompt - pipe text to any LLM from your terminal"
 description: |
-  `vrk prompt` pipes text to Claude or GPT and prints the response to stdout. Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, pipe in content, get back plain text. No curl, no JSON escaping, no response parsing. Temperature defaults to 0 for deterministic output. `--schema` checks the response has the keys and types you list, on Anthropic, OpenAI, and any `--endpoint`. Without `--fail` a mismatch still prints the response and exits 0. `--fail` makes it exit 1, and `--retry` re-sends with escalating temperature, then exits 1 if no attempt matches. An empty prompt is never sent: it exits 1.
+  `vrk prompt` pipes text to Claude or GPT and prints the response to stdout. Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` and pipe in the content. You get plain text back, with no curl, JSON escaping, or response parsing. Temperature defaults to 0 for deterministic output. `--schema` checks the response has the keys and types you list, on Anthropic, OpenAI, and any `--endpoint`. Without `--fail` a mismatch still prints the response and exits 0. `--fail` makes it exit 1, and `--retry` re-sends with escalating temperature, then exits 1 if no attempt matches. An empty prompt is never sent: it exits 1.
 problem: >
   Calling an LLM from a shell script means a curl command with JSON escaping,
   content-type headers, API key management, and response extraction. A backtick
   in the input breaks the JSON. A 429 response makes the jq pipeline print `null`.
-  You spend more time on HTTP plumbing than on the actual task.
+  You spend more time on HTTP than on the task itself.
 before: |
   curl -s https://api.anthropic.com/v1/messages \
     -H "x-api-key: $ANTHROPIC_API_KEY" \

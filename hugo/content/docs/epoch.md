@@ -1,6 +1,6 @@
 ---
 title: "vrk epoch"
-description: "Convert between Unix timestamps and ISO dates. Supports relative time like +3d or -1h."
+description: "vrk epoch converts between Unix timestamps and ISO 8601 dates. It also accepts relative times such as +3d or -1h, on macOS and Linux."
 meta_lead: "vrk epoch converts between Unix timestamps and ISO 8601, and handles relative offsets like +3d or -1h."
 og_title: "vrk epoch - Unix timestamp and ISO date converter"
 tool: epoch
@@ -19,7 +19,7 @@ vrk epoch converts between Unix timestamps and ISO 8601, and handles relative of
 
 ## The solution
 
-`vrk epoch` converts between Unix timestamps and ISO 8601, and handles relative offsets like `+3d` or `-1h`. Works identically on macOS and Linux. Use `--at` to pin the reference time for deterministic pipeline output.
+`vrk epoch` converts between Unix timestamps and ISO 8601, and handles relative offsets like `+3d` or `-1h`. It works the same on macOS and Linux. Use `--at` to pin the reference time, so the pipeline output is the same on every run.
 
 ## Before and after
 
@@ -67,6 +67,8 @@ vrk epoch '+3d' --iso
 
 ## Input formats
 
+`vrk epoch` converts between Unix timestamps and ISO 8601 dates, and calculates relative times such as `+3d`.
+
 vrk epoch accepts four input forms:
 
 | Input | Example | Meaning |
@@ -76,7 +78,7 @@ vrk epoch accepts four input forms:
 | ISO datetime | `2025-02-20T10:00:00Z` | RFC 3339 |
 | Relative offset | `+3d`, `-1h` | From now (or from --at) |
 
-Integers with an absolute value from 100000000000 up to (not including) 100000000000000 are read as milliseconds (JavaScript `Date.now()`), so `vrk epoch --iso 1792042275000` prints `2026-10-15T05:31:15Z`. Ten-digit values stay seconds. With `--json`, millisecond input adds `"unit":"ms"`.
+epoch reads an integer as milliseconds (JavaScript `Date.now()`) if its absolute value is from 100000000000 up to, but not including, 100000000000000. So `vrk epoch --iso 1792042275000` prints `2026-10-15T05:31:15Z`. Ten-digit values stay seconds. With `--json`, millisecond input adds `"unit":"ms"`.
 
 Relative units: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks).
 

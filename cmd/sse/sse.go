@@ -22,6 +22,14 @@ var isTerminal = shared.IsTerminal
 // nil means "use os.Stdin" at the time Run() is called.
 var stdinReader io.Reader
 
+// stdoutIsTerminal decides whether --field output is stripped of control
+// characters. Separate from isTerminal so tests can fake a TTY stdout alone.
+var stdoutIsTerminal = shared.IsTerminal
+
+// maxEventBytes caps the data buffered for one event (all its data: lines).
+// A var so tests can shrink it.
+var maxEventBytes = shared.MaxLineBytes
+
 type sseRecord struct {
 	Event string      `json:"event"`
 	Data  interface{} `json:"data"`
@@ -77,7 +85,9 @@ func Run() int {
 	// SSE state machine: per-block accumulators, reset on each blank line.
 	var eventName string
 	var dataLines []string
+	blockBytes := 0
 	hasData := false
+	strip := fieldPath != "" && stdoutIsTerminal(int(os.Stdout.Fd()))
 	st := &fieldStats{}
 
 	// finish maps the end of the stream to an exit code: --field that matched
@@ -95,7 +105,7 @@ func Run() int {
 		if line == "" {
 			// Blank line: dispatch the current block if it has data.
 			if hasData {
-				code := dispatch(w, eventFilter, fieldPath, rawFlag, st, eventName, dataLines)
+				code := dispatch(w, eventFilter, fieldPath, rawFlag, strip, st, eventName, dataLines)
 				if code == -1 {
 					// [DONE] sentinel — stop cleanly.
 					return finish()
@@ -107,6 +117,7 @@ func Run() int {
 			// Reset state for the next block.
 			eventName = ""
 			dataLines = dataLines[:0]
+			blockBytes = 0
 			hasData = false
 			continue
 		}
@@ -123,8 +134,17 @@ func Run() int {
 
 		if strings.HasPrefix(line, "data:") {
 			val := stripOneSpace(line[len("data:"):])
-			dataLines = append(dataLines, val)
 			hasData = true
+			// An event already named something --event won't emit is never
+			// dispatched; keep two lines at most so a lone [DONE] still ends.
+			if eventFilter != "" && eventName != "" && eventName != eventFilter && len(dataLines) >= 2 {
+				continue
+			}
+			blockBytes += len(val) + 1
+			if blockBytes > maxEventBytes {
+				return shared.Errorf("sse: event exceeds %d MiB limit", maxEventBytes>>20)
+			}
+			dataLines = append(dataLines, val)
 			continue
 		}
 
@@ -148,7 +168,7 @@ type fieldStats struct{ seen, matched int }
 //	-1  — caller should stop and return 0 ([DONE] sentinel)
 //	 0  — success, continue
 //	 1  — runtime error
-func dispatch(w *bufio.Writer, eventFilter, fieldPath string, raw bool, st *fieldStats, eventName string, dataLines []string) int {
+func dispatch(w *bufio.Writer, eventFilter, fieldPath string, raw, strip bool, st *fieldStats, eventName string, dataLines []string) int {
 	dataStr := strings.Join(dataLines, "\n")
 
 	// [DONE] is the Anthropic/OpenAI stream termination sentinel.
@@ -191,11 +211,16 @@ func dispatch(w *bufio.Writer, eventFilter, fieldPath string, raw bool, st *fiel
 			return 0
 		}
 		st.matched++
+		out := renderValue(val)
+		if strip {
+			// A terminal would act on ESC/OSC sequences from the stream.
+			out = shared.StripControls(out)
+		}
 		var err error
 		if raw {
-			_, err = fmt.Fprint(w, renderValue(val))
+			_, err = fmt.Fprint(w, out)
 		} else {
-			_, err = fmt.Fprintln(w, renderValue(val))
+			_, err = fmt.Fprintln(w, out)
 		}
 		if err != nil {
 			return shared.Errorf("sse: writing output: %v", err)

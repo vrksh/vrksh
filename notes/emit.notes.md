@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk emit` turns each line of stdin into a structured JSONL log record with a timestamp and a log level.
+
 ### Basic structured logging
 
 ```bash
@@ -7,7 +9,7 @@ $ echo 'Application started' | vrk emit
 {"ts":"...","level":"info","msg":"Application started"}
 ```
 
-Every line becomes a JSONL record with an ISO timestamp and log level.
+Every line becomes a JSONL record (one JSON object per line) with an ISO timestamp and a log level.
 
 ### Set log level
 
@@ -28,7 +30,7 @@ $ printf 'Application started\nERROR: database connection failed\nWARNING: cache
 {"ts":"...","level":"info","msg":"Processing complete"}
 ```
 
-Recognizes `ERROR`, `WARN`, `WARNING`, `INFO`, and `DEBUG` prefixes. Strips the prefix from the message.
+emit recognizes the prefixes `ERROR`, `WARN`, `WARNING`, `INFO`, and `DEBUG`. It removes the prefix from the message.
 
 ### Tag records by pipeline stage
 
@@ -37,7 +39,7 @@ $ echo 'Fetching data' | vrk emit --tag fetch
 {"ts":"...","level":"info","tag":"fetch","msg":"Fetching data"}
 ```
 
-Tags let you filter logs by stage: `jq 'select(.tag == "fetch")'`.
+Use tags to filter logs by stage: `jq 'select(.tag == "fetch")'`.
 
 ### Combined: tag + parse-level
 
@@ -50,7 +52,7 @@ $ printf 'INFO Starting deployment\nERROR Container health check failed\nWARN Ro
 
 ### Override message field (--msg)
 
-When stdin contains JSON you want to merge as extra fields:
+If stdin is JSON, emit merges its fields into the record as extra fields:
 
 ```bash
 echo '{"duration_ms":1234,"status":"ok"}' | vrk emit --msg 'Request completed'

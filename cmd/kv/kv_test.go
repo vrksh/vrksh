@@ -365,6 +365,63 @@ func TestTTLExpiry(t *testing.T) {
 	}
 }
 
+func TestTTLUnderOneSecondStillStored(t *testing.T) {
+	db := newTempDB(t)
+	runKV(t, db, []string{"set", "--ttl", "500ms", "k", "v"}, "")
+	stdout, _, code := runKV(t, db, []string{"get", "k"}, "")
+	if code != 0 || stdout != "v\n" {
+		t.Fatalf("get right after sub-second ttl set: code %d, stdout %q", code, stdout)
+	}
+}
+
+func TestNegativeTTLIsUsageError(t *testing.T) {
+	db := newTempDB(t)
+	_, stderr, code := runKV(t, db, []string{"set", "--ttl", "-5s", "k", "v"}, "")
+	if code != 2 || !strings.Contains(stderr, "--ttl") {
+		t.Fatalf("code %d, stderr %q, want exit 2 mentioning --ttl", code, stderr)
+	}
+}
+
+// --- file safety ---
+
+func TestOpenDBTightensExistingPerms(t *testing.T) {
+	db := newTempDB(t)
+	if err := os.Chmod(db, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, stderr, code := runKV(t, db, []string{"set", "k", "v"}, ""); code != 0 {
+		t.Fatalf("set exit %d: %s", code, stderr)
+	}
+	for _, p := range []string{db, db + "-wal", db + "-shm"} {
+		fi, err := os.Stat(p)
+		if err != nil {
+			continue // sqlite removes the sidecars on a clean close
+		}
+		if fi.Mode().Perm()&0o077 != 0 {
+			t.Errorf("%s has mode %v, want no group/other bits", p, fi.Mode().Perm())
+		}
+	}
+	if fi, _ := os.Stat(db); fi.Mode().Perm() != 0o600 {
+		t.Errorf("db mode %v, want 0600", fi.Mode().Perm())
+	}
+}
+
+func TestOpenDBRefusesSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.db")
+	link := filepath.Join(dir, "link.db")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	_, _, code := runKV(t, link, []string{"set", "k", "v"}, "")
+	if code != 1 {
+		t.Fatalf("exit %d, want 1", code)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("target must not be created through the symlink, stat err = %v", err)
+	}
+}
+
 // --- dry-run ---
 
 func TestDryRun(t *testing.T) {
@@ -679,35 +736,5 @@ func TestOpenDBCreatesFileWith0600(t *testing.T) {
 	perm := info.Mode().Perm()
 	if perm != 0o600 {
 		t.Errorf("database file permissions = %04o, want 0600", perm)
-	}
-}
-
-// TestOpenDBPreservesExistingPermissions verifies that if the database file
-// already exists, openDB does not change its permissions.
-func TestOpenDBPreservesExistingPermissions(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "existing.db")
-	t.Setenv("VRK_KV_PATH", dbPath)
-
-	// Create the file with 0644 first - simulating an existing database.
-	f, err := os.OpenFile(dbPath, os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatalf("create file: %v", err)
-	}
-	_ = f.Close()
-
-	db, err := openDB()
-	if err != nil {
-		t.Fatalf("openDB: %v", err)
-	}
-	_ = db.Close()
-
-	info, err := os.Stat(dbPath)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	perm := info.Mode().Perm()
-	if perm != 0o644 {
-		t.Errorf("existing file permissions changed to %04o, want 0644 (unchanged)", perm)
 	}
 }

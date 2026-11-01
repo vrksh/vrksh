@@ -1,9 +1,39 @@
 package plaintext
 
 import (
+	"strings"
 	"testing"
 	"testing/quick"
+	"time"
 )
+
+// Deeply nested openers make goldmark quadratic. These must fall back to the
+// raw text quickly instead of pinning a CPU for minutes.
+func TestStripMarkdownDeepNesting(t *testing.T) {
+	cases := map[string]string{
+		"links":       strings.Repeat("[a](", 100000),
+		"list":        strings.Repeat("- ", 100000) + "x",
+		"star list":   strings.Repeat("* ", 100000) + "x",
+		"blockquotes": strings.Repeat("> ", 100000) + "x",
+	}
+	for name, in := range cases {
+		start := time.Now()
+		out := StripMarkdown(in)
+		if d := time.Since(start); d > 2*time.Second {
+			t.Errorf("%s: took %v, want under 2s", name, d)
+		}
+		if out == "" {
+			t.Errorf("%s: empty output", name)
+		}
+	}
+}
+
+func TestStripMarkdownShallowNestingStillParsed(t *testing.T) {
+	in := strings.Repeat("> ", 5) + "**hi**"
+	if got := StripMarkdown(in); got != "hi" {
+		t.Errorf("got %q, want %q", got, "hi")
+	}
+}
 
 func TestStripMarkdown(t *testing.T) {
 	cases := []struct {

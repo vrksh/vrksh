@@ -33,12 +33,11 @@ func runSSE(t *testing.T, args []string, stdinContent string) (stdout, stderr st
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
 	}
-	if _, err := io.WriteString(stdinW, stdinContent); err != nil {
-		t.Fatalf("write stdin: %v", err)
-	}
-	if err := stdinW.Close(); err != nil {
-		t.Fatalf("close stdin write end: %v", err)
-	}
+	// Write in a goroutine so stdin bigger than the pipe buffer can't deadlock.
+	go func() {
+		_, _ = io.WriteString(stdinW, stdinContent)
+		_ = stdinW.Close()
+	}()
 	os.Stdin = stdinR
 
 	stdoutR, stdoutW, err := os.Pipe()
@@ -53,19 +52,19 @@ func runSSE(t *testing.T, args []string, stdinContent string) (stdout, stderr st
 	}
 	os.Stderr = stderrW
 
+	// Drain while Run executes so output bigger than the pipe buffer can't deadlock.
+	var outBuf, errBuf bytes.Buffer
+	outDone, errDone := make(chan struct{}), make(chan struct{})
+	go func() { _, _ = io.Copy(&outBuf, stdoutR); close(outDone) }()
+	go func() { _, _ = io.Copy(&errBuf, stderrR); close(errDone) }()
+
 	os.Args = append([]string{"sse"}, args...)
 	code = Run()
 
 	_ = stdoutW.Close()
 	_ = stderrW.Close()
-
-	var outBuf, errBuf bytes.Buffer
-	if _, err := io.Copy(&outBuf, stdoutR); err != nil {
-		t.Fatalf("read stdout: %v", err)
-	}
-	if _, err := io.Copy(&errBuf, stderrR); err != nil {
-		t.Fatalf("read stderr: %v", err)
-	}
+	<-outDone
+	<-errDone
 	_ = stdoutR.Close()
 	_ = stderrR.Close()
 
@@ -769,4 +768,56 @@ func TestRawStreamsLive(t *testing.T) {
 		t.Errorf("exit code = %d, want 0", code)
 	}
 	_ = outW.Close()
+}
+
+// TestEventByteCap: data lines with no blank line used to pile up until OOM.
+func TestEventByteCap(t *testing.T) {
+	orig := maxEventBytes
+	maxEventBytes = 1024
+	t.Cleanup(func() { maxEventBytes = orig })
+
+	in := strings.Repeat("data: "+strings.Repeat("A", 100)+"\n", 20)
+	stdout, stderr, code := runSSE(t, nil, in)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if stdout != "" || !strings.Contains(stderr, "exceeds") {
+		t.Errorf("stdout %q stderr %q", stdout, stderr)
+	}
+
+	// Under the cap, a normal multi-line event still works.
+	stdout, _, code = runSSE(t, nil, "data: a\ndata: b\n\n")
+	if code != 0 || !strings.Contains(stdout, `"a\nb"`) {
+		t.Errorf("small event: exit %d stdout %q", code, stdout)
+	}
+}
+
+// TestEventFilterSkipsBuffering: an event already known not to match is not
+// buffered, so it can't hit the cap.
+func TestEventFilterSkipsBuffering(t *testing.T) {
+	orig := maxEventBytes
+	maxEventBytes = 1024
+	t.Cleanup(func() { maxEventBytes = orig })
+
+	in := "event: noise\n" + strings.Repeat("data: "+strings.Repeat("A", 100)+"\n", 20) + "\nevent: want\ndata: ok\n\n"
+	stdout, stderr, code := runSSE(t, []string{"--event", "want"}, in)
+	if code != 0 || !strings.Contains(stdout, `"ok"`) {
+		t.Errorf("exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
+func TestFieldStripsControlsOnTTY(t *testing.T) {
+	in := "data: {\"t\":\"\\u001b]52;c;eA==\\u0007hi\"}\n\n"
+
+	stdoutIsTerminal = func(int) bool { return true }
+	stdout, _, _ := runSSE(t, []string{"--field", "data.t"}, in)
+	stdoutIsTerminal = func(int) bool { return false }
+	if strings.ContainsAny(stdout, "\x1b\x07") || !strings.Contains(stdout, "hi") {
+		t.Errorf("tty: %q", stdout)
+	}
+
+	stdout, _, _ = runSSE(t, []string{"--field", "data.t", "--raw"}, in)
+	if !strings.Contains(stdout, "\x1b]52") {
+		t.Errorf("pipe --raw must stay byte-exact: %q", stdout)
+	}
 }

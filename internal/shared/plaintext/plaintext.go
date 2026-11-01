@@ -25,6 +25,9 @@ func StripMarkdown(s string) string {
 	if s == "" {
 		return ""
 	}
+	if tooDeep(s) {
+		return cleanup(s)
+	}
 	src := []byte(s)
 	reader := text.NewReader(src)
 	doc := md.Parser().Parse(reader)
@@ -135,6 +138,46 @@ func StripMarkdown(s string) string {
 	})
 
 	return cleanup(sb.String())
+}
+
+// maxMarkdownNesting caps runs of nesting openers. goldmark goes quadratic on
+// long runs ("[a](" x 100000 takes minutes), and text like that is not
+// meaningful Markdown anyway, so StripMarkdown returns it as plain text.
+const maxMarkdownNesting = 1000
+
+// tooDeep reports whether s has a run of more than maxMarkdownNesting
+// back-to-back openers: "[label](" with a label up to 8 bytes, or a "- ",
+// "* ", "+ ", "> " list or quote marker.
+// ponytail: catches the known shapes only; cmd/plain also has a timeout.
+func tooDeep(s string) bool {
+	run := 0
+	for i := 0; i < len(s); {
+		n := openerLen(s[i:])
+		if n == 0 {
+			run = 0
+			i++
+			continue
+		}
+		if run++; run > maxMarkdownNesting {
+			return true
+		}
+		i += n
+	}
+	return false
+}
+
+func openerLen(s string) int {
+	if len(s) >= 2 && s[1] == ' ' && strings.IndexByte("-*+>", s[0]) >= 0 {
+		return 2
+	}
+	if len(s) < 3 || s[0] != '[' {
+		return 0
+	}
+	j := strings.IndexAny(s[1:min(len(s), 10)], "]\n")
+	if j < 0 || s[1+j] != ']' || 2+j >= len(s) || s[2+j] != '(' {
+		return 0
+	}
+	return j + 3
 }
 
 // cleanup normalises whitespace in the collected plain text:

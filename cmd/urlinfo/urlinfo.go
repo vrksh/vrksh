@@ -124,7 +124,7 @@ func Run() int {
 
 		rec, err := parseURL(line)
 		if err != nil {
-			return shared.Errorf("urlinfo: invalid URL: %s", line)
+			return shared.Errorf("urlinfo: invalid URL: %s", redactUserinfo(line))
 		}
 
 		if fieldFlag != "" {
@@ -154,7 +154,7 @@ func Run() int {
 func runSingle(rawURL, fieldFlag string, jsonFlag bool) int {
 	rec, err := parseURL(rawURL)
 	if err != nil {
-		return shared.Errorf("urlinfo: invalid URL: %s", rawURL)
+		return shared.Errorf("urlinfo: invalid URL: %s", redactUserinfo(rawURL))
 	}
 
 	if fieldFlag != "" {
@@ -175,6 +175,26 @@ func runSingle(rawURL, fieldFlag string, jsonFlag bool) int {
 		}
 	}
 	return 0
+}
+
+// redactUserinfo hides user:password in a URL that failed to parse, so the
+// error message doesn't leak it. Works on the raw string because url.Parse
+// (and so URL.Redacted) has already given up on it.
+func redactUserinfo(raw string) string {
+	i := strings.Index(raw, "://")
+	if i < 0 {
+		return raw
+	}
+	rest := raw[i+3:]
+	end := strings.IndexAny(rest, "/?#")
+	if end < 0 {
+		end = len(rest)
+	}
+	at := strings.LastIndex(rest[:end], "@")
+	if at < 0 {
+		return raw
+	}
+	return raw[:i+3] + "***" + rest[at:]
 }
 
 // parseURL parses a raw URL string into a urlRecord.

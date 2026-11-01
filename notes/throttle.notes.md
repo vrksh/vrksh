@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk throttle` limits how fast lines pass from stdin to stdout, so a pipeline stays under the rate limit of an API.
+
 ### Rate limiting
 
 ```bash
@@ -10,27 +12,27 @@ seq 20 | vrk throttle --rate 10/s
 cat records.jsonl | vrk throttle --rate 100/m
 ```
 
-Lines are delayed to maintain the target rate. Output is the same as input, just paced.
+throttle delays lines to keep the target rate. The output is the same as the input, but slower.
 
 ### Burst (--burst)
 
-Let the first N lines through immediately, then enforce the rate:
+`--burst N` lets the first N lines through at once. After that, throttle enforces the rate:
 
 ```bash
 cat records.jsonl | vrk throttle --rate 5/s --burst 10
 ```
 
-The first 10 lines arrive instantly. After that, 5 per second. Use this for APIs that allow burst traffic but enforce sustained rate limits.
+The first 10 lines arrive at once. After that, 5 lines arrive per second. Use this for APIs that allow short bursts but limit the sustained rate.
 
 ### Token-aware rate limiting (--tokens-field)
 
-When different records consume different amounts of API quota:
+If records use different amounts of API quota, count tokens instead of lines:
 
 ```bash
 cat chunks.jsonl | vrk throttle --rate 100000/m --tokens-field tokens
 ```
 
-Instead of counting lines, throttle counts the value of the `tokens` field in each JSONL record. This keeps you under token-per-minute limits even when chunk sizes vary.
+throttle adds up the `tokens` field of each JSONL record instead of counting lines. This keeps you under a tokens-per-minute limit when the chunk sizes differ.
 
 ### JSON metadata (--json)
 
@@ -82,7 +84,7 @@ cat large-dataset.jsonl | \
 
 ## When it fails
 
-Missing --rate:
+If you leave out `--rate`, throttle exits 2:
 
 ```bash
 $ seq 10 | vrk throttle
@@ -91,7 +93,7 @@ $ echo $?
 2
 ```
 
-Invalid rate format:
+If the rate format is invalid, throttle exits 2:
 
 ```bash
 $ seq 10 | vrk throttle --rate 10/h

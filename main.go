@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 
@@ -26,11 +27,13 @@ import (
 	"github.com/vrksh/vrksh/cmd/mask"
 	"github.com/vrksh/vrksh/cmd/moniker"
 	"github.com/vrksh/vrksh/cmd/pct"
+	"github.com/vrksh/vrksh/cmd/pdf"
 	"github.com/vrksh/vrksh/cmd/plain"
 	"github.com/vrksh/vrksh/cmd/prompt"
 	"github.com/vrksh/vrksh/cmd/recase"
 	"github.com/vrksh/vrksh/cmd/sip"
 	"github.com/vrksh/vrksh/cmd/slug"
+	"github.com/vrksh/vrksh/cmd/sql"
 	"github.com/vrksh/vrksh/cmd/sse"
 	"github.com/vrksh/vrksh/cmd/throttle"
 	"github.com/vrksh/vrksh/cmd/tok"
@@ -76,15 +79,19 @@ var tools = map[string]func() int{
 	"mask":     mask.Run,
 	"moniker":  moniker.Run,
 	"pct":      pct.Run,
+	"pdf":      pdf.Run,
 	"recase":   recase.Run,
 	"sip":      sip.Run,
 	"slug":     slug.Run,
+	"sql":      sql.Run,
 	"plain":    plain.Run,
 	"throttle": throttle.Run,
 	"validate": validate.Run,
 }
 
 func main() {
+	// A recursion bug in a parser then dies at 64 MB instead of after eating 1 GB.
+	debug.SetMaxStack(64 << 20)
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "--manifest":
@@ -225,11 +232,13 @@ func mcpMaps() (
 		"mask":     mask.Flags,
 		"moniker":  moniker.Flags,
 		"pct":      pct.Flags,
+		"pdf":      pdf.Flags,
 		"plain":    plain.Flags,
 		"prompt":   prompt.Flags,
 		"recase":   recase.Flags,
 		"sip":      sip.Flags,
 		"slug":     slug.Flags,
+		"sql":      sql.Flags,
 		"sse":      sse.Flags,
 		"throttle": throttle.Flags,
 		"tok":      tok.Flags,
@@ -251,6 +260,8 @@ func mcpMaps() (
 		// Optional stdin — subcommand-dependent or optional buffering
 		"coax": false, // stdin is optional buffering for subprocess
 		"kv":   false, // set reads stdin only when no positional value
+		"pdf":  false, // a file path works instead of PDF bytes on stdin
+		"sql":  false, // reads stdin only when the query names it
 
 		// Required — stdin or positional args needed
 		"jwt":      true, // single token input

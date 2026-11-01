@@ -1,6 +1,6 @@
 ---
 title: "vrk slug"
-description: "Generate URL-safe slugs from any text. Handles unicode, custom separators, and length limits."
+description: "vrk slug turns any text into a URL-safe, filename-safe slug. It folds Latin text to ASCII, accepts custom separators, and limits length."
 meta_lead: "vrk slug converts any text to a URL-safe, filename-safe slug with Unicode normalization."
 og_title: "vrk slug - URL and filename slug generator"
 tool: slug
@@ -19,7 +19,7 @@ A slugify function turns "Uber's $3.1B Q4 Revenue" into "uber-s--3-1b-q4-revenue
 
 ## The solution
 
-`vrk slug` converts any text to a URL-safe, filename-safe slug. Folds Latin text to ASCII (`Straße` becomes `strasse`), keeps other scripts such as Devanagari and CJK as they are, lowercases, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` truncates at word boundaries for length-limited contexts.
+`vrk slug` converts any text to a URL-safe, filename-safe slug. It folds Latin text to ASCII (`Straße` becomes `strasse`) and keeps other scripts, such as Devanagari and CJK, as they are. It lowercases the text, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` cuts the slug at a word boundary.
 
 ## Before and after
 
@@ -65,6 +65,8 @@ echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
 
 ## How it works
 
+`vrk slug` turns text into a URL-safe slug: lowercase words joined by hyphens.
+
 ```bash
 $ echo 'Hello World' | vrk slug
 hello-world
@@ -82,7 +84,7 @@ hello_world
 
 ### Length limit
 
-Truncates at word boundaries so slugs don't end mid-word:
+`--max` cuts the slug at a word boundary, so a word is never cut in half:
 
 ```bash
 $ echo 'My Very Long Blog Post Title That Goes On Forever' | vrk slug --max 30
@@ -91,7 +93,7 @@ my-very-long-blog-post-title
 
 ### Batch processing
 
-One slug per input line:
+slug makes one slug per input line:
 
 ```bash
 $ printf 'First Post\nSecond Post\nThird Post\n' | vrk slug
@@ -102,7 +104,7 @@ third-post
 
 ### Non-Latin text
 
-Latin letters fold to ASCII. Other scripts are kept as they are, so a Hindi or Japanese title still gets a slug:
+Latin letters fold to ASCII. slug keeps other scripts as they are, so a Hindi or Japanese title still gets a slug:
 
 ```bash
 $ printf 'Straße\nनमस्ते दुनिया\n東京 2026\n' | vrk slug
@@ -111,7 +113,7 @@ strasse
 東京-2026
 ```
 
-Every input line produces exactly one output line. If a line has nothing to keep, you get an empty line and a warning on stderr, so batch output stays aligned with the input. Use `--ascii` when the target needs strict ASCII:
+Every input line gives exactly one output line. If a line has nothing to keep, slug prints an empty line and warns on stderr, so the output lines match the input lines. Use `--ascii` when the target needs strict ASCII:
 
 ```bash
 $ echo '東京 2026' | vrk slug --ascii
@@ -150,7 +152,7 @@ done < urls.txt
 
 ## When it fails
 
-No input:
+If you give no input on an interactive terminal, slug exits 2:
 
 <!-- doccheck: skip (needs an interactive terminal, doccheck runs with empty stdin) -->
 ```bash

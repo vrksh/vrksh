@@ -1,6 +1,6 @@
 ---
 title: "vrk links"
-description: "Extract every hyperlink from markdown, HTML, or plain text. JSONL output with text, URL, and line number."
+description: "vrk links extracts every hyperlink from markdown, HTML, or plain text. It writes one JSONL record per link with text, URL, and line number."
 meta_lead: "vrk links extracts hyperlinks from markdown, HTML, or plain text and outputs one JSONL record per link."
 og_title: "vrk links - extract hyperlinks from markdown and HTML"
 tool: links
@@ -19,7 +19,7 @@ vrk links extracts hyperlinks from markdown, HTML, or plain text and outputs one
 
 ## The solution
 
-`vrk links` extracts hyperlinks from markdown, HTML, or plain text and outputs one JSONL record per link with the link text, URL, and line number. Handles inline links, reference-style links, HTML anchor tags, and bare URLs. `--bare` outputs just the URLs, one per line.
+`vrk links` extracts hyperlinks from markdown, HTML, or plain text and outputs one JSONL record per link with the link text, URL, and line number. It handles inline links, reference-style links, HTML anchor tags, and bare URLs. `--bare` outputs only the URLs, one per line.
 
 ## Before and after
 
@@ -65,6 +65,8 @@ vrk grab https://example.com/docs | vrk links --bare
 
 ## How it works
 
+`vrk links` extracts hyperlinks from markdown, HTML, or plain text and prints them as JSONL (one JSON object per line).
+
 ### JSONL output (default)
 
 ```bash
@@ -85,7 +87,7 @@ https://github.com/example/repo
 https://blog.example.com/updates.
 ```
 
-One URL per line, no JSON. Pipe directly to `xargs`, `while read`, or `vrk grab`.
+Each line is one URL, with no JSON. Pipe the output to `xargs`, `while read`, or `vrk grab`.
 
 ### Metadata trailer (--json)
 
@@ -149,4 +151,4 @@ $ echo $?
 2
 ```
 
-Empty input produces no output and exits 0 - there are simply no links to extract.
+If the input is empty, links prints nothing and exits 0, because there are no links to extract.

@@ -8,7 +8,55 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
+
+// A line carrying a second JSON value (or trailing garbage) must not pass the
+// gate: only the first value would be checked but both would be forwarded.
+func TestTrailingJSONRejected(t *testing.T) {
+	for _, in := range []string{
+		`{"ok":true}{"ok":false,"cmd":"rm -rf"}`,
+		`{"ok":true}garbage`,
+		`{"ok":true} {"ok":false}`,
+	} {
+		stdout, stderr, code := runAssert(t, []string{".ok == true"}, in+"\n")
+		if code != 1 {
+			t.Errorf("%s: exit %d, want 1", in, code)
+		}
+		if stdout != "" {
+			t.Errorf("%s: stdout %q, want empty", in, stdout)
+		}
+		if !strings.Contains(stderr, "not valid JSON") {
+			t.Errorf("%s: stderr %q", in, stderr)
+		}
+	}
+}
+
+func TestEmptyInputFailsJSONMode(t *testing.T) {
+	stdout, stderr, code := runAssert(t, []string{".ok == true"}, "")
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "assert: no JSON records on stdin") {
+		t.Errorf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runAssert(t, []string{".ok == true", "--json"}, "\n\n")
+	if code != 1 || stderr != "" || !strings.Contains(stdout, `"passed":false`) || !strings.Contains(stdout, `"error":"no input"`) {
+		t.Errorf("--json: code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
+
+func TestConditionTimeout(t *testing.T) {
+	orig := jqEvalTimeout
+	jqEvalTimeout = 200 * time.Millisecond
+	defer func() { jqEvalTimeout = orig }()
+
+	start := time.Now()
+	_, stderr, code := runAssert(t, []string{"def f: f; f"}, "{}\n")
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("took %v", d)
+	}
+	if code != 1 || !strings.Contains(stderr, "condition timed out") {
+		t.Errorf("code=%d stderr=%q", code, stderr)
+	}
+}
 
 // runAssert replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and returns
 // captured stdout, stderr, and the exit code. Not parallel-safe — tests share

@@ -54,7 +54,7 @@ assert_stdout_equals() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 stdout=$3
-  if echo "$stdout" | grep -qF -- "$pattern"; then
+  if <<<"$stdout" grep -qF -- "$pattern"; then
     ok "$desc (stdout contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $stdout"
@@ -81,7 +81,7 @@ assert_stdout_empty() {
 
 assert_stderr_contains() {
   local desc=$1 pattern=$2 stderr=$3
-  if echo "$stderr" | grep -qF -- "$pattern"; then
+  if <<<"$stderr" grep -qF -- "$pattern"; then
     ok "$desc (stderr contains '$pattern')"
   else
     fail "$desc" "stderr did not contain '$pattern'. got: $stderr"
@@ -331,7 +331,7 @@ assert_stderr_empty    "--now --json: stderr empty"                  "$stderr"
 assert_stdout_contains "--now --json: has unix"        '"unix"'      "$stdout"
 assert_stdout_contains "--now --json: has iso"         '"iso"'       "$stdout"
 # input must NOT appear for --now
-if echo "$stdout" | grep -q '"input"'; then
+if <<<"$stdout" grep -q '"input"'; then
   fail "--now --json: no input field" "stdout contained 'input' key: $stdout"
 else
   ok "--now --json: no input field"
@@ -356,6 +356,12 @@ stderr=$(set +e; "$VRK" epoch 2026-02-29 2>&1 >/dev/null; true)
 exit_code=$(set +e; "$VRK" epoch 2026-02-29 > /dev/null 2>&1; echo $?)
 assert_exit "invalid date: exit 1" 1 "$exit_code"
 assert_stderr_contains "invalid date: stderr" "invalid date" "$stderr"
+
+# Offsets past int64 fail instead of wrapping into the wrong direction
+exit_code=$(set +e; "$VRK" epoch --at 1740009600 -- '-9223372036854775807d' > /dev/null 2>&1; echo $?)
+assert_exit "overflowing -Nd: exit 1" 1 "$exit_code"
+exit_code=$(set +e; "$VRK" epoch --at 1740009600 -- '+9223372036854775807s' > /dev/null 2>&1; echo $?)
+assert_exit "overflowing +Ns: exit 1" 1 "$exit_code"
 
 # Error + --json: JSON to stdout, stderr empty
 stdout=$(set +e; echo '3d' | "$VRK" epoch --json 2>/dev/null; true)

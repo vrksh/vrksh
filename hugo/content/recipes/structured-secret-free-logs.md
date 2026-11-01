@@ -1,9 +1,9 @@
 ---
 title: "Structured secret-free logs"
 meta_title: "Structured secret-free logs - vrk pipeline recipe"
-description: "Plain script output becomes searchable JSON logs, and the secrets never reach the log file. Mask the output of a script, then wrap each line as a ..."
-why: "Plain script output becomes searchable JSON logs, and the secrets never reach the log file."
-body: "Mask the output of a script, then wrap each line as a JSON record with a level and a tag."
+description: "Plain script output becomes searchable JSON logs, and secrets never reach the log file. Mask secrets in the output of a script, then wrap each line ..."
+why: "Plain script output becomes searchable JSON logs, and secrets never reach the log file."
+body: "Mask secrets in the output of a script, then wrap each line in a JSON record with a level and a tag."
 slug: "structured-secret-free-logs"
 steps:
   - "./deploy.sh 2>&1 | vrk mask | vrk emit --tag deploy --parse-level"

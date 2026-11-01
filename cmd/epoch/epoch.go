@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -372,7 +373,16 @@ func parseRelative(s string, nowRef int64) (int64, error) {
 		return 0, fmt.Errorf("invalid relative time %q: unknown unit %q, use s/m/h/d/w", s, string(unit))
 	}
 
-	return nowRef + sign*magnitude*secondsPerUnit, nil
+	// Check before multiplying and adding: int64 wraps silently, and a
+	// wrapped "-N days" can land in the future.
+	if magnitude > math.MaxInt64/secondsPerUnit {
+		return 0, fmt.Errorf("relative time %q is out of range", s)
+	}
+	offset := magnitude * secondsPerUnit
+	if (sign > 0 && nowRef > math.MaxInt64-offset) || (sign < 0 && nowRef < math.MinInt64+offset) {
+		return 0, fmt.Errorf("relative time %q is out of range", s)
+	}
+	return nowRef + sign*offset, nil
 }
 
 // parseISO parses an ISO 8601 date or datetime string into a Unix timestamp.

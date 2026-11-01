@@ -1,0 +1,163 @@
+# Recipes for the browser playground (layouts/partials/playground.html).
+# Every cmd must run in the playground: only echo, printf, cat <sample file>
+# and the tools in internal/playground/main/main.go. Write one stage per line,
+# ending each line but the last with " \" so the command also pastes into bash.
+default: clean-and-check
+groups:
+  - title: Before the LLM
+    recipes:
+      - id: count
+        title: Count tokens
+        does: Counts tokens with o200k_base, the GPT-4o tokenizer. The sample README is 82 tokens.
+        cmd: cat README.md | vrk tok
+      - id: over-budget
+        title: Stop when over budget
+        does: tok --check exits 1 when the text is over the limit, so nothing goes to the next step.
+        cmd: |-
+          cat README.md \
+            | vrk tok --check 20
+      - id: clean-and-check
+        title: Clean a doc for a prompt
+        does: Strips the markdown, hides the API key, then checks that the result fits in 200 tokens.
+        cmd: |-
+          cat README.md \
+            | vrk plain \
+            | vrk mask \
+            | vrk tok --check 200
+      - id: mask
+        title: Hide a secret
+        does: Replaces API keys, tokens and passwords with [REDACTED] before the text goes anywhere.
+        cmd: |-
+          echo 'deploy key: sk-ant-api03-Xk9fQ2mLp7RtVw3ZbN8cYd4HjE6sUa1G' \
+            | vrk mask
+  - title: After the LLM
+    recipes:
+      - id: sse
+        title: Join a streamed reply
+        does: Reads a server-sent event stream and joins the text deltas into one reply.
+        cmd: |-
+          cat stream.sse \
+            | vrk sse --field 'data.choices[0].delta.content' --raw
+      - id: validate
+        title: Drop records that break a schema
+        does: Keeps the JSONL lines that match the schema. Line 2 has a text age, so it is dropped with a warning.
+        cmd: |-
+          cat users.jsonl \
+            | vrk validate \
+                --schema '{"name":"string","age":"number"}'
+      - id: links
+        title: Pull links out of markdown
+        does: Prints each link as one JSON object, with its text, URL and line number.
+        cmd: |-
+          cat README.md \
+            | vrk links --json
+  - title: Everyday tools
+    recipes:
+      - id: epoch
+        title: Unix time to a date
+        does: Converts 1740009600 to an ISO 8601 date in UTC.
+        cmd: vrk epoch 1740009600 --iso
+      - id: jwt
+        title: Read a JWT
+        does: Decodes the token payload. It does not check the signature.
+        cmd: vrk jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+      - id: slug
+        title: Make a URL slug
+        does: Turns a title into a lowercase, hyphenated slug.
+        cmd: vrk slug 'Hello, World! 2026'
+
+# One runnable example per tool, shown on its docs page (layouts/_default/single.html).
+# A tool listed here is playable; keep the keys in sync with PLAYGROUND_TOOLS in static/js/playground.js.
+tools:
+  assert:
+    does: Exits 0 when the condition holds and 1 when it does not. Change 0 to 50 to see it fail.
+    cmd: echo '{"status":"ok","count":42}' | vrk assert '.count > 0'
+  base:
+    does: Encodes text as base64. Use decode to go back.
+    cmd: echo 'hello' | vrk base encode --to base64
+  chunk:
+    does: Splits the sample README into 30-token chunks with a 5-token overlap, one JSON record per chunk.
+    cmd: cat README.md | vrk chunk --size 30 --overlap 5
+  digest:
+    does: Prints the SHA-256 of the input.
+    cmd: cat README.md | vrk digest
+  emit:
+    does: Wraps each line in a JSON log record and reads the level from the line's prefix.
+    cmd: |-
+      printf 'INFO deploy started\nERROR health check failed\n' \
+        | vrk emit --tag deploy --parse-level
+  epoch:
+    does: Converts a relative time to an ISO 8601 date in UTC.
+    cmd: vrk epoch '+3d' --iso
+  jsonl:
+    does: Turns a JSON array into one record per line.
+    cmd: echo '[{"name":"ana"},{"name":"bo"}]' | vrk jsonl
+  jwt:
+    does: Reads one claim from the token payload. It does not check the signature.
+    cmd: vrk jwt --claim name eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+  links:
+    does: Prints each URL in the sample README, one per line.
+    cmd: cat README.md | vrk links --bare
+  mask:
+    does: Replaces API keys, tokens and passwords with [REDACTED] before the text goes anywhere.
+    cmd: |-
+      echo 'deploy key: sk-ant-api03-Xk9fQ2mLp7RtVw3ZbN8cYd4HjE6sUa1G' \
+        | vrk mask
+  moniker:
+    does: Makes five readable names. The same seed gives the same names.
+    cmd: vrk moniker --count 5 --seed 42
+  pct:
+    does: Percent-encodes text for a URL.
+    cmd: echo 'hello world&foo=bar' | vrk pct --encode
+  plain:
+    does: Strips the markdown from the sample README and keeps the text.
+    cmd: cat README.md | vrk plain
+  recase:
+    does: Converts snake_case to camelCase.
+    cmd: echo 'user_first_name' | vrk recase --to camel
+  sip:
+    does: Keeps two random lines. The same seed keeps the same two.
+    cmd: cat users.jsonl | vrk sip --count 2 --seed 42
+  slug:
+    does: Turns a title into a lowercase, hyphenated slug.
+    cmd: |-
+      echo 'My Blog Post: A Deep Dive into LLM Pipelines!' | vrk slug
+  sse:
+    does: Reads a server-sent event stream and joins the text deltas into one reply.
+    cmd: |-
+      cat stream.sse \
+        | vrk sse --field 'data.choices[0].delta.content' --raw
+  throttle:
+    does: Lets two lines through per second. The three lines take about a second.
+    cmd: cat users.jsonl | vrk throttle --rate 2/s
+  tok:
+    does: Passes the text through when it fits in 100 tokens. Change 100 to 20 and it exits 1 with no output.
+    cmd: cat README.md | vrk tok --check 100
+  urlinfo:
+    does: Splits a URL into its parts as JSON.
+    cmd: vrk urlinfo 'https://api.example.com:8080/v1/search?q=llm+tools&limit=10'
+  uuid:
+    does: Makes three time-ordered v7 UUIDs.
+    cmd: vrk uuid --v7 --count 3
+  validate:
+    does: Keeps the JSONL lines that match the schema. Line 2 has a text age, so it is dropped with a warning.
+    cmd: |-
+      cat users.jsonl \
+        | vrk validate --schema '{"name":"string","age":"number"}'
+
+# Recipes that run in the browser, keyed by recipe slug. The sample files stand in for the real input.
+recipes:
+  sse-stream-to-text:
+    does: stream.sse stands in for curl. It is an OpenAI-style stream, so the field path differs from the Anthropic one above.
+    cmd: |-
+      cat stream.sse \
+        | vrk sse --field 'data.choices[0].delta.content' --raw
+  reproducible-eval-sample:
+    does: users.jsonl stands in for prompts.jsonl. Run it twice and you get the same lines. Change the seed for a different sample.
+    cmd: cat users.jsonl | vrk sip --count 2 --seed 7
+  structured-secret-free-logs:
+    does: printf stands in for ./deploy.sh. The key is masked before emit turns each line into a JSON record.
+    cmd: |-
+      printf 'INFO deploy started\nWARN using key sk-ant-api03-Xk9fQ2mLp7RtVw3ZbN8cYd4HjE6sUa1G\nERROR health check failed\n' \
+        | vrk mask \
+        | vrk emit --tag deploy --parse-level

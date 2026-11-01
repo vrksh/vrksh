@@ -1,5 +1,7 @@
 ## How it works
 
+`vrk sse` parses a Server-Sent Events (SSE) stream from stdin into JSONL records, so you can read an LLM stream in a pipeline.
+
 ### Parse SSE into JSONL records
 
 ```bash
@@ -8,11 +10,11 @@ $ printf 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text
 {"event":"message","data":{"delta":{"text":" world","type":"text_delta"},"type":"content_block_delta"}}
 ```
 
-Each SSE event becomes one JSONL record with `event` and `data` fields. The `[DONE]` sentinel terminates parsing cleanly (exit 0).
+Each SSE event becomes one JSONL record with `event` and `data` fields. The `[DONE]` sentinel ends the parse, and sse exits 0.
 
 ### Extract nested text with --field
 
-The real power is `--field`, which uses dot-path syntax to drill into the JSON data and print just the value you need.
+`--field` takes a dot path into the JSON data and prints only that value.
 
 **Anthropic streams** - text lives at `data.delta.text`:
 
@@ -31,11 +33,11 @@ curl -sN https://api.openai.com/v1/chat/completions \
   vrk sse --field 'data.choices[0].delta.content' --raw
 ```
 
-Array indexes work as `[0]` or `.0`, so `data.choices.0.delta.content` is the same path. If the stream carried events but `--field` matched none of them, `vrk sse` prints `sse: --field <path> matched no events` to stderr and exits 1. A stream with no events at all (for example only `[DONE]`) exits 0.
+An array index is `[0]` or `.0`, so `data.choices.0.delta.content` is the same path. If the stream has events but `--field` matches none of them, `vrk sse` prints `sse: --field <path> matched no events` to stderr and exits 1. If the stream has no events at all (for example only `[DONE]`), it exits 0.
 
 ### Reassemble streamed text (--raw)
 
-By default `--field` prints one value per line. Streamed text already carries its own newlines, so that adds a break after every token. `--raw` writes each value exactly as it arrived, with nothing after it, and flushes after every event so output stays live:
+By default `--field` prints one value per line. Streamed text has its own newlines, so this adds a break after every token. `--raw` writes each value as it arrived, with nothing after it. It flushes after every event, so the output stays live:
 
 ```bash
 $ printf 'event: ping\ndata: {}\n\nevent: content_block_delta\ndata: {"delta":{"text":"Hello"}}\n\nevent: content_block_delta\ndata: {"delta":{"text":" world"}}\n\n' | vrk sse --event content_block_delta --field data.delta.text --raw
@@ -44,13 +46,13 @@ Hello world
 
 ### Filter by event type (--event)
 
-If the stream contains multiple event types and you only want one:
+If the stream has more than one event type and you want only one, use `--event`:
 
 ```bash
 curl -sN $STREAM_URL | vrk sse --event content_block_delta
 ```
 
-Only events matching that type are emitted. All others are silently dropped.
+sse emits only the events of that type and drops all others.
 
 ## Pipeline integration
 
@@ -85,7 +87,7 @@ curl -sN $API_URL | \
 
 ## When it fails
 
-Interactive terminal with no piped input:
+If you run sse on an interactive terminal with no piped input, it exits 2:
 
 <!-- doccheck: skip (needs an interactive terminal, doccheck runs with empty stdin) -->
 ```bash
@@ -95,4 +97,6 @@ $ echo $?
 2
 ```
 
-Non-SSE input produces no output and exits 0 - there are simply no events to parse.
+If the input is not SSE, sse prints nothing and exits 0, because there are no events to parse.
+
+If the `data:` lines of one event pass 64 MiB before the closing blank line, sse exits 1 with `sse: event exceeds 64 MiB limit`. This stops a server that never ends an event from using all your memory.

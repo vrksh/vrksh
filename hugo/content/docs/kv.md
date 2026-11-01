@@ -1,6 +1,6 @@
 ---
 title: "vrk kv"
-description: "Persistent key-value store for pipelines. SQLite-backed, with namespaces, TTL, and atomic counters."
+description: "vrk kv is a persistent key-value store for shell pipelines. It uses SQLite and supports namespaces, TTL, and atomic counters."
 meta_lead: "vrk kv is a persistent key-value store backed by SQLite with namespaces, TTL, and atomic counters."
 og_title: "vrk kv - SQLite key-value store for shell pipelines"
 tool: kv
@@ -19,7 +19,7 @@ A pipeline needs to remember state between runs: a cursor position, a processed 
 
 ## The solution
 
-`vrk kv` is a persistent key-value store backed by SQLite. Namespaces isolate different pipelines. TTL handles automatic expiry. Atomic `incr`/`decr` is safe under concurrent access. The database lives at `~/.vrk.db` (override with `VRK_KV_PATH`). No server, no config.
+`vrk kv` is a persistent key-value store backed by SQLite. Namespaces keep pipelines apart. A TTL expires keys automatically. Atomic `incr` and `decr` are safe under concurrent access. The database lives at `~/.vrk.db`. Set `VRK_KV_PATH` to change the path. It needs no server and no config.
 
 ## Before and after
 
@@ -70,6 +70,8 @@ vrk kv set --ns nightly-pipeline last_run "$(vrk epoch --now)" --ttl 24h
 
 ## Subcommands
 
+`vrk kv` is a key-value store in a local SQLite file, with namespaces, TTL expiry, and atomic counters.
+
 ### set - store a value
 
 ```bash
@@ -90,7 +92,7 @@ $ vrk kv get mykey
 hello world
 ```
 
-Exits 1 if the key doesn't exist or has expired:
+If the key does not exist or has expired, kv exits 1:
 
 ```bash
 $ vrk kv get nonexistent
@@ -105,7 +107,7 @@ $ echo $?
 vrk kv del mykey
 ```
 
-Silent if the key doesn't exist. Always exits 0.
+If the key does not exist, del prints nothing. It always exits 0.
 
 ### list - show all keys
 
@@ -152,7 +154,7 @@ vrk kv get --ns weekly-report status    # "pending"
 
 ### --ttl (time to live)
 
-Automatically expires keys after a duration. Supports Go duration format: `1s`, `5m`, `24h`, `168h` (7 days).
+Expires a key after a set duration. Supports Go duration format: `1s`, `5m`, `24h`, `168h` (7 days).
 
 ```bash
 vrk kv set --ns cache response "$DATA" --ttl 1h
@@ -160,6 +162,12 @@ vrk kv set --ns cache response "$DATA" --ttl 1h
 vrk kv get --ns cache response
 # error: kv get: key not found
 ```
+
+A sub-second TTL rounds up to one second. A negative TTL is a usage error.
+
+### Database file safety
+
+kv creates the database as `0600`, tightens an existing file to `0600`, and refuses a symlink or a file owned by another user. Point `VRK_KV_PATH` at the real file, not a link.
 
 ### --dry-run
 

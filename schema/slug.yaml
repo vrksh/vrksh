@@ -1,10 +1,10 @@
 name: slug
 tagline: URL/filename slug generator - --separator, --max, --json
-meta_description: "Generate URL-safe slugs from any text. Handles unicode, custom separators, and length limits."
+meta_description: "vrk slug turns any text into a URL-safe, filename-safe slug. It folds Latin text to ASCII, accepts custom separators, and limits length."
 meta_lead: "vrk slug converts any text to a URL-safe, filename-safe slug with Unicode normalization."
 og_title: "vrk slug - URL and filename slug generator"
 description: |
-  `vrk slug` converts any text to a URL-safe, filename-safe slug. Folds Latin text to ASCII (`Straße` becomes `strasse`), keeps other scripts such as Devanagari and CJK as they are, lowercases, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` truncates at word boundaries for length-limited contexts.
+  `vrk slug` converts any text to a URL-safe, filename-safe slug. It folds Latin text to ASCII (`Straße` becomes `strasse`) and keeps other scripts, such as Devanagari and CJK, as they are. It lowercases the text, replaces non-alphanumeric characters with hyphens, and collapses consecutive hyphens. `--max` cuts the slug at a word boundary.
 problem: >
   A slugify function turns "Uber's $3.1B Q4 Revenue" into "uber-s--3-1b-q4-revenue"
   with a double hyphen. Another title has Unicode characters that pass through

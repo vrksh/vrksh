@@ -5,6 +5,7 @@ package assert
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/itchyny/gojq"
 	"github.com/spf13/pflag"
@@ -225,18 +227,19 @@ func runJSON(conditions []string, queries []*gojq.Code, message string, jsonFlag
 	w := bufio.NewWriter(os.Stdout)
 	defer func() { _ = w.Flush() }()
 
+	records := 0
 	scanner := shared.ScanLines(os.Stdin)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
+		records++
 
-		// Parse JSON.
+		// Parse exactly one JSON value. A second value on the line would be
+		// forwarded without being checked.
 		var parsed any
-		d := json.NewDecoder(strings.NewReader(string(line)))
-		d.UseNumber()
-		if err := d.Decode(&parsed); err != nil {
+		if err := shared.DecodeOne(string(line), &parsed); err != nil {
 			if jsonFlag {
 				_ = emitJSONResult(w, false, conditions[0], nil, "input is not valid JSON", message)
 				_ = w.Flush()
@@ -248,14 +251,14 @@ func runJSON(conditions []string, queries []*gojq.Code, message string, jsonFlag
 
 		// Evaluate each condition.
 		for i, code := range queries {
-			result, ok := evalJQ(code, parsed)
+			result, ok, failMsg := evalJQ(code, parsed)
 			if !ok || !isTruthy(result) {
 				if jsonFlag {
-					_ = emitJSONResult(w, false, conditions[i], parsed, "", message)
+					_ = emitJSONResult(w, false, conditions[i], parsed, failMsg, message)
 					_ = w.Flush()
 					return 1
 				}
-				return stderrFail(conditions[i], "", message)
+				return stderrFail(conditions[i], failMsg, message)
 			}
 		}
 
@@ -288,21 +291,40 @@ func runJSON(conditions []string, queries []*gojq.Code, message string, jsonFlag
 		return shared.Errorf("%s", msg)
 	}
 
+	// No records means the producer printed nothing (crashed, timed out,
+	// filtered everything). A gate must not pass that.
+	if records == 0 {
+		if jsonFlag {
+			_ = emitJSONResult(w, false, conditions[0], nil, "no input", message)
+			return 1
+		}
+		return shared.Errorf("assert: no JSON records on stdin")
+	}
+
 	return 0
 }
 
+// jqEvalTimeout bounds one condition on one record. gojq checks the context
+// between steps, so runaway recursion and huge ranges stop. Memory is not
+// bounded: '"a" * 1e9' can still allocate a lot before it finishes.
+var jqEvalTimeout = 5 * time.Second
+
 // evalJQ runs a compiled jq query against input and returns the first result.
-func evalJQ(code *gojq.Code, input any) (any, bool) {
-	iter := code.Run(input)
-	result, ok := iter.Next()
+// failMsg is set when the condition timed out.
+func evalJQ(code *gojq.Code, input any) (result any, ok bool, failMsg string) {
+	ctx, cancel := context.WithTimeout(context.Background(), jqEvalTimeout)
+	defer cancel()
+	result, ok = code.RunWithContext(ctx, input).Next()
 	if !ok {
-		return nil, false
+		return nil, false, ""
 	}
 	if err, isErr := result.(error); isErr {
-		_ = err
-		return nil, false
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, false, fmt.Sprintf("condition timed out after %s", jqEvalTimeout)
+		}
+		return nil, false, ""
 	}
-	return result, true
+	return result, true, ""
 }
 
 // isTruthy implements jq truthiness: null and false are falsy, everything else is truthy.
@@ -339,6 +361,9 @@ func emitJSONResult(w *bufio.Writer, passed bool, condition string, input any, f
 	}
 	if !passed && userMessage != "" {
 		obj["message"] = userMessage
+	}
+	if !passed && failMsg != "" {
+		obj["error"] = failMsg
 	}
 	data, err := json.Marshal(obj)
 	if err != nil {

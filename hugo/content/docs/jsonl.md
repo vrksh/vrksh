@@ -1,7 +1,7 @@
 ---
 title: "vrk jsonl"
-description: "Convert between JSON arrays and JSONL. Flatten arrays for streaming, collect lines back into arrays."
-meta_lead: "vrk jsonl converts JSON arrays to JSONL and back for line-by-line pipeline processing."
+description: "vrk jsonl converts a JSON array to JSONL (one object per line) and back with --collect. It streams, so large files do not fill memory."
+meta_lead: "vrk jsonl converts a JSON array to JSONL and back, so a pipeline can process one record at a time."
 og_title: "vrk jsonl - convert between JSON arrays and JSONL"
 tool: jsonl
 group: v1
@@ -11,7 +11,7 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-vrk jsonl converts JSON arrays to JSONL and back for line-by-line pipeline processing.
+vrk jsonl converts a JSON array to JSONL and back, so a pipeline can process one record at a time.
 
 ## The problem
 
@@ -61,6 +61,8 @@ cat api-response.json | vrk jsonl | vrk validate --schema '{"name":"string"}'
 <!-- notes - edit in notes/jsonl.notes.md -->
 
 ## How it works
+
+`vrk jsonl` converts a JSON array to JSONL (one JSON object per line), and converts JSONL back to an array with `--collect`.
 
 ### Split a JSON array into JSONL
 

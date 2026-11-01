@@ -35,7 +35,7 @@ assert_exit() {
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if echo "$haystack" | grep -qF -- "$needle"; then
+  if <<<"$haystack" grep -qF -- "$needle"; then
     pass "$desc"
   else
     fail "$desc — expected to contain: $needle | got: $haystack"
@@ -78,7 +78,7 @@ assert_eq "--bare sha256 of hello (with newline)" \
   "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" \
   "$out"
 # No colon in bare output
-if echo "$out" | grep -q ':'; then
+if <<<"$out" grep -q ':'; then
   fail "--bare output must not contain colon"
 else
   pass "--bare output has no colon"
@@ -260,6 +260,29 @@ assert_exit "--verify different key exits 1" 1 "$ec"
 # --verify without --hmac → exit 2
 ec=$(set +e; echo 'x' | $VRK digest --verify "$HMAC_HEX" >/dev/null 2>&1; echo $?)
 assert_exit "--verify without --hmac exits 2" 2 "$ec"
+
+# Empty expected MAC (unset $SIG) must fail closed with nothing on stdout
+for v in '' 'sha256:'; do
+  out=$(set +e; echo 'payload' | $VRK digest --hmac --key mysecret --verify "$v" 2>/dev/null; true)
+  ec=$(set +e; echo 'payload' | $VRK digest --hmac --key mysecret --verify "$v" >/dev/null 2>&1; echo $?)
+  assert_exit "--verify '$v' exits 1" 1 "$ec"
+  assert_eq "--verify '$v' prints nothing" "" "$out"
+done
+
+# --key-env and --key-file give the same MAC as --key
+want=$(echo 'payload' | $VRK digest --hmac --key mysecret)
+got=$(echo 'payload' | WEBHOOK_SECRET=mysecret $VRK digest --hmac --key-env WEBHOOK_SECRET)
+assert_eq "--key-env matches --key" "$want" "$got"
+echo 'mysecret' > "$TMPDIR/key"
+got=$(echo 'payload' | $VRK digest --hmac --key-file "$TMPDIR/key")
+assert_eq "--key-file matches --key" "$want" "$got"
+ec=$(set +e; echo 'payload' | $VRK digest --hmac --key a --key-file "$TMPDIR/key" >/dev/null 2>&1; echo $?)
+assert_exit "--key with --key-file exits 2" 2 "$ec"
+
+# --verify with --file is rejected instead of silently ignored
+printf 'payload\n' > "$TMPDIR/verify.txt"
+ec=$(set +e; $VRK digest --hmac --key mysecret --verify "$HMAC_HEX" --file "$TMPDIR/verify.txt" >/dev/null 2>&1; echo $?)
+assert_exit "--verify with --file exits 2" 2 "$ec"
 
 # ---------------------------------------------------------------------------
 # Section 11 — mutual exclusion and usage errors

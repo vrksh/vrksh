@@ -1,5 +1,7 @@
 ## Supported encodings
 
+`vrk base` encodes and decodes text as base64, base64url, hex, or base32.
+
 | Encoding | Flag value | Example output |
 |----------|-----------|----------------|
 | Base64 | `base64` | `aGVsbG8=` |
@@ -34,7 +36,7 @@ hello
 
 ### Trailing newline handling
 
-`echo` appends a newline. vrk base strips exactly one trailing newline before encoding, so `echo 'hello'` and `printf 'hello'` produce the same result. Use `printf 'hello\n'` if you want the newline included.
+`echo` adds a newline. `vrk base` removes exactly one trailing newline before it encodes, so `echo 'hello'` and `printf 'hello'` give the same result. To keep the newline, use `printf 'hello\n'`.
 
 ## Pipeline integration
 

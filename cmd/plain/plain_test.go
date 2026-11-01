@@ -7,7 +7,44 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestPlainDeepNestingReturnsQuickly(t *testing.T) {
+	// 15000 openers parse in ~1.5s without the fallback; the output has to
+	// stay under the 64 KiB pipe buffer runPlain reads after Run returns.
+	start := time.Now()
+	_, _, code := runPlain(t, []string{strings.Repeat("[a](", 15000)}, "")
+	if code != 0 {
+		t.Errorf("exit %d, want 0", code)
+	}
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Errorf("took %v, want under 500ms", d)
+	}
+}
+
+func TestPlainTimeout(t *testing.T) {
+	origStrip, origTimeout := stripMarkdown, plainTimeout
+	stripMarkdown = func(string) string { time.Sleep(2 * time.Second); return "late" }
+	plainTimeout = 50 * time.Millisecond
+	defer func() { stripMarkdown, plainTimeout = origStrip, origTimeout }()
+
+	stdout, stderr, code := runPlain(t, nil, "hello\n")
+	if code != 1 {
+		t.Errorf("exit %d, want 1", code)
+	}
+	if stdout != "" {
+		t.Errorf("stdout %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "plain: markdown too complex") {
+		t.Errorf("stderr %q", stderr)
+	}
+
+	stdout, stderr, code = runPlain(t, []string{"--json"}, "hello\n")
+	if code != 1 || stderr != "" || !strings.Contains(stdout, `"code":1`) {
+		t.Errorf("--json: code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}
 
 // runPlain replaces os.Stdin/Stdout/Stderr and os.Args, calls Run(), and returns
 // captured stdout, stderr, and the exit code. Not parallel-safe — tests share

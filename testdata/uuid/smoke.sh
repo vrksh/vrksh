@@ -44,7 +44,7 @@ assert_exit() {
 
 assert_stdout_matches() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -qE "$pattern"; then
+  if <<<"$actual" grep -qE "$pattern"; then
     ok "$desc (matches $pattern)"
   else
     fail "$desc" "expected match for '$pattern', got: '$actual'"
@@ -159,7 +159,7 @@ assert_line_count "--count 5: line count" 5 "$line_count"
 
 # All 5 must match UUID regex
 while IFS= read -r line; do
-  if ! echo "$line" | grep -qE "$UUID_RE"; then
+  if ! <<<"$line" grep -qE "$UUID_RE"; then
     fail "--count 5: line format" "line '$line' does not match UUID regex"
   fi
 done <<< "$stdout"

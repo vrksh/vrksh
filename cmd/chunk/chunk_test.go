@@ -687,3 +687,28 @@ func TestModelFlag(t *testing.T) {
 		t.Errorf("unknown model: exit %d stdout %q, want exit 2 and no output", code, stdout)
 	}
 }
+
+// TestSplitStreamsRecords checks the splitters hand each record to emit as it
+// is made and stop on an emit error, so output is never buffered in full
+// (--size 1000 --overlap 999 on 200 KB used to hold 200 MB of records).
+func TestSplitStreamsRecords(t *testing.T) {
+	ids, err := tokcount.Default.Encode(strings.Repeat("alpha beta gamma delta ", 500))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := io.ErrShortWrite
+	for name, run := range map[string]func(emit func(string, int) error) error{
+		"tokens": func(emit func(string, int) error) error {
+			return splitByTokens(tokcount.Default, ids, 10, 9, emit)
+		},
+		"paragraph": func(emit func(string, int) error) error {
+			return splitByParagraph(tokcount.Default, strings.Repeat("one two three\n\n", 200), 5, 0, emit)
+		},
+	} {
+		calls := 0
+		err := run(func(string, int) error { calls++; return stop })
+		if err != stop || calls != 1 {
+			t.Errorf("%s: err=%v calls=%d, want the emit error after 1 call", name, err, calls)
+		}
+	}
+}

@@ -1,7 +1,7 @@
 ---
 title: "vrk recase"
-description: "Convert between naming conventions. snake_case, camelCase, kebab-case, PascalCase, and Title Case."
-meta_lead: "vrk recase converts between naming conventions - snake_case, camelCase, kebab-case, PascalCase, and more."
+description: "vrk recase converts text between naming conventions: snake_case, camelCase, kebab-case, PascalCase, and Title Case. Pick one with --to."
+meta_lead: "vrk recase converts text between naming conventions such as snake_case, camelCase, kebab-case, and PascalCase."
 og_title: "vrk recase - convert between snake, camel, kebab, and more"
 tool: recase
 group: v1
@@ -11,7 +11,7 @@ noindex: false
 
 <!-- generated - do not edit below this line -->
 
-vrk recase converts between naming conventions - snake_case, camelCase, kebab-case, PascalCase, and more.
+vrk recase converts text between naming conventions such as snake_case, camelCase, kebab-case, and PascalCase.
 
 ## The problem
 
@@ -19,7 +19,7 @@ Converting 200 field names from snake_case to camelCase takes 30 lines of Python
 
 ## The solution
 
-`vrk recase` converts between naming conventions: snake_case, camelCase, PascalCase, kebab-case, SCREAMING_SNAKE, Title Case, and more. Auto-detects the input convention and handles acronyms correctly. Processes line by line for batch conversion.
+`vrk recase` converts between naming conventions: snake_case, camelCase, PascalCase, kebab-case, SCREAMING_SNAKE, Title Case, and more. It detects the input convention and handles acronyms. It converts line by line, so you can convert a batch.
 
 ## Before and after
 
@@ -63,6 +63,8 @@ echo 'user_first_name' | vrk recase --to camel
 
 ## Supported conventions
 
+`vrk recase` converts identifiers between naming conventions such as camelCase, snake_case and kebab-case.
+
 | Convention | Example | Flag value |
 |-----------|---------|------------|
 | camelCase | `helloWorld` | `camel` |
@@ -74,7 +76,7 @@ echo 'user_first_name' | vrk recase --to camel
 | lowercase | `hello world` | `lower` |
 | UPPERCASE | `HELLO WORLD` | `upper` |
 
-Input convention is auto-detected. You only need to specify the target.
+recase detects the input convention itself. You only set the target with `--to`.
 
 ## How it works
 
@@ -94,7 +96,7 @@ user-first-name
 
 ### Batch conversion
 
-Processes line by line, so you can convert multiple names at once:
+recase converts each line on its own, so you can convert many names at once:
 
 ```bash
 $ printf 'user_first_name\nuser_last_name\nemail_address\n' | vrk recase --to camel
@@ -132,7 +134,7 @@ done
 
 ## When it fails
 
-Missing --to flag:
+If you leave out `--to`, recase exits 2:
 
 ```bash
 $ echo 'hello' | vrk recase
@@ -141,7 +143,7 @@ $ echo $?
 2
 ```
 
-Invalid convention:
+If the convention is unknown, recase exits 2:
 
 ```bash
 $ echo 'hello' | vrk recase --to unknown

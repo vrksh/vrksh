@@ -1,6 +1,6 @@
 ---
 title: "vrk pct"
-description: "Percent-encode and decode strings per RFC 3986. Handles URL components and form data correctly."
+description: "vrk pct percent-encodes and decodes text per RFC 3986. Use --form for HTML form encoding, where spaces become +, and --decode to reverse it."
 meta_lead: "vrk pct percent-encodes and decodes text per RFC 3986 for URL-safe strings."
 og_title: "vrk pct - RFC 3986 percent encoding and decoding"
 tool: pct
@@ -15,11 +15,11 @@ vrk pct percent-encodes and decodes text per RFC 3986 for URL-safe strings.
 
 ## The problem
 
-A URL parameter contains spaces and ampersands. Python's `quote()` encodes spaces as `%20`, `quote_plus()` encodes them as `+`. The difference matters: the API expects path encoding, not form encoding. `curl --data-urlencode` encodes the whole value but you just need the encoded string by itself.
+A URL parameter contains spaces and ampersands. Python's `quote()` encodes spaces as `%20`, `quote_plus()` encodes them as `+`. The difference matters: the API expects path encoding, not form encoding. `curl --data-urlencode` encodes the whole value but you only need the encoded string by itself.
 
 ## The solution
 
-`vrk pct` percent-encodes and decodes text per RFC 3986. `--encode` gives path-safe encoding (spaces become `%20`). `--form` switches to HTML form encoding (spaces become `+`). Processes line by line for batch conversion.
+`vrk pct` percent-encodes and decodes text per RFC 3986. `--encode` gives path-safe encoding (spaces become `%20`). `--form` switches to HTML form encoding (spaces become `+`). It converts input line by line, so you can convert a batch.
 
 ## Before and after
 
@@ -65,6 +65,8 @@ echo 'hello world&foo=bar' | vrk pct --encode
 
 ## How it works
 
+`vrk pct` percent-encodes and decodes text, as defined in RFC 3986, so you can build safe URLs in a pipeline.
+
 ### Encode (default)
 
 ```bash
@@ -75,7 +77,7 @@ $ echo 'key=value&other=data' | vrk pct --encode
 key%3Dvalue%26other%3Ddata
 ```
 
-Spaces become `%20`. All RFC 3986 reserved characters are encoded.
+A space becomes `%20`. Every RFC 3986 reserved character is encoded.
 
 ### Encode (form mode)
 
@@ -84,7 +86,7 @@ $ echo 'hello world' | vrk pct --encode --form
 hello+world
 ```
 
-Spaces become `+` instead of `%20`. Use this for HTML form data and `application/x-www-form-urlencoded` content.
+A space becomes `+` instead of `%20`. Use this for HTML form data and `application/x-www-form-urlencoded` content.
 
 ### Decode
 
@@ -96,11 +98,11 @@ $ echo 'hello+world' | vrk pct --decode --form
 hello world
 ```
 
-Without `--form`, `+` is left as-is. With `--form`, `+` decodes to a space.
+Without `--form`, `+` stays as `+`. With `--form`, `+` decodes to a space.
 
 ### Batch processing
 
-Processes line by line:
+pct reads the input line by line:
 
 ```bash
 $ printf 'hello world\nfoo bar\n' | vrk pct --encode
@@ -133,7 +135,7 @@ vrk urlinfo --field query.q 'https://example.com?q=hello%20world' | vrk pct --de
 
 ## When it fails
 
-Both --encode and --decode:
+If you pass both `--encode` and `--decode`, pct exits 2:
 
 ```bash
 $ echo 'test' | vrk pct --encode --decode
@@ -142,7 +144,7 @@ $ echo $?
 2
 ```
 
-Neither flag:
+If you pass neither flag, pct exits 2:
 
 ```bash
 $ echo 'test' | vrk pct
@@ -151,7 +153,7 @@ $ echo $?
 2
 ```
 
-Invalid percent sequence:
+If the input has an invalid percent sequence, pct exits 1:
 
 ```bash
 $ echo '%ZZ' | vrk pct --decode

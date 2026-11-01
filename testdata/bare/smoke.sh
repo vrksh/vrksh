@@ -41,7 +41,7 @@ assert_exit() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"
@@ -50,7 +50,7 @@ assert_stdout_contains() {
 
 assert_stderr_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (stderr contains '$pattern')"
   else
     fail "$desc" "stderr did not contain '$pattern'. got: $actual"
@@ -197,7 +197,7 @@ assert_stdout_contains "list: contains epoch" "epoch" "$stdout"
 assert_stdout_contains "list: contains jwt"   "jwt"   "$stdout"
 
 # The non-vrk file "alpha" should not appear.
-if echo "$stdout" | grep -q "alpha"; then
+if <<<"$stdout" grep -q "alpha"; then
   fail "list: alpha should not appear" "alpha found in list output"
 else
   ok "list: alpha not shown (not a vrk symlink)"

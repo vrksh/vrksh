@@ -1,6 +1,6 @@
 ---
 title: "vrk completions"
-description: "Generate shell completion scripts for bash, zsh, and fish. Tab-complete every vrk tool and flag."
+description: "vrk completions prints a tab-completion script for bash, zsh, or fish. The script completes every vrk tool name and flag."
 meta_lead: "vrk completions generates tab-completion scripts for bash, zsh, and fish."
 og_title: "vrk completions - shell completion for bash, zsh, and fish"
 tool: completions
@@ -19,7 +19,7 @@ A multicall binary has 26 tool names and hundreds of flags. Without tab completi
 
 ## The solution
 
-`vrk completions` generates tab-completion scripts for bash, zsh, and fish. After installing, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags. The completions are generated from the binary itself, so they always match the installed version.
+`vrk completions` generates tab-completion scripts for bash, zsh, and fish. After installing, `vrk <tab>` completes tool names and `vrk tok --<tab>` completes flags. The binary generates the script, so it always matches the installed version.
 
 ## Before and after
 
@@ -63,6 +63,8 @@ vrk completions bash > ~/.bash_completion.d/vrk
 <!-- notes - edit in notes/completions.notes.md -->
 
 ## Setup
+
+`vrk completions` prints a shell completion script for bash, zsh, or fish.
 
 ### Bash
 

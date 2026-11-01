@@ -1,9 +1,9 @@
 ---
 title: "Fetch and summarise a page"
 meta_title: "Fetch and summarise a page - vrk pipeline recipe"
-description: "Catches oversized pages before the API call - no wasted request on a doc that won't fit in context. Grab a URL, check token count, then summarise ..."
-why: "Catches oversized pages before the API call - no wasted request on a doc that won't fit in context."
-body: "Grab a URL, check token count, then summarise with an LLM."
+description: "If the page is too long, the pipeline stops before the API call, so you do not pay for a request that cannot fit. Fetch a web page as markdown, check ..."
+why: "If the page is too long, the pipeline stops before the API call, so you do not pay for a request that cannot fit."
+body: "Fetch a web page as markdown, check its token count, and send it to an LLM for a summary."
 slug: "fetch-and-summarise-a-page"
 steps:
   - |-
@@ -28,7 +28,7 @@ Each step can fail independently. URL unreachable? `vrk grab` exits 1. Page too 
 
 ## Variations
 
-Fetch and extract just the links. `links --bare` prints a URL every time it appears, so `sort -u` removes the duplicates:
+Fetch a page and extract only the links. `links --bare` prints a URL every time it appears, so `sort -u` removes the duplicates:
 
 ```bash
 vrk grab https://example.com | vrk links --bare | sort -u

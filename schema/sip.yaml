@@ -1,6 +1,6 @@
 name: sip
 tagline: stream sampler - --first, --count, --every, --sample
-meta_description: "Sample lines from a stream. Take the first N, every Nth, or a random percentage. Works on unbounded input."
+meta_description: "vrk sip samples lines from stdin. Take the first N, a reservoir sample, every Nth line, or a random percentage, on input of any size."
 meta_lead: "vrk sip samples lines from stdin using first-N, reservoir sampling, every-Nth, or percentage strategies."
 og_title: "vrk sip - sample lines from streams and large files"
 description: |

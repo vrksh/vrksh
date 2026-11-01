@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -23,35 +24,79 @@ var isTerminal = shared.IsTerminal
 // the OS-level stdin pipe.
 var stdinReader io.Reader
 
-// builtinPattern is a compiled pattern with a short name for patterns_matched reporting.
+// builtinPattern is a compiled pattern with a short name for patterns_matched
+// reporting. repl is the replacement template; empty means "${1}[REDACTED]",
+// which keeps the first capture group (the key prefix) and drops the rest.
 type builtinPattern struct {
 	name string
 	re   *regexp.Regexp
+	repl string
 }
 
-// builtins are applied in order before entropy scanning. Each regex has exactly
-// one capture group (the key prefix to preserve); the value after the group is
-// replaced with [REDACTED]. Compiled once at package init — never modified.
-var builtins = []builtinPattern{
-	{"bearer", regexp.MustCompile(`(?i)(bearer\s+)\S+`)},
-	{"password", regexp.MustCompile(`(?i)(password\s*[=:]\s*)\S+`)},
-	{"secret", regexp.MustCompile(`(?i)(secret\s*[=:]\s*)\S+`)},
-	{"api_key", regexp.MustCompile(`(?i)(api[_-]?key\s*[=:]\s*)\S+`)},
-	{"token", regexp.MustCompile(`(?i)(token\s*[=:]\s*)\S+`)},
-	// Known credential prefixes. The empty group keeps the ${1} replacement
-	// uniform. These run on the whole line, so a key hidden inside a URL, path,
-	// or image ref (which entropy scanning skips) is still caught.
-	{"aws_key", regexp.MustCompile(`()\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`)},
-	{"openai_anthropic", regexp.MustCompile(`()\bsk-[A-Za-z0-9_-]{20,}`)},
-	{"stripe", regexp.MustCompile(`()\b[rs]k_(?:live|test)_[A-Za-z0-9]{16,}`)},
-	{"github", regexp.MustCompile(`()\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{22,})`)},
-	{"slack", regexp.MustCompile(`()\bxox[abposr]-[A-Za-z0-9-]{10,}`)},
-	{"google", regexp.MustCompile(`()\bAIza[0-9A-Za-z_-]{35}`)},
-	{"huggingface", regexp.MustCompile(`()\bhf_[A-Za-z0-9]{30,}`)},
-	{"npm", regexp.MustCompile(`()\bnpm_[A-Za-z0-9]{36}`)},
-	{"sendgrid", regexp.MustCompile(`()\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}`)},
-	{"jwt", regexp.MustCompile(`()\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)},
+// Key names that end in a secret word: db_password, X-API-Key, access_token.
+// "Ends in" is what keeps "tokens": 42 (vrk tok --json) from matching. Short
+// words (pass, pwd, auth) have to be a whole segment, so bypass and oauth
+// don't count.
+const (
+	passwordKey = `\b(?:[A-Za-z0-9_.-]*(?:password|passwd|passphrase)|(?:[A-Za-z0-9_.-]*[_.-])?(?:pass|pwd))`
+	secretKey   = `\b(?:[A-Za-z0-9_.-]*(?:secrets?|credentials?)|(?:[A-Za-z0-9_.-]*[_.-])?auth)`
+	apiKeyKey   = `\b[A-Za-z0-9_.-]*(?:api[_-]?key|access[_-]?key|private[_-]?key|secret[_-]?key|signing[_-]?key)`
+	tokenKey    = `\b[A-Za-z0-9_.-]*token`
+)
+
+// kvValue is a "double quoted" (escapes allowed), 'single quoted' or bare
+// value. kvRepl puts the quotes back, so "password": "a b c" becomes
+// "password": "[REDACTED]" and the JSON stays valid.
+const (
+	kvValue = `(?:(")(?:[^"\\]|\\.)+(")|(')[^']+(')|[^\s"',;{}\[\]&<>]+)`
+	kvRepl  = "${1}${2}${4}[REDACTED]${3}${5}"
+)
+
+// keyword builds the patterns for one family of secret key names, all
+// reported under name:
+//   - YAML/INI lines that start with an unquoted key (key: v, key = v) lose
+//     the rest of the line, so an unquoted passphrase with spaces goes too
+//   - key=v, key: v and "key": "v" anywhere in a line
+//   - <key>v</key>
+//   - --key v on a command line
+func keyword(name, key string) []builtinPattern {
+	return []builtinPattern{
+		{name: name, re: regexp.MustCompile(`(?i)^(\s*(?:export\s+|-\s+)?` + key + `(?:[ \t]*:|[ \t]+=|=[ \t])[ \t]*)[^\s"'{\[].*`)},
+		{name: name, re: regexp.MustCompile(`(?i)(["']?` + key + `["']?\s*[=:]\s*)` + kvValue), repl: kvRepl},
+		{name: name, re: regexp.MustCompile(`(?i)(<(?:[A-Za-z0-9_.-]+:)?` + key + `>)[^<]+(</)`), repl: "${1}[REDACTED]${2}"},
+		{name: name, re: regexp.MustCompile(`(?i)((?:^|\s)--?` + key + `\s+)(?:(")(?:[^"\\]|\\.)+(")|(')[^']+(')|[^\s"'-][^\s"']*)`), repl: kvRepl},
+	}
 }
+
+// builtins are applied in order before entropy scanning. Compiled once at
+// package init, never modified.
+var builtins = slices.Concat(
+	[]builtinPattern{{name: "bearer", re: regexp.MustCompile(`(?i)(bearer\s+)\S+`)}},
+	keyword("password", passwordKey),
+	keyword("secret", secretKey),
+	keyword("api_key", apiKeyKey),
+	keyword("token", tokenKey),
+	[]builtinPattern{
+		// Authorization headers with any scheme (Basic, token, Digest) or none.
+		{name: "auth_header", re: regexp.MustCompile(`(?i)(\b(?:proxy-)?authorization["']?\s*[=:]\s*["']?(?:(?:basic|bearer|token|digest|negotiate|apikey)\s+)?)[^\s"',]+`)},
+		// scheme://user:pass@host keeps the user and drops the password.
+		{name: "url_userinfo", re: regexp.MustCompile(`(\b[A-Za-z][A-Za-z0-9+.-]*://[^/\s:@]*:)[^@\s/]+(@)`), repl: "${1}[REDACTED]${2}"},
+		{name: "curl_user", re: regexp.MustCompile(`((?:^|\s)(?:-u|--user)(?:\s+|=)['"]?[^:\s'"]+:)[^\s'"]+`)},
+		// Known credential prefixes. The empty group keeps the ${1} replacement
+		// uniform. These run on the whole line, so a key hidden inside a URL, path,
+		// or image ref (which entropy scanning skips) is still caught.
+		{name: "aws_key", re: regexp.MustCompile(`()\b(?:AKIA|ASIA)[0-9A-Z]{16}\b`)},
+		{name: "openai_anthropic", re: regexp.MustCompile(`()\bsk-[A-Za-z0-9_-]{20,}`)},
+		{name: "stripe", re: regexp.MustCompile(`()\b[rs]k_(?:live|test)_[A-Za-z0-9]{16,}`)},
+		{name: "github", re: regexp.MustCompile(`()\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{22,})`)},
+		{name: "slack", re: regexp.MustCompile(`()\bxox[abposr]-[A-Za-z0-9-]{10,}`)},
+		{name: "google", re: regexp.MustCompile(`()\bAIza[0-9A-Za-z_-]{35}`)},
+		{name: "huggingface", re: regexp.MustCompile(`()\bhf_[A-Za-z0-9]{30,}`)},
+		{name: "npm", re: regexp.MustCompile(`()\bnpm_[A-Za-z0-9]{36}`)},
+		{name: "sendgrid", re: regexp.MustCompile(`()\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}`)},
+		{name: "jwt", re: regexp.MustCompile(`()\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)},
+	},
+)
 
 // compiledCustom holds a user-supplied pattern compiled to a regexp.
 // name is the literal regex string provided by the user — used in patterns_matched.
@@ -198,7 +243,11 @@ func redactLine(line string, customs []compiledCustom, threshold float64) (strin
 	// Apply built-in patterns. Each preserves its first capture group (the key
 	// prefix) and replaces everything after with [REDACTED].
 	for _, bp := range builtins {
-		replaced := bp.re.ReplaceAllString(out, "${1}[REDACTED]")
+		repl := bp.repl
+		if repl == "" {
+			repl = "${1}[REDACTED]"
+		}
+		replaced := bp.re.ReplaceAllString(out, repl)
 		if replaced != out {
 			if !seen[bp.name] {
 				fired = append(fired, bp.name)
@@ -223,6 +272,8 @@ func redactLine(line string, customs []compiledCustom, threshold float64) (strin
 	// Entropy scan: check each whitespace-delimited token that is >= 8 chars and
 	// does not already contain [REDACTED] (which would indicate it was already
 	// handled by a pattern, or is itself a placeholder from a prior substitution).
+	gitLine := gitContextRe.MatchString(line)
+	isSecret := func(v string) bool { return looksSecret(v, threshold, gitLine) }
 	hit := func() {
 		if !seen["entropy"] {
 			fired = append(fired, "entropy")
@@ -237,13 +288,13 @@ func redactLine(line string, customs []compiledCustom, threshold float64) (strin
 		if len(core) < 8 {
 			return tok
 		}
-		if masked, ok := maskStructured(core, threshold); ok {
+		if masked, ok := maskStructured(core, isSecret); ok {
 			if masked != core {
 				hit()
 			}
 			return lead + masked + trail
 		}
-		if shannonEntropy(core) >= threshold {
+		if isSecret(core) {
 			hit()
 			return lead + "[REDACTED]" + trail
 		}
@@ -251,6 +302,31 @@ func redactLine(line string, customs []compiledCustom, threshold float64) (strin
 	})
 
 	return out, fired
+}
+
+// Random hex tops out at 4.0 bits per character, so the default 4.0 threshold
+// never fires on a hex API key or webhook secret. Runs of 32+ hex characters
+// get a 3.0 threshold instead. A 40-character run on a line that talks about
+// git (commit, merge, sha, ...) is taken as a commit SHA and kept.
+const hexSecretMinLen = 32
+
+var (
+	hexRe        = regexp.MustCompile(`^[0-9a-fA-F]+$`)
+	gitContextRe = regexp.MustCompile(`(?i)\b(?:commit|merge|sha1?|rev|revision|ref|tree|parent|cherry-pick|revert)\b`)
+)
+
+// looksSecret reports whether v reads as a random credential.
+func looksSecret(v string, threshold float64, gitLine bool) bool {
+	if len(v) < 8 {
+		return false
+	}
+	if len(v) >= hexSecretMinLen && hexRe.MatchString(v) {
+		if len(v) == 40 && gitLine {
+			return false
+		}
+		return shannonEntropy(v) >= min(threshold, 3.0)
+	}
+	return shannonEntropy(v) >= threshold
 }
 
 // shannonEntropy calculates the Shannon entropy of s in bits per character.
@@ -281,15 +357,16 @@ func shannonEntropy(s string) float64 {
 // then custom patterns in argument order.
 func buildMatchedList(fired map[string]bool, customs []compiledCustom) []string {
 	var matched []string
+	seen := map[string]bool{}
 	for _, b := range builtins {
-		if fired[b.name] {
+		if fired[b.name] && !seen[b.name] {
 			matched = append(matched, b.name)
+			seen[b.name] = true
 		}
 	}
 	if fired["entropy"] {
 		matched = append(matched, "entropy")
 	}
-	seen := map[string]bool{}
 	for _, c := range customs {
 		if fired[c.name] && !seen[c.name] {
 			matched = append(matched, c.name)
@@ -380,26 +457,26 @@ func isSecretParam(name string) bool {
 // value) is checked on its own, which still catches a webhook secret in a
 // path while leaving /v1/charges alone. ok is false when tok is none of these.
 // A name=value token is judged by its value, so request_id=<uuid> is kept.
-func maskStructured(tok string, threshold float64) (string, bool) {
+func maskStructured(tok string, isSecret func(string) bool) (string, bool) {
 	if m := keyValueRe.FindStringSubmatch(tok); m != nil {
-		v, ok := maskStructured(m[1], threshold)
+		v, ok := maskStructured(m[1], isSecret)
 		return tok[:len(tok)-len(m[1])] + v, ok
 	}
 	switch {
 	case uuidRe.MatchString(tok), digestRe.MatchString(tok):
 		return tok, true
 	case pathRe.MatchString(tok), imageRe.MatchString(tok):
-		return maskSegments(tok, threshold), true
+		return maskSegments(tok, isSecret), true
 	case urlRe.MatchString(tok):
-		return maskURL(tok, threshold)
+		return maskURL(tok, isSecret)
 	}
 	return tok, false
 }
 
-func maskSegments(p string, threshold float64) string {
+func maskSegments(p string, isSecret func(string) bool) string {
 	segs := strings.Split(p, "/")
 	for i, s := range segs {
-		if len(s) >= 8 && shannonEntropy(s) >= threshold {
+		if isSecret(s) {
 			segs[i] = "[REDACTED]"
 		}
 	}
@@ -409,7 +486,7 @@ func maskSegments(p string, threshold float64) string {
 // maskURL splits scheme://host/path?query#fragment by hand (net/url would
 // re-encode the parts). Any userinfo (user@ or user:pass@) means the URL
 // carries a credential, so it falls back to whole-token entropy.
-func maskURL(u string, threshold float64) (string, bool) {
+func maskURL(u string, isSecret func(string) bool) (string, bool) {
 	i := strings.Index(u, "://") + 3
 	end := len(u)
 	if j := strings.IndexAny(u[i:], "/?#"); j >= 0 {
@@ -425,7 +502,7 @@ func maskURL(u string, threshold float64) (string, bool) {
 	}
 	var b strings.Builder
 	b.WriteString(u[:end])
-	b.WriteString(maskSegments(path, threshold))
+	b.WriteString(maskSegments(path, isSecret))
 	// tail is a run of ?query and #fragment parts; both use k=v&k=v.
 	for tail != "" {
 		b.WriteByte(tail[0])
@@ -439,7 +516,7 @@ func maskURL(u string, threshold float64) (string, bool) {
 		params := strings.Split(part, "&")
 		for k, p := range params {
 			name, val, found := strings.Cut(p, "=")
-			if found && isSecretParam(name) && len(val) >= 8 && shannonEntropy(val) >= threshold {
+			if found && isSecretParam(name) && isSecret(val) {
 				params[k] = name + "=[REDACTED]"
 			}
 		}

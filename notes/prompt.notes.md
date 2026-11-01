@@ -1,5 +1,7 @@
 ## Usage
 
+`vrk prompt` sends text from stdin to an LLM (Anthropic, OpenAI or any OpenAI-compatible endpoint) and prints the reply to stdout.
+
 ### Simple question
 
 <!-- doccheck: skip (real LLM output, the mock endpoint cannot answer questions) -->
@@ -10,7 +12,7 @@ Paris.
 
 ### System prompt from a file
 
-For prompts longer than a line, store them in a file and reference with `@`:
+If the system prompt is longer than a line, store it in a file and reference the file with `@`:
 
 ```bash
 cat user-feedback.csv | vrk prompt --system @prompts/analyze-feedback.txt
@@ -18,7 +20,7 @@ cat user-feedback.csv | vrk prompt --system @prompts/analyze-feedback.txt
 
 ### Schema-validated structured output
 
-Force the LLM to return JSON matching a specific shape:
+Use `--schema` to check that the LLM returns JSON in a given shape:
 
 <!-- doccheck: skip (real LLM output, the mock endpoint cannot fill a schema sent as system text) -->
 ```bash
@@ -28,13 +30,13 @@ $ cat bug-report.txt | vrk prompt \
 {"severity":"high","component":"auth","summary":"Login fails after password reset","reproducible":true}
 ```
 
-If the response does not match the schema, what happens depends on `--fail` and `--retry`:
+If the response does not match the schema, the result depends on `--fail` and `--retry`:
 
-- Neither set: prompt prints the response anyway, warns on stderr, and exits 0. `--schema` alone does not fail the pipeline.
+- Neither flag set: prompt prints the response anyway, warns on stderr, and exits 0. `--schema` alone does not fail the pipeline.
 - `--fail`: prompt exits 1 and prints nothing to stdout.
 - `--retry N`: prompt re-sends up to N more times. If no attempt matches, it exits 1 with `response does not match schema after N+1 attempts`.
 
-Combine with `--retry` to automatically re-prompt:
+Add `--retry` to send the prompt again when the response does not match:
 
 ```bash
 cat bug-report.txt | vrk prompt \
@@ -43,15 +45,15 @@ cat bug-report.txt | vrk prompt \
   --retry 3
 ```
 
-On each retry, temperature rises by 0.1 (0, 0.1, 0.2, and so on, up to 1) to encourage the model to try a different approach.
+On each retry, the temperature rises by 0.1 (0, 0.1, 0.2, and so on, up to 1). This pushes the model to try a different answer.
 
-This works the same on every provider. Only the request differs:
+The schema check works the same on every provider. Only the request differs:
 
 - Anthropic: the schema keys and types are added to the system prompt as instructions.
 - OpenAI: the schema is sent as `response_format` with a JSON Schema built from your keys (`type: object`, every key `required`, `additionalProperties: false`). `strict` is on only when every type is `string`, `number`, `integer`, or `boolean`.
 - `--endpoint`: the schema instructions are sent as a system message (after your `--system` text, separated by a blank line), with `response_format: {"type":"json_object"}`.
 
-In every case vrk checks the reply itself, so `--fail` and `--retry` behave the same everywhere.
+In every case vrk checks the reply itself, so `--fail` and `--retry` work the same on every provider.
 
 ### See what would be sent without calling the API
 
@@ -60,13 +62,13 @@ In every case vrk checks the reply itself, so `--fail` and `--retry` behave the 
 $ echo 'test input' | vrk prompt --explain
 ```
 
-The `--explain` flag prints the equivalent curl command and exits without making an API call. Use it to debug what prompt is actually being sent.
+The `--explain` flag prints the equivalent curl command and exits without an API call. Use it to see the exact request.
 
 ## Flag details
 
 ### --model / -m
 
-Selects the LLM. Defaults to `claude-sonnet-4-6` or the value of `VRK_DEFAULT_MODEL`.
+Selects the LLM. The default is `claude-sonnet-4-6` or the value of `VRK_DEFAULT_MODEL`.
 
 ```bash
 # Use GPT-4o via OpenAI
@@ -78,7 +80,7 @@ cat article.md | vrk prompt -m llama3 --endpoint http://localhost:11434/v1
 
 ### --budget
 
-Pre-flight token check. If the prompt exceeds N tokens, prompt exits 1 without calling the API. Saves money on obviously-too-large inputs.
+Checks the token count before the call. If the prompt is over N tokens, prompt exits 1 and does not call the API. This saves money on inputs that are too large.
 
 ```bash
 $ cat huge-document.txt | vrk prompt --budget 10 --system 'Summarize'
@@ -89,7 +91,7 @@ $ echo $?
 
 ### --schema / -s
 
-Validates the LLM response against a JSON schema. Can be an inline JSON string or a path to a `.json` file:
+Checks the LLM response against a JSON schema. The value is an inline JSON string or a path to a `.json` file:
 
 ```bash
 # Inline schema
@@ -102,7 +104,7 @@ echo 'Extract entities' | vrk prompt --schema entities-schema.json
 
 ### --retry
 
-Only meaningful with `--schema`. Retries N times when the response doesn't match the schema, escalating temperature on each attempt. If the last attempt still does not match, prompt exits 1, even without `--fail`:
+Use `--retry` with `--schema`. If the response does not match the schema, prompt retries up to N times and raises the temperature on each attempt. If the last attempt still does not match, prompt exits 1, even without `--fail`:
 
 ```bash
 cat input.txt | vrk prompt \
@@ -112,15 +114,17 @@ cat input.txt | vrk prompt \
 
 ### --fail / -f
 
-Exit 1 on schema mismatch instead of printing the response. API errors (non-2xx) always exit 1, with or without `--fail`. Use in CI or pipelines where a wrong-shaped result is worse than no result.
+If the response does not match the schema, prompt exits 1 and prints nothing. An API error (non-2xx) always exits 1, with or without `--fail`. Use `--fail` in CI or in pipelines where a wrong-shaped result is worse than no result.
 
 ### --json / -j
 
-Wraps the response in a JSON envelope with metadata (model used, token counts, timing). This is for wrapping the LLM's response - it does NOT instruct the model to respond in JSON. Use `--schema` for that.
+Puts the response in a JSON envelope with metadata (model used, token counts, timing). This flag does not tell the model to reply in JSON. Use `--schema` for that.
 
 ### --endpoint
 
-Point prompt at any OpenAI-compatible API. Works with Ollama, vLLM, LiteLLM, or any provider that speaks the OpenAI chat completions format. `--schema`, `--fail`, and `--retry` work here too. `--model` is required. Set `VRK_LLM_KEY` if the server needs a bearer token:
+Points prompt at any OpenAI-compatible API, such as Ollama, vLLM or LiteLLM. Any provider that speaks the OpenAI chat completions format works. `--schema`, `--fail`, and `--retry` work here too. `--model` is required.
+
+Set `VRK_LLM_KEY` if the server needs a bearer token. The key goes only to the `VRK_LLM_URL` origin (scheme, host, port). If `--endpoint` points anywhere else, prompt exits 2 before it sends anything. Unset `VRK_LLM_KEY` for a server that needs no key. If you use plain `http` with a key, prompt exits 2 unless the host is loopback. Prompt does not follow redirects:
 
 ```bash
 cat notes.txt | vrk prompt \
@@ -131,7 +135,7 @@ cat notes.txt | vrk prompt \
 
 ## Pipeline integration
 
-### Fetch, measure, and summarize
+### Fetch, measure and summarize
 
 ```bash
 # Grab a web page, check it fits in context, summarize it
@@ -177,7 +181,7 @@ done
 
 ## When it fails
 
-API key missing:
+If no API key is set, prompt exits 1:
 
 <!-- doccheck: skip (doccheck always sets a mock endpoint and key) -->
 ```bash
@@ -187,7 +191,7 @@ $ echo $?
 1
 ```
 
-Budget exceeded:
+If the prompt is over the budget, prompt exits 1:
 
 ```bash
 $ cat huge-file.txt | vrk prompt --budget 20 --system 'Summarize'
@@ -196,7 +200,7 @@ $ echo $?
 1
 ```
 
-Schema mismatch without --retry:
+If the response does not match the schema and you set `--fail` without `--retry`, prompt exits 1:
 
 ```bash
 $ echo 'Tell me a joke' | vrk prompt --schema '{"setup":"string","punchline":"string"}' --fail
@@ -205,7 +209,7 @@ $ echo $?
 1
 ```
 
-Empty prompt (nothing on stdin, or only whitespace). Nothing is sent:
+If the prompt is empty (nothing on stdin, or only whitespace), prompt sends nothing and exits 1:
 
 ```bash
 $ printf '' | vrk prompt
@@ -214,4 +218,4 @@ $ echo $?
 1
 ```
 
-With `--field`, a record whose field is empty is skipped with a warning (`prompt: line N: empty prompt, skipped`) and processing continues.
+With `--field`, prompt skips a record whose field is empty and warns `prompt: line N: empty prompt, skipped`. It then continues with the next record.

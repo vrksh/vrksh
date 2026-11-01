@@ -40,7 +40,7 @@ assert_exit() {
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if echo "$haystack" | grep -qF "$needle"; then
+  if <<<"$haystack" grep -qF "$needle"; then
     echo "PASS: $desc"
     PASS=$((PASS + 1))
   else
@@ -52,7 +52,7 @@ assert_contains() {
 
 assert_match() {
   local desc="$1" pattern="$2" actual="$3"
-  if echo "$actual" | grep -qE "$pattern"; then
+  if <<<"$actual" grep -qE "$pattern"; then
     echo "PASS: $desc"
     PASS=$((PASS + 1))
   else
@@ -73,6 +73,11 @@ assert_eq "--count 5 produces 5 lines" "5" "$line_count"
 # Smoke 3: --count 0 exits 2
 "$VRK" moniker --count 0 2>/dev/null || exit_code=$?
 assert_exit "--count 0 exits 2" 2 "${exit_code:-0}"
+unset exit_code
+
+# Huge --count is a usage error, not a panic or a multi-GB allocation
+"$VRK" moniker --words 3 --count 9223372036854775807 2>/dev/null || exit_code=$?
+assert_exit "--count max int64 exits 2" 2 "${exit_code:-0}"
 unset exit_code
 
 # Smoke 4: --separator _ uses underscore

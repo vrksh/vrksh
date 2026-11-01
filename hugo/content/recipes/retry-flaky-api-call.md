@@ -1,9 +1,9 @@
 ---
 title: "Retry flaky API call"
 meta_title: "Retry flaky API call - vrk pipeline recipe"
-description: "Transient 500s don't kill the pipeline - coax retries with backoff so one bad request doesn't stop the run. Wrap an LLM prompt in coax for ..."
-why: "Transient 500s don't kill the pipeline - coax retries with backoff so one bad request doesn't stop the run."
-body: "Wrap an LLM prompt in coax for exponential backoff retries."
+description: "A transient 500 does not stop the run, because coax retries the call with backoff. Retry an LLM call with exponential backoff, and fail the attempt ..."
+why: "A transient 500 does not stop the run, because coax retries the call with backoff."
+body: "Retry an LLM call with exponential backoff, and fail the attempt when the response does not match a schema."
 slug: "retry-flaky-api-call"
 steps:
   - |-

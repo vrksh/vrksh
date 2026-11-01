@@ -50,7 +50,7 @@ assert_stdout_equals() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"
@@ -68,7 +68,7 @@ assert_stdout_empty() {
 
 assert_stderr_contains() {
   local desc=$1 pattern=$2 stderr=$3
-  if echo "$stderr" | grep -q "$pattern"; then
+  if <<<"$stderr" grep -q "$pattern"; then
     ok "$desc (stderr contains '$pattern')"
   else
     fail "$desc" "stderr did not contain '$pattern'. got: $stderr"
@@ -352,6 +352,19 @@ got=$(echo '{"confidence":0.9}' | "$VRK" assert '.confidence > 0.8' | cat)
 rc=$?
 assert_exit "pipeline composition" 0 "$rc"
 assert_stdout_equals "pipeline data flows" '{"confidence":0.9}' "$got"
+
+echo ""
+echo "--- 21. Gate fails closed ---"
+
+rc=0; got=$(echo '{"ok":true}{"ok":false,"cmd":"rm -rf"}' | "$VRK" assert '.ok == true' 2>/dev/null) || rc=$?
+assert_exit "trailing JSON value" 1 "$rc"
+assert_stdout_empty "trailing JSON value" "$got"
+
+rc=0; printf '' | "$VRK" assert '.ok == true' 2>/dev/null || rc=$?
+assert_exit "empty input" 1 "$rc"
+
+rc=0; echo '{}' | timeout 10 "$VRK" assert 'last(range(1e18))' 2>/dev/null || rc=$?
+assert_exit "runaway condition times out" 1 "$rc"
 
 # ------------------------------------------------------------
 # Summary

@@ -70,7 +70,7 @@ assert_stderr_empty() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"
@@ -79,7 +79,7 @@ assert_stdout_contains() {
 
 assert_stdout_not_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     fail "$desc" "stdout must NOT contain '$pattern' but did: $actual"
   else
     ok "$desc (does not contain '$pattern')"
@@ -284,7 +284,7 @@ exit_code=$(set +e; echo '{"name":"alice","age":30}' | "$VRK" validate --schema 
 
 assert_exit "pipeline: exit 0" 0 "$exit_code"
 # tok should output a positive integer.
-if echo "$tok_out" | grep -qE '^[1-9][0-9]*$'; then
+if <<<"$tok_out" grep -qE '^[1-9][0-9]*$'; then
   ok "pipeline: tok output is a positive number ($tok_out)"
 else
   fail "pipeline: tok output is not a positive number" "got: $tok_out"
@@ -339,6 +339,20 @@ case "$stderr" in *"line 2:"*) ok "warning has line 2:" ;; *) fail "warning has 
 exit_code=0; stderr=$(echo '{}' | "$VRK" validate --schema '{"type":"object","properties":{"a":{"type":"string"}}}' 2>&1 >/dev/null) || exit_code=$?
 assert_exit "JSON Schema: exit 2" 2 "$exit_code"
 case "$stderr" in *"JSON Schema"*) ok "JSON Schema: stderr names it" ;; *) fail "JSON Schema: stderr names it" "$stderr" ;; esac
+
+# A second JSON value on the line, or a non-object, is invalid
+exit_code=0; stdout=$(echo '{"name":"a"} {"name":1,"admin":true}' | "$VRK" validate --schema '{"name":"string"}' --strict 2>/dev/null) || exit_code=$?
+assert_exit "trailing JSON value: exit 1" 1 "$exit_code"
+assert_stdout_equals "trailing JSON value: stdout empty" "" "$stdout"
+exit_code=0; echo 'null' | "$VRK" validate --schema '{}' --strict > /dev/null 2>&1 || exit_code=$?
+assert_exit "null record: exit 1" 1 "$exit_code"
+
+# Bad schema values are not echoed
+schema_file=$(mktemp)
+echo '{"OPENAI_API_KEY":"sk-fake-0000000000000000000000"}' > "$schema_file"
+stderr=$(echo '{}' | "$VRK" validate --schema "$schema_file" 2>&1 >/dev/null || true)
+rm -f "$schema_file"
+case "$stderr" in *"sk-fake"*) fail "schema error hides values" "$stderr" ;; *) ok "schema error hides values" ;; esac
 
 # ------------------------------------------------------------
 # Summary

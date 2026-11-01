@@ -31,12 +31,11 @@ func runEpoch(t *testing.T, args []string, stdinContent string) (stdout, stderr 
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
 	}
-	if _, err := io.WriteString(stdinW, stdinContent); err != nil {
-		t.Fatalf("write stdin: %v", err)
-	}
-	if err := stdinW.Close(); err != nil {
-		t.Fatalf("close stdin: %v", err)
-	}
+	// Write in a goroutine so stdin bigger than the pipe buffer can't deadlock.
+	go func() {
+		_, _ = io.WriteString(stdinW, stdinContent)
+		_ = stdinW.Close()
+	}()
 	os.Stdin = stdinR
 
 	stdoutR, stdoutW, err := os.Pipe()
@@ -51,19 +50,19 @@ func runEpoch(t *testing.T, args []string, stdinContent string) (stdout, stderr 
 	}
 	os.Stderr = stderrW
 
+	// Drain while Run executes so output bigger than the pipe buffer can't deadlock.
+	var outBuf, errBuf bytes.Buffer
+	outDone, errDone := make(chan struct{}), make(chan struct{})
+	go func() { _, _ = io.Copy(&outBuf, stdoutR); close(outDone) }()
+	go func() { _, _ = io.Copy(&errBuf, stderrR); close(errDone) }()
+
 	os.Args = append([]string{"epoch"}, args...)
 	code = Run()
 
 	_ = stdoutW.Close()
 	_ = stderrW.Close()
-
-	var outBuf, errBuf bytes.Buffer
-	if _, err := io.Copy(&outBuf, stdoutR); err != nil {
-		t.Fatalf("read stdout: %v", err)
-	}
-	if _, err := io.Copy(&errBuf, stderrR); err != nil {
-		t.Fatalf("read stderr: %v", err)
-	}
+	<-outDone
+	<-errDone
 	_ = stdoutR.Close()
 	_ = stderrR.Close()
 
@@ -184,6 +183,17 @@ func TestRelativeMinusDays(t *testing.T) {
 	}
 	if stdout != "1739750400\n" {
 		t.Errorf("stdout = %q, want %q", stdout, "1739750400\n")
+	}
+}
+
+// TestRelativeOverflow: an offset past int64 is an error, never a wrapped
+// timestamp (a "past" offset must not land in the future).
+func TestRelativeOverflow(t *testing.T) {
+	for _, in := range []string{"-9223372036854775807d", "+9223372036854775807s", "+106751991167300d", "-15250284452472w"} {
+		stdout, _, code := runEpoch(t, []string{"--at", nowAnchor, "--", in}, "")
+		if code != 1 || stdout != "" {
+			t.Errorf("%s: exit %d stdout %q, want 1 and empty", in, code, stdout)
+		}
 	}
 }
 

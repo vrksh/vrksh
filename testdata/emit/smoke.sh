@@ -48,7 +48,7 @@ assert_exit() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -qF "$pattern"; then
+  if <<<"$actual" grep -qF "$pattern"; then
     ok "$desc (stdout contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"
@@ -57,7 +57,7 @@ assert_stdout_contains() {
 
 assert_stdout_not_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -qF "$pattern"; then
+  if <<<"$actual" grep -qF "$pattern"; then
     fail "$desc" "stdout must NOT contain '$pattern' but did: $actual"
   else
     ok "$desc (stdout does not contain '$pattern')"

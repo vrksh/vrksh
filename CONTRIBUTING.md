@@ -9,11 +9,11 @@ make build
 ./vrk uuid   # verify it works
 ```
 
-Requires Go 1.25+. No other dependencies.
+You need Go 1.25 or later. No other dependencies are required.
 
 ## Adding a tool
 
-Each tool is a Go package in `cmd/<tool>/` with one exported function: `Run() int`. It returns an exit code. Never call `os.Exit` inside `Run()`.
+Each tool is a Go package in `cmd/<tool>/` with one exported function, `Run() int`. The function returns an exit code. Do not call `os.Exit` inside `Run()`.
 
 ### Files to create
 
@@ -28,11 +28,11 @@ Each tool is a Go package in `cmd/<tool>/` with one exported function: `Run() in
 6. `manifest.json` - add tool name and description (under 60 chars)
 7. `integrations/skills/SKILLS.md` - add flags, exit codes, gotchas section
 
-All seven changes go in one commit: `feat(<tool>): <what it does>`.
+Put all seven changes in one commit: `feat(<tool>): <what it does>`.
 
 ### The Run() pattern
 
-Use `cmd/links/links.go` as the reference implementation. Key rules:
+Use `cmd/links/links.go` as the reference implementation. Follow these rules:
 
 - `pflag` for flag parsing, not stdlib `flag`, not cobra
 - `fs.SetOutput(io.Discard)` before `fs.Parse` to suppress pflag's own error output
@@ -41,7 +41,7 @@ Use `cmd/links/links.go` as the reference implementation. Key rules:
 - Use `shared.Errorf()` (returns 1) and `shared.UsageErrorf()` (returns 2) for errors
 - Use `shared.ReadInput()` so both positional args and stdin work
 
-See `AGENTS.md` for the full tool template and shared utility reference.
+`AGENTS.md` has the full tool template and the shared utility reference.
 
 ## Testing
 
@@ -52,7 +52,7 @@ make smoke                 # end-to-end smoke tests (builds first)
 make check                 # build + test + lint + cross-compile + smoke
 ```
 
-Always use the Makefile. It sets `CGO_ENABLED=0` consistently.
+Always use the Makefile. It sets `CGO_ENABLED=0` for every target.
 
 ### Required test coverage
 
@@ -70,7 +70,7 @@ Every tool must test:
 
 ## Exit codes
 
-These are public API. Never change them after a tool ships.
+These exit codes are public API. Do not change them after a tool ships.
 
 | Code | Meaning | When |
 |------|---------|------|
@@ -92,4 +92,4 @@ Data goes to stdout. Errors and warnings go to stderr. When `--json` is active, 
 - [ ] `--help` works with no stdin
 - [ ] Both positional args and stdin work for input
 
-For the full codebase reference (shared utilities, flag conventions, architecture decisions), see `AGENTS.md`.
+`AGENTS.md` has the full codebase reference: shared utilities, flag conventions, and architecture decisions.

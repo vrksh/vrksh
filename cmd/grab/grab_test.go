@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/net/html"
 )
@@ -72,6 +73,7 @@ func runGrab(t *testing.T, args []string, stdinContent string) (stdout, stderr s
 	}
 	os.Stderr = stderrW
 
+	t.Setenv("VRK_ALLOW_INTERNAL", "1")
 	os.Args = append([]string{"grab", "--allow-internal"}, args...)
 
 	code = Run()
@@ -796,6 +798,20 @@ func TestIsInternalIP(t *testing.T) {
 		{"fc00::1", true},
 		{"fd12:3456::1", true},
 		{"fe80::1", true},
+		{"100.64.0.1", true},
+		{"100.100.100.200", true},
+		{"198.18.0.1", true},
+		{"0.1.2.3", true},
+		{"240.0.0.1", true},
+		{"::ffff:100.100.100.200", true},
+		{"64:ff9b::a9fe:a9fe", true},
+		{"64:ff9b::7f00:1", true},
+		{"2002:7f00:1::", true},
+		{"2002:a00:1::1", true},
+		{"::7f00:1", true},
+		{"ff02::1", true},
+		{"64:ff9b::808:808", false},
+		{"2002:808:808::1", false},
 		{"8.8.8.8", false},
 		{"1.1.1.1", false},
 		{"93.184.216.34", false},
@@ -888,8 +904,138 @@ func TestRenderMarkdownInlineSpacing(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := renderMarkdown(doc, nil); got != want {
+		if got, _ := renderMarkdown(doc, nil, defaultMaxSize); got != want {
 			t.Errorf("renderMarkdown(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// --- security regressions ---
+
+// TestBlockquoteNestingBounded: deep <blockquote> nesting over many lines used
+// to re-render every level, turning a 1 MB page into 80 MB of output.
+func TestBlockquoteNestingBounded(t *testing.T) {
+	body := "<html><body>" + strings.Repeat("<blockquote>", 200) + strings.Repeat("a<br>", 200000) + "</body></html>"
+	doc, err := html.Parse(strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	out, err := renderMarkdown(doc, nil, 4*len(body))
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("took %v, want < 2s", d)
+	}
+	if err != nil {
+		t.Fatalf("renderMarkdown: %v", err)
+	}
+	if len(out) > 4*len(body) {
+		t.Errorf("output %d bytes, want <= %d", len(out), 4*len(body))
+	}
+}
+
+func TestRenderMarkdownNestedQuotes(t *testing.T) {
+	in := `<blockquote><p>a</p><blockquote><p>b</p></blockquote><p>c</p></blockquote><p>d</p>`
+	want := "> a\n>\n> > b\n>\n> c\n\nd"
+	doc, err := html.Parse(strings.NewReader(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := renderMarkdown(doc, nil, defaultMaxSize); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestRenderMarkdownLimit(t *testing.T) {
+	doc, err := html.Parse(strings.NewReader("<p>" + strings.Repeat("word ", 1000) + "</p>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderMarkdown(doc, nil, 100); err == nil {
+		t.Error("want an error when rendered output passes the limit")
+	}
+}
+
+// TestControlCharsStripped: ESC/OSC sequences (raw or as &#27; entities) must
+// not reach the terminal.
+func TestControlCharsStripped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = io.WriteString(w, "<html><head><title>t&#27;]0;x&#7;</title></head><body><p>a&#27;]52;c;eA==&#7;b \x1b[31mc</p><a href=\"/x\x1b]8\">l</a></body></html>")
+	}))
+	defer srv.Close()
+
+	for _, mode := range [][]string{nil, {"--text"}, {"--json"}} {
+		stdout, _, code := runGrab(t, append([]string{srv.URL}, mode...), "")
+		if code != 0 {
+			t.Fatalf("%v: exit %d", mode, code)
+		}
+		if strings.ContainsAny(stdout, "\x1b\x07") {
+			t.Errorf("%v: control bytes in output: %q", mode, stdout)
+		}
+		if mode == nil && !strings.Contains(stdout, "a]52;c;eA==b") {
+			t.Errorf("%v: text lost: %q", mode, stdout)
+		}
+	}
+}
+
+func TestCredentialsRedacted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = io.WriteString(w, `<html><body><p><a href="/rel">rel</a></p></body></html>`)
+	}))
+	defer srv.Close()
+	withCreds := strings.Replace(srv.URL, "http://", "http://u:hunter2@", 1)
+
+	stdout, _, code := runGrab(t, []string{withCreds, "--json"}, "")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, stdout)
+	}
+	if strings.Contains(stdout, "hunter2") {
+		t.Errorf("password in output: %s", stdout)
+	}
+
+	stdout, _, _ = runGrabNoAllowInternal(t, []string{"http://u:hunter2@127.0.0.1:1/", "--json"}, "")
+	if strings.Contains(stdout, "hunter2") {
+		t.Errorf("password in error output: %s", stdout)
+	}
+	_, stderr, _ := runGrab(t, []string{withCreds, "--max-size", "10"}, "")
+	if strings.Contains(stderr, "hunter2") {
+		t.Errorf("password in size error: %s", stderr)
+	}
+}
+
+func TestRedirectDropsReferer(t *testing.T) {
+	var referer string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		referer = r.Header.Get("Referer")
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer target.Close()
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer src.Close()
+
+	if _, _, code := runGrab(t, []string{src.URL + "/?token=secret"}, ""); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if referer != "" {
+		t.Errorf("Referer sent to redirect target: %q", referer)
+	}
+}
+
+// TestAllowInternalNeedsEnv: --allow-internal alone is something a model can
+// set, so it only works when the operator also exports VRK_ALLOW_INTERNAL=1.
+func TestAllowInternalNeedsEnv(t *testing.T) {
+	srv := htmlServer()
+	defer srv.Close()
+	t.Setenv("VRK_ALLOW_INTERNAL", "")
+
+	_, stderr, code := runGrabNoAllowInternal(t, []string{"--allow-internal", srv.URL}, "")
+	if code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "VRK_ALLOW_INTERNAL=1") {
+		t.Errorf("stderr = %q, want it to name VRK_ALLOW_INTERNAL=1", stderr)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -58,6 +59,13 @@ func Run() int {
 			return shared.PrintJSONError(map[string]any{"error": "--times must be >= 1", "code": 2})
 		}
 		return shared.UsageErrorf("--times must be >= 1")
+	}
+
+	if *backoffMax < 0 {
+		if jsonFlag {
+			return shared.PrintJSONError(map[string]any{"error": "--backoff-max must be >= 0", "code": 2})
+		}
+		return shared.UsageErrorf("--backoff-max must be >= 0")
 	}
 
 	cmdArgs := fs.Args()
@@ -148,8 +156,19 @@ func Run() int {
 			}
 		}
 
-		if delay > 0 {
-			time.Sleep(delay)
+		// Sleep in a select so a stop request ends the wait instead of being
+		// buffered until after the next attempt has started.
+		// A zero delay still polls, so a signal that landed during --until counts.
+		timer := time.NewTimer(delay)
+		select {
+		case s := <-sigs:
+			timer.Stop()
+			signalled.Store(true)
+			if sig, ok := s.(syscall.Signal); ok {
+				return 128 + int(sig)
+			}
+			return lastCode
+		case <-timer.C:
 		}
 	}
 
@@ -312,18 +331,15 @@ func parseBackoff(spec string) (isExp bool, base time.Duration, err error) {
 	if spec == "" {
 		return false, 0, nil
 	}
-	if strings.HasPrefix(spec, "exp:") {
-		d, err := time.ParseDuration(strings.TrimPrefix(spec, "exp:"))
-		if err != nil {
-			return false, 0, fmt.Errorf("invalid duration in %q: %v", spec, err)
-		}
-		return true, d, nil
-	}
-	d, err := time.ParseDuration(spec)
+	isExp = strings.HasPrefix(spec, "exp:")
+	d, err := time.ParseDuration(strings.TrimPrefix(spec, "exp:"))
 	if err != nil {
 		return false, 0, fmt.Errorf("invalid duration %q: %v", spec, err)
 	}
-	return false, d, nil
+	if d < 0 {
+		return false, 0, fmt.Errorf("duration must be >= 0, got %q", spec)
+	}
+	return isExp, d, nil
 }
 
 // Flags returns flag metadata for MCP schema generation.
@@ -375,7 +391,14 @@ func computeDelay(isExp bool, base, max time.Duration, attempt int) time.Duratio
 	if isExp {
 		d = base
 		for i := 0; i < attempt; i++ {
+			if d > math.MaxInt64/2 {
+				d = math.MaxInt64
+				break
+			}
 			d *= 2
+			if max > 0 && d >= max {
+				break
+			}
 		}
 	} else {
 		d = base

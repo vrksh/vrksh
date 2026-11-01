@@ -1,5 +1,7 @@
 ## How the output works
 
+`vrk chunk` splits text into pieces that each fit a token limit, and prints one JSONL record (one JSON object per line) for each piece.
+
 Every record contains three fields:
 
 - `index` - zero-based chunk number, sequential
@@ -26,7 +28,7 @@ cat document.txt | vrk chunk --size 7000
 
 ### --overlap
 
-Repeats tokens from the end of each chunk at the start of the next one. This is how you prevent entities from being lost at boundaries.
+Repeats tokens from the end of each chunk at the start of the next one. This stops entities from being lost at chunk boundaries.
 
 Without overlap, a sentence that spans a chunk boundary gets split:
 
@@ -66,7 +68,7 @@ To stay on a boundary, a chunk ends a token or two early. In the rare case where
 
 ## Processing chunks through an LLM
 
-Use `vrk prompt --field text` to process each chunk. One API call per record, no loop needed:
+Use `vrk prompt --field text` to process each chunk. It makes one API call per record, so you need no loop:
 
 ```bash
 cat long-document.md | vrk chunk --size 4000 --overlap 200 | \

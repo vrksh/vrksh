@@ -127,7 +127,7 @@ expect_code "--until condition satisfied" 0 \
 echo ""
 echo "--- --quiet ---"
 QUIET_STDERR=$("$VRK" coax --quiet --times 2 -- false 2>&1 || true)
-if echo "$QUIET_STDERR" | grep -q "coax:"; then
+if <<<"$QUIET_STDERR" grep -q "coax:"; then
     echo "  FAIL  --quiet: coax: lines still present in stderr"
     FAIL=$((FAIL+1))
 else
@@ -136,7 +136,7 @@ else
 fi
 
 SUB_STDERR=$("$VRK" coax --quiet --times 1 -- sh -c "printf 'from_sub\n' >&2; exit 1" 2>&1 || true)
-if echo "$SUB_STDERR" | grep -q "from_sub"; then
+if <<<"$SUB_STDERR" grep -q "from_sub"; then
     echo "  PASS  --quiet: subprocess stderr passes through"
     PASS=$((PASS+1))
 else

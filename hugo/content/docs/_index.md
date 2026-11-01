@@ -1,4 +1,4 @@
 ---
 title: "Docs"
-description: "vrksh tool reference - flags, exit codes, examples, and compose patterns."
+description: "Reference for every vrk tool. Each page says what the tool does and lists its flags, exit codes, and examples you can run."
 ---

@@ -312,7 +312,9 @@ func runEvery(s *bufio.Scanner, n int, w *bufio.Writer) (returned, totalSeen int
 // After the stream ends, the reservoir is sorted by original position so output
 // reflects input order. Returns (returned, totalSeen, scanErr, writeErr).
 func runReservoir(s *bufio.Scanner, n int, rng *rand.Rand, w *bufio.Writer) (returned, totalSeen int, scanErr, writeErr error) {
-	reservoir := make([]reservoirItem, 0, n)
+	// Size from the flag only up to a small hint; append grows it, so memory
+	// tracks lines actually seen and a huge -n can't panic or allocate GBs.
+	reservoir := make([]reservoirItem, 0, min(n, 1024))
 
 	for s.Scan() {
 		line := s.Text()

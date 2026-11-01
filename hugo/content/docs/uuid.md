@@ -1,6 +1,6 @@
 ---
 title: "vrk uuid"
-description: "Generate UUIDs from the command line. v4 random or v7 time-sorted. Batch with --count."
+description: "vrk uuid generates v4 (random) or v7 (time-ordered) UUIDs from the command line, with the same output on macOS and Linux. Use --count for a batch."
 meta_lead: "vrk uuid generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across platforms."
 og_title: "vrk uuid - UUID v4 and v7 generator"
 tool: uuid
@@ -19,7 +19,7 @@ vrk uuid generates v4 (random) or v7 (time-ordered) UUIDs with consistent output
 
 ## The solution
 
-`vrk uuid` generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across macOS and Linux. v7 UUIDs sort by creation time, which keeps B-tree indexes compact. `--count` generates batches in one call.
+`vrk uuid` generates v4 (random) or v7 (time-ordered) UUIDs with consistent output across macOS and Linux. v7 UUIDs sort by creation time, which keeps B-tree indexes compact. Use `--count` to generate a batch in one call.
 
 ## Before and after
 
@@ -64,6 +64,8 @@ vrk uuid --v7 --count 5
 
 ## How it works
 
+`vrk uuid` generates UUIDs: random v4 by default, or time-ordered v7 with `--v7`.
+
 ### v4 (random, default)
 
 <!-- doccheck: skip (random output) -->
@@ -72,7 +74,7 @@ $ vrk uuid
 98d06ca5-e747-4a63-8fc9-045f0e02f8d4
 ```
 
-Standard random UUID. Good for correlation IDs, file names, and anywhere uniqueness matters but ordering doesn't.
+A v4 UUID is random. Use it for correlation IDs, file names, and anywhere you need a unique ID but not an order.
 
 ### v7 (time-ordered)
 
@@ -82,7 +84,7 @@ $ vrk uuid --v7
 019d3fdb-2de7-756e-a340-de561cfa43ab
 ```
 
-The first 48 bits encode a millisecond timestamp. v7 UUIDs sort chronologically - newer IDs are always lexicographically greater. Use these for database primary keys to keep B-tree indexes efficient.
+The first 48 bits of a v7 UUID are a millisecond timestamp. v7 UUIDs sort by time, so a newer ID is always greater than an older one. Use v7 for database primary keys to keep B-tree indexes efficient.
 
 ### Batch generation
 
@@ -109,7 +111,7 @@ vrk kv set --ns pipeline run_id "$RUN_ID"
 echo "Starting run $RUN_ID"
 ```
 
-### Use as chunk IDs
+### Use UUIDs as chunk IDs
 
 ```bash
 # Assign unique IDs to each chunk of a document
@@ -131,7 +133,7 @@ done
 
 ## When it fails
 
-Invalid count:
+If the count is below 1, uuid exits 2:
 
 ```bash
 $ vrk uuid --count 0

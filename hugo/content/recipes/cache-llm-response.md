@@ -1,9 +1,9 @@
 ---
 title: "Cache LLM response"
 meta_title: "Cache LLM response - vrk pipeline recipe"
-description: "Avoids duplicate API calls for identical prompts - the content hash keys the cache so reruns are free. Hash the input, look it up in kv, call the ..."
-why: "Avoids duplicate API calls for identical prompts - the content hash keys the cache so reruns are free."
-body: "Hash the input, look it up in kv, call the model only on a miss."
+description: "The content hash is the cache key, so a rerun with the same input makes no API call. Hash the input, look the hash up in kv, and call the model only ..."
+why: "The content hash is the cache key, so a rerun with the same input makes no API call."
+body: "Hash the input, look the hash up in kv, and call the model only if no answer is stored."
 slug: "cache-llm-response"
 steps:
   - "K=\"llm:$(vrk digest --bare < doc.txt)\""

@@ -1,9 +1,9 @@
 ---
 title: "Agent-safe pipeline with secret masking"
 meta_title: "Agent-safe pipeline with secret masking - vrk pipeline recipe"
-description: "When agents handle user data, mask before any logging or storage - secrets should never reach an LLM or a kv store unredacted. Full guard pipeline - ..."
-why: "When agents handle user data, mask before any logging or storage - secrets should never reach an LLM or a kv store unredacted."
-body: "Full guard pipeline - mask secrets, gate on token budget, prompt, validate output."
+description: "If an agent handles user data, mask it first, so secrets never reach the LLM or the kv store. Mask secrets, check the token budget, call the LLM, and ..."
+why: "If an agent handles user data, mask it first, so secrets never reach the LLM or the kv store."
+body: "Mask secrets, check the token budget, call the LLM, and validate the response in one pipeline."
 slug: "agent-safe-pipeline-with-secret-masking"
 steps:
   - |-
@@ -34,7 +34,7 @@ This is the full guard pipeline - four tools chained together, each handling one
 3. `vrk prompt` - sends the cleaned, size-checked input to the LLM.
 4. `vrk validate --schema summary.json --strict` - checks that the LLM's response has the keys and types in your flat schema. With `--strict`, a bad response exits 1.
 
-If any step fails, the pipeline stops. No partial results, no bad data downstream.
+If any step fails, the pipeline stops, and no partial result goes downstream.
 
 ## When to use this pattern
 

@@ -56,7 +56,7 @@ assert_line_count() {
 
 assert_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if printf '%s\n' "$actual" | grep -qF "$pattern"; then
+  if <<<"$actual" grep -qF "$pattern"; then
     ok "$desc (contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"
@@ -148,6 +148,13 @@ set +e
 exit_code=$?
 set -e
 assert_exit "--count 0: exit 2"  2  "$exit_code"
+
+set +e
+out=$(printf 'a\nb\n' | "$VRK" sip --count 9223372036854775807 2>&1)
+exit_code=$?
+set -e
+assert_exit "--count max int64: exit 0"  0  "$exit_code"
+[ "$out" = "$(printf 'a\nb')" ] && ok "--count max int64: both lines, no panic" || fail "--count max int64: both lines" "$out"
 
 # Seed determinism: same seed → same output.
 out1=$(seq 1000 | "$VRK" sip --count 100 --seed 42)

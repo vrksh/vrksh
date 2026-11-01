@@ -19,6 +19,14 @@
           <h1 class="text-3xl font-bold mb-2">{{ .Title }}</h1>
         </div>
 
+        {{/* Tools that run in the browser get a console with one example (data/playground.yaml). */}}
+        {{ if eq .Section "docs" }}{{ with index hugo.Data.playground.tools .File.ContentBaseName }}
+        <section class="mb-10" aria-labelledby="try-heading">
+          <h2 id="try-heading" class="text-lg font-semibold mb-3">Try it in your browser</h2>
+          {{ partial "playground.html" (dict "id" "try" "example" .) }}
+        </section>
+        {{ end }}{{ end }}
+
         <div class="prose">
           {{ .Content }}
         </div>

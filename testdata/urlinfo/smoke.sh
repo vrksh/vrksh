@@ -28,7 +28,7 @@ assert_exit() {
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if echo "$haystack" | grep -qF "$needle"; then
+  if <<<"$haystack" grep -qF "$needle"; then
     echo "PASS: $desc"
     PASS=$((PASS + 1))
   else
@@ -40,7 +40,7 @@ assert_contains() {
 
 assert_not_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if echo "$haystack" | grep -qF "$needle"; then
+  if <<<"$haystack" grep -qF "$needle"; then
     echo "FAIL: $desc (expected output NOT to contain: $needle)"
     echo "  got: $haystack"
     FAIL=$((FAIL + 1))
@@ -178,6 +178,10 @@ assert_exit "invalid URL exits 1" 1 "$inv_exit"
 # stderr contains "invalid URL"
 inv_stderr=$($VRK urlinfo 'not a url' 2>&1 >/dev/null || true)
 assert_contains "invalid URL: stderr message" "invalid URL" "$inv_stderr"
+
+# invalid URL with credentials: error hides them
+inv_stderr=$($VRK urlinfo 'http://u:s3cretPW@ho st/%zz' 2>&1 >/dev/null || true)
+assert_not_contains "invalid URL: password not echoed" "s3cretPW" "$inv_stderr"
 
 # ---------------------------------------------------------------------------
 # Scheme-relative URL — host non-empty → exit 0

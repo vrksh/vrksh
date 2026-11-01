@@ -2,9 +2,11 @@ package mask
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
+	"math/rand"
 	"os"
 	"strings"
 	"testing"
@@ -559,5 +561,101 @@ func TestDeployLogKeepsContext(t *testing.T) {
 	stdout, _, code := runMask(t, nil, in)
 	if code != 0 || stdout != in {
 		t.Errorf("exit %d, stdout %q, want %q", code, stdout, in)
+	}
+}
+
+// TXT-1: quoted JSON/YAML keys, names ending in a secret word, XML, flags.
+func TestKeywordForms(t *testing.T) {
+	cases := []struct{ in, secret, want string }{
+		{`{"password": "hunter2hunter2"}`, "hunter2", `{"password": "[REDACTED]"}`},
+		{`{"password":"hunter2"}`, "hunter2", `{"password":"[REDACTED]"}`},
+		{`"Password" : "hunter2"`, "hunter2", `"Password" : "[REDACTED]"`},
+		{`{"token": "d8ebd4e10d21ef6bb07f93a5e80c56d8271b835c"}`, "d8ebd4e1", `{"token": "[REDACTED]"}`},
+		{`{"api_key": "3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f"}`, "3f2a9c1e", `{"api_key": "[REDACTED]"}`},
+		{`{"id": 0, "password": "pw0", "token": "abc\"def"}`, "pw0", `{"id": 0, "password": "[REDACTED]", "token": "[REDACTED]"}`},
+		{`DB_PASS=hunter2hunter2`, "hunter2", `DB_PASS=[REDACTED]`},
+		{`<password>hunter2hunter2</password>`, "hunter2", `<password>[REDACTED]</password>`},
+		{`--password hunter2hunter2`, "hunter2", `--password [REDACTED]`},
+		{`password = correct horse battery staple`, "horse", `password = [REDACTED]`},
+		{`  db_password: 'correct horse'`, "horse", `  db_password: '[REDACTED]'`},
+		{`client_secret=abc123`, "abc123", `client_secret=[REDACTED]`},
+		{`X-API-Key: abcd1234`, "abcd1234", `X-API-Key: [REDACTED]`},
+		{`error: login failed, password=hunter2 user=bob`, "hunter2", `error: login failed, password=[REDACTED] user=bob`},
+	}
+	for _, c := range cases {
+		out, _ := redactLine(c.in, nil, 4.0)
+		if strings.Contains(out, c.secret) || out != c.want {
+			t.Errorf("redactLine(%q)\n  got  %q\n  want %q", c.in, out, c.want)
+		}
+	}
+}
+
+// TXT-1: patterns_matched keeps the old category names for the new forms.
+func TestKeywordFormsNames(t *testing.T) {
+	cases := map[string]string{
+		`{"password": "x1"}`:    "password",
+		`{"client_secret":"x"}`: "secret",
+		`{"api_key": "x"}`:      "api_key",
+		`"access_token": "x"`:   "token",
+	}
+	for in, name := range cases {
+		_, fired := redactLine(in, nil, 4.0)
+		if len(fired) == 0 || fired[0] != name {
+			t.Errorf("%q fired %v, want %s first", in, fired, name)
+		}
+	}
+}
+
+// TXT-2: Basic auth, Authorization: token, URL userinfo, curl -u.
+func TestAuthCarriers(t *testing.T) {
+	cases := []struct{ in, secret string }{
+		{"Authorization: Basic YWRtaW46aHVudGVyMg==", "YWRtaW46aHVudGVyMg"},
+		{"Authorization: token 3f2a9c1e7b4d4e8a9c2f1a2b3c4d5e6f7a8b9c0d", "3f2a9c1e"},
+		{`"authorization": "Basic YWRtaW46aHVudGVyMg=="`, "YWRtaW46aHVudGVyMg"},
+		{"amqp://guest:guest@mq", "guest@"},
+		{"https://u:p4ss@x.io", "p4ss"},
+		{"curl -u admin:hunter2 https://x", "hunter2"},
+		{"curl --user admin:hunter2 https://x", "hunter2"},
+	}
+	for _, c := range cases {
+		out, _ := redactLine(c.in, nil, 4.0)
+		if strings.Contains(out, c.secret) || !strings.Contains(out, "[REDACTED]") {
+			t.Errorf("redactLine(%q) = %q, leaks %q", c.in, out, c.secret)
+		}
+	}
+}
+
+// TXT-3: random hex can never reach 4.0 bits, so it gets its own check.
+func TestHexSecrets(t *testing.T) {
+	r := rand.New(rand.NewSource(1))
+	b := make([]byte, 20)
+	r.Read(b)
+	h := hex.EncodeToString(b)
+	for _, in := range []string{h, "https://hooks.example.com/hook/" + h, "webhook " + h + "."} {
+		out, _ := redactLine(in, nil, 4.0)
+		if strings.Contains(out, h) {
+			t.Errorf("hex secret leaked: %q", out)
+		}
+	}
+}
+
+// Things that look close to a secret but are not.
+func TestKeywordDecoys(t *testing.T) {
+	for _, in := range []string{
+		`{"tokens":42,"model":"o200k_base"}`,
+		`{"input_tokens": 42, "max_tokens": 100}`,
+		"https://example.com/a",
+		"we have a token budget of 4000",
+		"the basic idea is simple",
+		"vrk tok --token-budget 100",
+		"bypass: true",
+		"compass: north",
+		`{"password": ""}`,
+		"0000000000000000000000000000000000000000",
+		"merge 3f9a2c7e1b4d8f6a0c5e9b2d7f1a4c8e6b0d3f5a into main",
+	} {
+		if out, _ := redactLine(in, nil, 4.0); out != in {
+			t.Errorf("decoy changed:\n  in:  %q\n  out: %q", in, out)
+		}
 	}
 }

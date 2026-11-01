@@ -12,3 +12,9 @@ GET https://payments.internal/v1/charges failed: 503 after 3 retries
 pulling image registry.example.com/api-gateway:2.31.4
 -----BEGIN OPENSSH PRIVATE KEY-----
 trace_id=7cbc81bf-c747-466a-a777-f3f88dcdfe38 rollback started
+{"tokens":42,"model":"o200k_base"}
+{"input_tokens": 42, "max_tokens": 100}
+we have a token budget of 4000
+vrk tok --token-budget 100
+bypass: true
+merge 3f9a2c7e1b4d8f6a0c5e9b2d7f1a4c8e6b0d3f5a into main

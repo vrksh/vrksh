@@ -117,41 +117,43 @@ func Run() int {
 	}
 
 	// Split into records.
-	var records []chunkRecord
-	if by == "paragraph" {
-		records, err = splitByParagraph(tk, input, size, overlap)
-	} else {
-		records, err = splitByTokens(tk, ids, size, overlap, 0)
-	}
-	if err != nil {
-		return shared.Errorf("chunk: %v", err)
-	}
-
-	// Emit JSONL with an explicit flush after every record (streaming-friendly).
+	// Each record is written and flushed as it is made: with a large
+	// --overlap the output can be ~size times the input, so nothing is held.
 	w := bufio.NewWriter(os.Stdout)
 	defer func() { _ = w.Flush() }()
 	enc := json.NewEncoder(w)
-	for _, r := range records {
-		if err := enc.Encode(r); err != nil {
-			return shared.Errorf("chunk: writing output: %v", err)
+	index := 0
+	emit := func(text string, tokens int) error {
+		if err := enc.Encode(chunkRecord{Index: index, Text: text, Tokens: tokens}); err != nil {
+			return fmt.Errorf("writing output: %w", err)
 		}
 		if err := w.Flush(); err != nil {
-			return shared.Errorf("chunk: flushing output: %v", err)
+			return fmt.Errorf("flushing output: %w", err)
 		}
+		index++
+		return nil
+	}
+
+	if by == "paragraph" {
+		err = splitByParagraph(tk, input, size, overlap, emit)
+	} else {
+		err = splitByTokens(tk, ids, size, overlap, emit)
+	}
+	if err != nil {
+		return shared.Errorf("chunk: %v", err)
 	}
 	return 0
 }
 
 // splitByTokens splits ids into chunks of at most size tokens with overlap
-// tokens shared between adjacent chunks. startIndex offsets the Index field
-// (used when called from splitByParagraph to continue a sequence).
+// tokens shared between adjacent chunks, passing each chunk to emit.
 //
 // A token can hold part of a multi-byte character, so window edges
 // only land between tokens that sit on a character boundary. The end moves
 // back to the nearest boundary; if that would empty the window it moves
 // forward instead (at most 3 tokens past size, the only allowed overflow).
 // Tokens reports the real token count of the emitted text.
-func splitByTokens(tk *tokcount.Encoding, ids []int, size, overlap, startIndex int) ([]chunkRecord, error) {
+func splitByTokens(tk *tokcount.Encoding, ids []int, size, overlap int, emit func(text string, tokens int) error) error {
 	n := len(ids)
 	raw := tk.DecodeBytes(ids)
 
@@ -170,7 +172,6 @@ func splitByTokens(tk *tokcount.Encoding, ids []int, size, overlap, startIndex i
 	runeStart[len(raw)] = true
 	isBoundary := func(k int) bool { return runeStart[offs[k]] }
 
-	var records []chunkRecord
 	for start := 0; start < n; {
 		end := min(start+size, n)
 		e := end
@@ -188,7 +189,7 @@ func splitByTokens(tk *tokcount.Encoding, ids []int, size, overlap, startIndex i
 		text := string(raw[offs[start]:offs[e]])
 		count, err := tk.Count(text)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for count > limit {
 			e2 := e - 1
@@ -201,15 +202,13 @@ func splitByTokens(tk *tokcount.Encoding, ids []int, size, overlap, startIndex i
 			e = e2
 			text = string(raw[offs[start]:offs[e]])
 			if count, err = tk.Count(text); err != nil {
-				return nil, err
+				return err
 			}
 		}
 
-		records = append(records, chunkRecord{
-			Index:  startIndex + len(records),
-			Text:   text,
-			Tokens: count,
-		})
+		if err := emit(text, count); err != nil {
+			return err
+		}
 		if e >= n {
 			break
 		}
@@ -225,7 +224,7 @@ func splitByTokens(tk *tokcount.Encoding, ids []int, size, overlap, startIndex i
 		}
 		start = next
 	}
-	return records, nil
+	return nil
 }
 
 // splitByParagraph splits text at double-newline boundaries, greedily packing
@@ -233,11 +232,14 @@ func splitByTokens(tk *tokcount.Encoding, ids []int, size, overlap, startIndex i
 // Paragraphs that exceed size tokens fall back to token-level splitting.
 // With overlap, a chunk starts with the last overlap tokens of the previous
 // chunk, trimmed forward to a character boundary.
-func splitByParagraph(tk *tokcount.Encoding, text string, size, overlap int) ([]chunkRecord, error) {
-	var records []chunkRecord
+func splitByParagraph(tk *tokcount.Encoding, text string, size, overlap int, emit func(text string, tokens int) error) error {
 	var parts []string // pieces of the chunk being built
 	approx := 0        // token estimate for parts: sum of counts + 1 per separator
 	prev := ""         // text of the last emitted chunk
+	out := func(s string, n int) error {
+		prev = s
+		return emit(s, n)
+	}
 
 	flush := func() error {
 		if len(parts) == 0 {
@@ -251,9 +253,8 @@ func splitByParagraph(tk *tokcount.Encoding, text string, size, overlap int) ([]
 		if err != nil {
 			return err
 		}
-		records = append(records, chunkRecord{Index: len(records), Text: s, Tokens: n})
-		prev, parts, approx = s, nil, 0
-		return nil
+		parts, approx = nil, 0
+		return out(s, n)
 	}
 
 	// overlapTail returns the last overlap tokens of prev, starting on a
@@ -293,31 +294,28 @@ func splitByParagraph(tk *tokcount.Encoding, text string, size, overlap int) ([]
 		}
 		ids, err := tk.Encode(p)
 		if err != nil {
-			return nil, fmt.Errorf("tokenizer error: %v", err)
+			return fmt.Errorf("tokenizer error: %v", err)
 		}
 
 		// Oversized paragraph: fall back to token-level split.
 		if len(ids) > size {
 			if err := flush(); err != nil {
-				return nil, err
+				return err
 			}
-			subs, err := splitByTokens(tk, ids, size, overlap, len(records))
-			if err != nil {
-				return nil, err
+			if err := splitByTokens(tk, ids, size, overlap, out); err != nil {
+				return err
 			}
-			records = append(records, subs...)
-			prev = subs[len(subs)-1].Text
 			continue
 		}
 
 		if len(parts) > 0 && approx+1+len(ids) > size {
 			if err := flush(); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		if len(parts) == 0 {
 			if err := startChunk(len(ids)); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		if len(parts) > 0 {
@@ -326,10 +324,7 @@ func splitByParagraph(tk *tokcount.Encoding, text string, size, overlap int) ([]
 		parts = append(parts, p)
 		approx += len(ids)
 	}
-	if err := flush(); err != nil {
-		return nil, err
-	}
-	return records, nil
+	return flush()
 }
 
 // Flags returns flag metadata for MCP schema generation.

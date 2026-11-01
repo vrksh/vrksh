@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -23,7 +24,12 @@ type jwtEnvelope struct {
 	Signature string         `json:"signature"`
 	Expired   bool           `json:"expired"`
 	Valid     bool           `json:"valid"`
+	// SignatureVerified is always false: "valid" covers the time claims only.
+	SignatureVerified bool `json:"signature_verified"`
 }
+
+// now is a var so tests can pin the clock.
+var now = time.Now
 
 // jsonError emits {"error":"msg","code":N} to stdout and returns N.
 // Used when --json is active so that all output — including errors — goes
@@ -111,7 +117,10 @@ func Run() int {
 
 	// --expired: check before formatting output so it acts as a guard.
 	if checkExpired {
-		expired := isTokenExpired(payload)
+		expired, claimErr := isExpired(payload, now().Unix())
+		if claimErr != nil {
+			return errorf("%v", claimErr)
+		}
 		if jsonFlag {
 			// --expired --json: emit {"expired":bool} — always to stdout, exit 1 if expired.
 			if err := shared.PrintJSON(map[string]any{"expired": expired}); err != nil {
@@ -123,53 +132,16 @@ func Run() int {
 			return 0
 		}
 		if expired {
-			if expNum, ok := payload["exp"].(json.Number); ok {
-				if expUnix, e := expNum.Int64(); e == nil {
-					exp := time.Unix(expUnix, 0)
-					ago := time.Since(exp).Round(time.Second)
-					return shared.Errorf("jwt: token expired %s ago (exp: %s)", ago, exp.UTC().Format(time.RFC3339))
-				}
-			}
-			return shared.Errorf("jwt: token is expired")
+			return shared.Errorf("%v", validityError(payload, now().Unix()))
 		}
 		// Not expired — fall through to output.
 	}
 
 	// --valid: stricter than --expired. Checks exp, nbf, and iat in order.
 	if checkValid {
-		now := time.Now().Unix()
-
-		// 1. exp: must not be expired.
-		if expNum, ok := payload["exp"].(json.Number); ok {
-			if expUnix, e := expNum.Int64(); e == nil {
-				if now > expUnix {
-					exp := time.Unix(expUnix, 0)
-					ago := time.Since(exp).Round(time.Second)
-					return errorf("jwt: token expired %s ago (exp: %s)", ago, exp.UTC().Format(time.RFC3339))
-				}
-			}
+		if err := validityError(payload, now().Unix()); err != nil {
+			return errorf("%v", err)
 		}
-
-		// 2. nbf: must be past its not-before time.
-		if nbfNum, ok := payload["nbf"].(json.Number); ok {
-			if nbfUnix, e := nbfNum.Int64(); e == nil {
-				if now < nbfUnix {
-					nbf := time.Unix(nbfUnix, 0)
-					return errorf("jwt: token not yet valid (nbf: %s)", nbf.UTC().Format(time.RFC3339))
-				}
-			}
-		}
-
-		// 3. iat: must not be issued in the future.
-		if iatNum, ok := payload["iat"].(json.Number); ok {
-			if iatUnix, e := iatNum.Int64(); e == nil {
-				if now < iatUnix {
-					iat := time.Unix(iatUnix, 0)
-					return errorf("jwt: token issued in the future (iat: %s)", iat.UTC().Format(time.RFC3339))
-				}
-			}
-		}
-		// All checks passed — fall through to output.
 	}
 
 	// --claim: extract a single field.
@@ -192,12 +164,14 @@ func Run() int {
 
 	// --json: full envelope with new shape.
 	if jsonFlag {
+		ts := now().Unix()
+		expired, _ := isExpired(payload, ts)
 		env := jwtEnvelope{
 			Header:    header,
 			Payload:   payload,
 			Signature: signature,
-			Expired:   isTokenExpired(payload),
-			Valid:     isTokenValid(payload),
+			Expired:   expired,
+			Valid:     validityError(payload, ts) == nil,
 		}
 		if err := shared.PrintJSON(env); err != nil {
 			return jsonError(shared.ExitError, err.Error())
@@ -212,37 +186,69 @@ func Run() int {
 	return 0
 }
 
-// isTokenExpired reports whether the token's exp claim is present and in the past.
-func isTokenExpired(payload map[string]any) bool {
-	if expNum, ok := payload["exp"].(json.Number); ok {
-		if expUnix, err := expNum.Int64(); err == nil {
-			return time.Now().Unix() > expUnix
-		}
+// numericDate returns claim k as Unix seconds. present is false only when the
+// claim is absent. A claim that is there but is not a usable NumericDate is an
+// error, so callers fail closed instead of skipping the check.
+func numericDate(p map[string]any, k string) (sec int64, present bool, err error) {
+	v, ok := p[k]
+	if !ok {
+		return 0, false, nil
 	}
-	return false
+	n, ok := v.(json.Number)
+	if !ok {
+		return 0, true, fmt.Errorf("jwt: %s claim is not a number", k)
+	}
+	if i, e := n.Int64(); e == nil {
+		return i, true, nil
+	}
+	f, e := n.Float64()
+	switch {
+	case e != nil && !math.IsInf(f, 0), math.IsNaN(f):
+		return 0, true, fmt.Errorf("jwt: %s claim is not a valid NumericDate", k)
+	case f >= math.MaxInt64:
+		return math.MaxInt64, true, nil
+	case f <= math.MinInt64:
+		// A date before the start of int64 time is nonsense for exp/nbf/iat.
+		return 0, true, fmt.Errorf("jwt: %s claim is out of range", k)
+	}
+	return int64(math.Floor(f)), true, nil
 }
 
-// isTokenValid reports whether the token passes all three time checks:
-// exp (not expired), nbf (past), iat (not in future). Missing claims are skipped.
-func isTokenValid(payload map[string]any) bool {
-	now := time.Now().Unix()
+// isExpired reports whether exp is present and now is on or after it.
+func isExpired(p map[string]any, now int64) (bool, error) {
+	exp, ok, err := numericDate(p, "exp")
+	if err != nil {
+		return true, err
+	}
+	return ok && now >= exp, nil
+}
 
-	if expNum, ok := payload["exp"].(json.Number); ok {
-		if expUnix, err := expNum.Int64(); err == nil && now > expUnix {
-			return false
-		}
+// validityError checks exp, nbf and iat in that order. Missing claims are
+// skipped; present but unusable ones fail.
+func validityError(p map[string]any, now int64) error {
+	exp, ok, err := numericDate(p, "exp")
+	if err != nil {
+		return err
 	}
-	if nbfNum, ok := payload["nbf"].(json.Number); ok {
-		if nbfUnix, err := nbfNum.Int64(); err == nil && now < nbfUnix {
-			return false
-		}
+	if ok && now >= exp {
+		t := time.Unix(exp, 0)
+		return fmt.Errorf("jwt: token expired %s ago (exp: %s)", time.Unix(now, 0).Sub(t), t.UTC().Format(time.RFC3339))
 	}
-	if iatNum, ok := payload["iat"].(json.Number); ok {
-		if iatUnix, err := iatNum.Int64(); err == nil && now < iatUnix {
-			return false
-		}
+	nbf, ok, err := numericDate(p, "nbf")
+	if err != nil {
+		return err
 	}
-	return true
+	if ok && now < nbf {
+		return fmt.Errorf("jwt: token not yet valid (nbf: %s)", time.Unix(nbf, 0).UTC().Format(time.RFC3339))
+	}
+	iat, ok, err := numericDate(p, "iat")
+	if err != nil {
+		return err
+	}
+	if ok && now < iat {
+		return fmt.Errorf("jwt: token issued in the future (iat: %s)", time.Unix(iat, 0).UTC().Format(time.RFC3339))
+	}
+	return nil
 }
 
 // decodeJWT splits a JWT into its three parts, base64url-decodes the header and

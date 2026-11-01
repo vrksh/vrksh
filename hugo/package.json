@@ -2,6 +2,7 @@
   "name": "vrksh-site",
   "private": true,
   "scripts": {
+    "prebuild": "if command -v go >/dev/null; then make -C .. playground; else echo 'warning: go not found, the playground wasm is not built' >&2; fi",
     "build": "npx @tailwindcss/cli -i assets/css/main.css -o static/css/main.css --minify && hugo --minify",
     "postbuild": "npx pagefind --site public",
     "dev": "hugo server"

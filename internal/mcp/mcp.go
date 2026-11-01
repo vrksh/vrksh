@@ -9,6 +9,7 @@
 package mcp
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,19 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/vrksh/vrksh/internal/shared"
 )
+
+// maxRequestBytes caps one JSON-RPC line. Discovery requests are tiny.
+const maxRequestBytes = 1 << 20
+
+// hiddenTools run commands, touch the kv database or call an LLM with
+// credentials, so they are never advertised to MCP clients.
+var hiddenTools = map[string]bool{"coax": true, "kv": true, "prompt": true}
+
+// hiddenFlags take a file path, a shell command or a prompt-file reference,
+// or switch off a safety guard (SSRF, path checks). Never advertised.
+var hiddenFlags = map[string]bool{
+	"until": true, "file": true, "system": true, "schema": true, "allow-internal": true,
+}
 
 // Version can be overridden via -ldflags at build time.
 var Version = "dev"
@@ -57,7 +71,9 @@ func runList(
 ) int {
 	names := make([]string, 0, len(flagsFn))
 	for name := range flagsFn {
-		names = append(names, name)
+		if !hiddenTools[name] {
+			names = append(names, name)
+		}
 	}
 	sort.Strings(names)
 
@@ -144,7 +160,8 @@ func runStdio(
 	tools := buildToolsList(flagsFn, descriptions, stdinRequired)
 
 	enc := json.NewEncoder(os.Stdout)
-	scanner := shared.ScanLines(os.Stdin)
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxRequestBytes)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -168,10 +185,20 @@ func runStdio(
 			continue
 		}
 
-		// Decode the id to use in the response.
+		// Decode the id to use in the response. Only strings and numbers
+		// are valid ids; anything else is not echoed back.
 		var id interface{}
 		if err := json.Unmarshal(*req.ID, &id); err != nil {
 			id = nil
+		}
+		switch id.(type) {
+		case string, float64:
+		default:
+			_ = enc.Encode(jsonrpcResponse{
+				JSONRPC: "2.0",
+				Error:   &rpcError{Code: -32600, Message: "invalid request: id must be a string or number"},
+			})
+			continue
 		}
 
 		var resp jsonrpcResponse
@@ -204,6 +231,13 @@ func runStdio(
 		_ = enc.Encode(resp)
 	}
 
+	if err := scanner.Err(); err != nil {
+		_ = enc.Encode(jsonrpcResponse{
+			JSONRPC: "2.0",
+			Error:   &rpcError{Code: -32700, Message: "request too large or unreadable"},
+		})
+		return shared.Errorf("mcp: reading stdin: %v", err)
+	}
 	return 0
 }
 
@@ -215,7 +249,9 @@ func buildToolsList(
 ) []mcpTool {
 	names := make([]string, 0, len(flagsFn))
 	for name := range flagsFn {
-		names = append(names, name)
+		if !hiddenTools[name] {
+			names = append(names, name)
+		}
 	}
 	sort.Strings(names)
 
@@ -229,6 +265,9 @@ func buildToolsList(
 		if fn, ok := flagsFn[name]; ok {
 			fs := fn()
 			fs.VisitAll(func(f *pflag.Flag) {
+				if hiddenFlags[f.Name] {
+					return
+				}
 				props[f.Name] = schemaProperty{
 					Type:        pflagTypeToJSONSchema(f.Value.Type()),
 					Description: f.Usage,

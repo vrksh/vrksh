@@ -50,7 +50,7 @@ assert_stdout_equals() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"
@@ -186,6 +186,17 @@ exit_code=0; echo "**bold**" | "$VRK" plain --quiet > /dev/null 2>&1 || exit_cod
 assert_exit            "--quiet success: exit 0"          0       "$exit_code"
 assert_stdout_contains "--quiet success: stdout has text" "bold"  "$stdout"
 assert_stderr_empty    "--quiet success: no stderr"               "$stderr"
+
+echo ""
+echo "--- deep nesting ---"
+
+# 100000 link openers used to pin a CPU for minutes; now plain-text fallback.
+exit_code=0
+python3 -I -c "import sys;sys.stdout.write('[a]('*100000)" | timeout 5 "$VRK" plain > /dev/null || exit_code=$?
+assert_exit "deep link nesting: exit 0 within 5s" 0 "$exit_code"
+exit_code=0
+python3 -I -c "import sys;sys.stdout.write('- '*100000+'x')" | timeout 5 "$VRK" plain > /dev/null || exit_code=$?
+assert_exit "deep list nesting: exit 0 within 5s" 0 "$exit_code"
 
 # ------------------------------------------------------------
 # Summary

@@ -1,9 +1,9 @@
 ---
 title: "Validate LLM output before it propagates"
 meta_title: "Validate LLM output before it propagates - vrk pipeline recipe"
-description: "Bad structured output exits 1 before reaching downstream systems - you catch schema drift at the source, not in production. Gate the pipeline on ..."
-why: "Bad structured output exits 1 before reaching downstream systems - you catch schema drift at the source, not in production."
-body: "Gate the pipeline on schema correctness. Exit 1 on mismatch stops the next stage from running."
+description: "A bad structured response exits 1 before it reaches downstream systems, so you catch schema drift at the source. Check the LLM response against a ..."
+why: "A bad structured response exits 1 before it reaches downstream systems, so you catch schema drift at the source."
+body: "Check the LLM response against a schema and exit 1 on a mismatch, so the next stage does not run."
 slug: "validate-llm-output-before-it-propagates"
 steps:
   - |-
@@ -27,7 +27,7 @@ Schema validation at the source catches this immediately. The pipeline stops at 
 
 `vrk prompt` calls the LLM and prints the raw response. `vrk validate` checks the response against a flat schema. It checks top-level keys and their types, nothing deeper. If the response matches, the data passes through. If not, `--strict` makes `vrk validate` exit 1 with no output, so `vrk kv set` gets nothing to store, exits 2 with `kv set: no value`, and the key is never written. Without `--strict`, a bad line is only warned about on stderr.
 
-No bad data reaches storage. No downstream code processes an invalid response.
+A bad response never reaches storage, and no downstream code sees it.
 
 ## The schema
 
