@@ -35,7 +35,7 @@ assert_exit() {
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if echo "$haystack" | grep -qF -- "$needle"; then
+  if <<<"$haystack" grep -qF -- "$needle"; then
     pass "$desc"
   else
     fail "$desc — expected to contain: $needle | got: $haystack"
@@ -78,7 +78,7 @@ assert_eq "--bare sha256 of hello (with newline)" \
   "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" \
   "$out"
 # No colon in bare output
-if echo "$out" | grep -q ':'; then
+if <<<"$out" grep -q ':'; then
   fail "--bare output must not contain colon"
 else
   pass "--bare output has no colon"

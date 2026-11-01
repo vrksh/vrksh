@@ -40,7 +40,7 @@ assert_exit() {
 
 assert_contains() {
   local desc="$1" needle="$2" haystack="$3"
-  if echo "$haystack" | grep -qF "$needle"; then
+  if <<<"$haystack" grep -qF "$needle"; then
     echo "PASS: $desc"
     PASS=$((PASS + 1))
   else
@@ -52,7 +52,7 @@ assert_contains() {
 
 assert_match() {
   local desc="$1" pattern="$2" actual="$3"
-  if echo "$actual" | grep -qE "$pattern"; then
+  if <<<"$actual" grep -qE "$pattern"; then
     echo "PASS: $desc"
     PASS=$((PASS + 1))
   else

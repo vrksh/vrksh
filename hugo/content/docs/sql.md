@@ -52,22 +52,22 @@ vrk sql --json 'SELECT * FROM users WHERE age > 25' users.csv | jq -c 'select(.i
 
 ## Exit codes
 
-| Code | Meaning                                                                                                                                         |
-|------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0    | Success, including empty stdin when the query reads stdin                                                                                       |
-| 1    | SQL error, file not found, CSV parse error, empty file, gzip file, or --timeout reached                                                         |
-| 2    | No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, bad --delimiter, negative --timeout, or unknown flag |
+| Code | Meaning                                                                                                                                                                                         |
+|------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0    | Success, including empty stdin when the query reads stdin                                                                                                                                       |
+| 1    | SQL error (syntax, no such table or column, a string in double quotes, runtime), file not found, CSV or JSON parse error, empty file, gzip file, PRAGMA, --timeout reached, or a size limit hit |
+| 2    | No query, a table but no files, duplicate or invalid table name, stdin with nothing piped, a file where the query should be, bad --delimiter, negative --timeout, or unknown flag               |
 
 ## Flags
 
-| Flag          | Short | Type     | Description                                                                   |
-|---------------|-------|----------|-------------------------------------------------------------------------------|
-| `--query`     |       | string   | SQL query; every positional argument is then a CSV file                       |
-| `--no-header` |       | bool     | Leave the header row out of CSV output                                        |
-| `--delimiter` | -d    | string   | Input field separator, one character or \t (default , or tab for .tsv)        |
-| `--json`      | -j    | bool     | One JSON object per row, then a metadata trailer                              |
-| `--quiet`     | -q    | bool     | Suppress stderr output                                                        |
-| `--timeout`   |       | duration | Stop and exit 1 if loading and the query take longer, e.g. 30s (default none) |
+| Flag          | Short | Type     | Description                                                                        |
+|---------------|-------|----------|------------------------------------------------------------------------------------|
+| `--query`     |       | string   | SQL query; every positional argument is then a CSV file                            |
+| `--no-header` |       | bool     | Leave the header row out of CSV output                                             |
+| `--delimiter` | -d    | string   | Input field separator, one character or \t (default , or tab for .tsv)             |
+| `--json`      | -j    | bool     | One JSON object per row, then a metadata trailer                                   |
+| `--quiet`     | -q    | bool     | Suppress stderr output                                                             |
+| `--timeout`   |       | duration | Stop and exit 1 if loading and the query take longer (default 60s, 0 for no limit) |
 
 
 <!-- notes - edit in notes/sql.notes.md -->

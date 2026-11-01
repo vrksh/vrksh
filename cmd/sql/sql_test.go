@@ -163,7 +163,9 @@ func TestInferType(t *testing.T) {
 		{[]string{"", ""}, "TEXT", -1},
 		{[]string{}, "TEXT", -1},
 		{[]string{"99999999999999999999"}, "TEXT", -1},
-		{[]string{"1.5", "99999999999999999999"}, "TEXT", -1},
+		{[]string{"1.5", "99999999999999999999"}, "TEXT", 1},
+		{[]string{"1", "99999999999999999999"}, "TEXT", 1},
+		{[]string{"99999999999999999999", "88888888888888888888"}, "TEXT", -1},
 		{[]string{" 30", "7 "}, "INTEGER", -1},
 		{[]string{"1.", ".5"}, "TEXT", -1},
 		{[]string{"5", "N/A", "2", "null", "-", "NA", "none"}, "INTEGER", -1},
@@ -1252,6 +1254,43 @@ func TestOutOfRangeNumberWarns(t *testing.T) {
 	w, _ := recs[len(recs)-1]["warnings"].([]any)
 	if errOut != "" || len(w) != 1 || !strings.Contains(fmt.Sprint(w[0]), "column id is TEXT") {
 		t.Errorf("--json stdout %q stderr %q", out, errOut)
+	}
+}
+
+// One normal int and one big one tie; the column still goes TEXT and must say so.
+// A column of only big integers (long IDs) is plain TEXT with nothing to warn.
+func TestBigIntegerTieWarnsAllBigIsSilent(t *testing.T) {
+	dir := t.TempDir()
+	tie := writeCSV(t, dir, "tie.csv", "id\n1\n99999999999999999999\n")
+	_, errOut, code := runSql(t, []string{"SELECT id FROM tie", tie}, "")
+	if code != 0 || !strings.Contains(errOut, `column id is TEXT: row 2 has "99999999999999999999"`) {
+		t.Errorf("tie: exit %d stderr %q", code, errOut)
+	}
+	ids := writeCSV(t, dir, "ids.csv", "id\n99999999999999999999\n88888888888888888888\n")
+	out, errOut, code := runSql(t, []string{"SELECT typeof(id) AS t FROM ids LIMIT 1", ids}, "")
+	if code != 0 || out != "t\ntext\n" || errOut != "" {
+		t.Errorf("all big: exit %d stdout %q stderr %q", code, out, errOut)
+	}
+}
+
+// Truncated JSON must fail, not load as a one-column CSV.
+func TestTruncatedJSONFails(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"cut.json":  `{"a":`,
+		"bad.jsonl": "{bad\n",
+		"arr.txt":   `[ {"a":1},`,
+	} {
+		f := writeCSV(t, dir, name, body)
+		_, errOut, code := runSql(t, []string{"SELECT * FROM " + strings.Split(name, ".")[0], f}, "")
+		if code != 1 {
+			t.Errorf("%s: exit %d stderr %q, want 1", name, code, errOut)
+		}
+	}
+	// A CSV header that happens to start with { is still CSV.
+	f := writeCSV(t, dir, "braces.csv", "{id},name\n1,a\n")
+	if out, errOut, code := runSql(t, []string{"SELECT name FROM braces", f}, ""); code != 0 || out != "name\na\n" {
+		t.Errorf("braces csv: exit %d stdout %q stderr %q", code, out, errOut)
 	}
 }
 

@@ -37,12 +37,11 @@ func runTok(t *testing.T, args []string, stdinContent string) (stdout, stderr st
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
 	}
-	if _, err := io.WriteString(stdinW, stdinContent); err != nil {
-		t.Fatalf("write stdin: %v", err)
-	}
-	if err := stdinW.Close(); err != nil {
-		t.Fatalf("close stdin write end: %v", err)
-	}
+	// Write in a goroutine so stdin bigger than the pipe buffer can't deadlock.
+	go func() {
+		_, _ = io.WriteString(stdinW, stdinContent)
+		_ = stdinW.Close()
+	}()
 	os.Stdin = stdinR
 
 	stdoutR, stdoutW, err := os.Pipe()
@@ -57,21 +56,21 @@ func runTok(t *testing.T, args []string, stdinContent string) (stdout, stderr st
 	}
 	os.Stderr = stderrW
 
+	// Drain while Run executes so output bigger than the pipe buffer can't deadlock.
+	var outBuf, errBuf bytes.Buffer
+	outDone, errDone := make(chan struct{}), make(chan struct{})
+	go func() { _, _ = io.Copy(&outBuf, stdoutR); close(outDone) }()
+	go func() { _, _ = io.Copy(&errBuf, stderrR); close(errDone) }()
+
 	os.Args = append([]string{"tok"}, args...)
 
 	code = Run()
 
-	// Close write ends before reading so io.Copy sees EOF.
+	// Close write ends so the drain goroutines see EOF.
 	_ = stdoutW.Close()
 	_ = stderrW.Close()
-
-	var outBuf, errBuf bytes.Buffer
-	if _, err := io.Copy(&outBuf, stdoutR); err != nil {
-		t.Fatalf("read stdout: %v", err)
-	}
-	if _, err := io.Copy(&errBuf, stderrR); err != nil {
-		t.Fatalf("read stderr: %v", err)
-	}
+	<-outDone
+	<-errDone
 	_ = stdoutR.Close()
 	_ = stderrR.Close()
 

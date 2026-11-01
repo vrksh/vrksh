@@ -99,7 +99,8 @@ func Run() int {
 	// nesting check in plaintext does not catch. On timeout the goroutine is
 	// abandoned; the process exits right after.
 	done := make(chan string, 1)
-	go func() { done <- stripMarkdown(input) }()
+	strip := stripMarkdown // read the var once; the abandoned goroutine must not race a test restoring it
+	go func() { done <- strip(input) }()
 	var stripped string
 	select {
 	case stripped = <-done:

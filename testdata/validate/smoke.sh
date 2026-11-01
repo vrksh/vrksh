@@ -70,7 +70,7 @@ assert_stderr_empty() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"
@@ -79,7 +79,7 @@ assert_stdout_contains() {
 
 assert_stdout_not_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     fail "$desc" "stdout must NOT contain '$pattern' but did: $actual"
   else
     ok "$desc (does not contain '$pattern')"
@@ -284,7 +284,7 @@ exit_code=$(set +e; echo '{"name":"alice","age":30}' | "$VRK" validate --schema 
 
 assert_exit "pipeline: exit 0" 0 "$exit_code"
 # tok should output a positive integer.
-if echo "$tok_out" | grep -qE '^[1-9][0-9]*$'; then
+if <<<"$tok_out" grep -qE '^[1-9][0-9]*$'; then
   ok "pipeline: tok output is a positive number ($tok_out)"
 else
   fail "pipeline: tok output is not a positive number" "got: $tok_out"

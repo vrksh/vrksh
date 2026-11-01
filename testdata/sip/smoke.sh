@@ -56,7 +56,7 @@ assert_line_count() {
 
 assert_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if printf '%s\n' "$actual" | grep -qF "$pattern"; then
+  if <<<"$actual" grep -qF "$pattern"; then
     ok "$desc (contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $actual"

@@ -138,7 +138,7 @@ comp=$(bash --norc --noprofile -c "
   COMP_WORDS=(vrk to); COMP_CWORD=1; COMP_LINE='vrk to'; COMP_POINT=6
   f=\$(complete -p vrk | sed -E 's/.*-F ([^ ]+).*/\1/'); \$f
   printf '%s\n' \"\${COMPREPLY[@]}\"")
-printf '%s\n' "$comp" | grep -qx tok && ok A-22 || bad A-22 "completion gave: $comp"
+<<<"$comp" grep -qx tok && ok A-22 || bad A-22 "completion gave: $comp"
 
 # ---- install (network) ----
 if [ "${NETWORK:-0}" = 1 ]; then

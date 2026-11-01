@@ -49,7 +49,7 @@ assert_eq() {
 }
 
 assert_contains() {
-  if printf '%s' "$3" | grep -qF -- "$2"; then ok "$1 (contains '$2')"; else fail "$1" "missing '$2' in: $3"; fi
+  if <<<"$3" grep -qF -- "$2"; then ok "$1 (contains '$2')"; else fail "$1" "missing '$2' in: $3"; fi
 }
 
 echo "vrk pdf smoke tests"

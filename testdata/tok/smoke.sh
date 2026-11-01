@@ -65,7 +65,7 @@ assert_stdout_empty() {
 
 assert_stderr_contains() {
   local desc=$1 pattern=$2 actual=$3
-  if echo "$actual" | grep -q "$pattern"; then
+  if <<<"$actual" grep -q "$pattern"; then
     ok "$desc (stderr contains '$pattern')"
   else
     fail "$desc" "stderr did not contain '$pattern'. got: $actual"
@@ -212,7 +212,7 @@ echo "--- --check + --json (over limit) ---"
 out=$(echo 'hello world' | "$VRK" tok --check 1 --json 2>/dev/null || true)
 exit_code=$(set +e; echo 'hello world' | "$VRK" tok --check 1 --json > /dev/null 2>&1; echo $?)
 assert_exit "--check --json over limit: exit 1" 1 "$exit_code"
-if echo "$out" | grep -q '"error"' && echo "$out" | grep -q '"limit"'; then
+if <<<"$out" grep -q '"error"' && <<<"$out" grep -q '"limit"'; then
   ok "--check --json over limit: JSON has error and limit fields"
 else
   fail "--check --json over limit: missing JSON fields" "got: $out"
@@ -290,7 +290,7 @@ echo "--- --help ---"
 stdout=$("$VRK" tok --help 2>/dev/null) || true
 exit_code=$(set +e; "$VRK" tok --help > /dev/null 2>&1; echo $?)
 assert_exit "help: exit 0" 0 "$exit_code"
-if echo "$stdout" | grep -q "tok"; then
+if <<<"$stdout" grep -q "tok"; then
   ok "help: contains 'tok'"
 else
   fail "help: contains 'tok'" "got: $stdout"

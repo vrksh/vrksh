@@ -60,7 +60,7 @@ assert_exit() {
 # assert_stdout_contains <description> <pattern> <stdout>
 assert_stdout_contains() {
   local desc=$1 pattern=$2 stdout=$3
-  if echo "$stdout" | grep -q "$pattern"; then
+  if <<<"$stdout" grep -q "$pattern"; then
     ok "$desc (stdout contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $stdout"
@@ -80,7 +80,7 @@ assert_stdout_empty() {
 # assert_stderr_contains <description> <pattern> <stderr>
 assert_stderr_contains() {
   local desc=$1 pattern=$2 stderr=$3
-  if echo "$stderr" | grep -q "$pattern"; then
+  if <<<"$stderr" grep -q "$pattern"; then
     ok "$desc (stderr contains '$pattern')"
   else
     fail "$desc" "stderr did not contain '$pattern'. got: $stderr"

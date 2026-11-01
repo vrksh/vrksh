@@ -43,7 +43,7 @@ assert_exit() {
 
 assert_stdout() {
   local desc="$1" expected="$2" actual="$3"
-  if echo "$actual" | grep -qF "$expected"; then
+  if <<<"$actual" grep -qF "$expected"; then
     echo "PASS: $desc"
     PASS=$((PASS + 1))
   else
@@ -348,7 +348,7 @@ echo "--- Section 11: prompt (offline --explain) ---"
 text="Summarize this for me"
 count=$(echo "$text" | $VRK tok --quiet)
 explain=$(echo "$text" | $VRK prompt --explain)
-[ "$count" -gt 0 ] && echo "$explain" | grep -q "claude" \
+[ "$count" -gt 0 ] && <<<"$explain" grep -q "claude" \
   && { echo "PASS: tok count then prompt --explain contains model"; PASS=$((PASS+1)); } \
   || { echo "FAIL: tok→prompt --explain chain"; FAIL=$((FAIL+1)); }
 
@@ -401,7 +401,7 @@ cached=$($VRK kv get "response:$req_id")
 JWT=$(make_jwt '{"sub":"alice","role":"admin","exp":9999999999}')
 role=$(echo "$JWT" | $VRK jwt --claim role --quiet)
 explain=$(echo "Reply with only the word: $role" | $VRK prompt --explain)
-echo "$explain" | grep -q "admin" \
+<<<"$explain" grep -q "admin" \
   && { echo "PASS: jwt claim injected into prompt --explain"; PASS=$((PASS+1)); } \
   || { echo "FAIL: jwt claim injected into prompt --explain"; FAIL=$((FAIL+1)); }
 
@@ -581,13 +581,13 @@ done
 # vrk --skills <tool>: per-tool skill file starts with "# <tool> "
 for tool in jwt tok kv links; do
   section=$($VRK --skills "$tool")
-  echo "$section" | grep -q "^# $tool " \
+  <<<"$section" grep -q "^# $tool " \
     && { echo "PASS: --skills $tool section header present"; PASS=$((PASS+1)); } \
     || { echo "FAIL: --skills $tool missing section header"; FAIL=$((FAIL+1)); }
   # must not contain another tool's content
   other="epoch"
   [ "$tool" = "epoch" ] && other="jwt"
-  echo "$section" | grep -q "^# $other " \
+  <<<"$section" grep -q "^# $other " \
     && { echo "FAIL: --skills $tool leaked section for $other"; FAIL=$((FAIL+1)); } \
     || { echo "PASS: --skills $tool does not bleed into $other"; PASS=$((PASS+1)); }
 done
@@ -596,7 +596,7 @@ done
 ec=$(set +e; $VRK >/dev/null 2>&1; echo $?)
 assert_exit "vrk no-args exits 0" 0 "$ec"
 stdout_no_args=$($VRK 2>/dev/null || true)
-echo "$stdout_no_args" | grep -q "^tools:" \
+<<<"$stdout_no_args" grep -q "^tools:" \
   && { echo "PASS: vrk no-args stdout lists tools"; PASS=$((PASS+1)); } \
   || { echo "FAIL: vrk no-args stdout missing tool list: $stdout_no_args"; FAIL=$((FAIL+1)); }
 stderr_no_args=$($VRK 2>&1 >/dev/null || true)
@@ -893,7 +893,7 @@ val_out=$(echo '{"name":"alice","age":30}' | $VRK validate --schema "$SCHEMA_VAL
 
 # validate | tok: output is a positive integer.
 tok_val=$(echo '{"name":"alice","age":30}' | $VRK validate --schema "$SCHEMA_VAL" | $VRK tok 2>/dev/null)
-echo "$tok_val" | grep -qE '^[1-9][0-9]*$' \
+<<<"$tok_val" grep -qE '^[1-9][0-9]*$' \
   && { echo "PASS: validate | tok produces token count ($tok_val)"; PASS=$((PASS+1)); } \
   || { echo "FAIL: validate | tok: expected positive integer, got '$tok_val'"; FAIL=$((FAIL+1)); }
 
@@ -980,10 +980,10 @@ assert_exit "emit | validate: exits 0" 0 "$ec"
 
 # emit | mask: secret in message is redacted; record structure passes through.
 mask_out=$(echo 'token=secret123abcXYZ' | $VRK emit | $VRK mask 2>/dev/null)
-echo "$mask_out" | grep -q '\[REDACTED\]' \
+<<<"$mask_out" grep -q '\[REDACTED\]' \
   && { echo "PASS: emit | mask: [REDACTED] present"; PASS=$((PASS+1)); } \
   || { echo "FAIL: emit | mask: [REDACTED] not found in: $mask_out"; FAIL=$((FAIL+1)); }
-echo "$mask_out" | grep -q 'secret123abcXYZ' \
+<<<"$mask_out" grep -q 'secret123abcXYZ' \
   && { echo "FAIL: emit | mask: original secret still present"; FAIL=$((FAIL+1)); } \
   || { echo "PASS: emit | mask: original secret absent"; PASS=$((PASS+1)); }
 
@@ -995,10 +995,10 @@ assert_stdout "emit | kv: retrieved record contains msg" '"msg":"hello"' "$emit_
 # emit --parse-level: mixed input → records with different level fields.
 parse_out=$(printf 'ERROR: bad\nINFO: ok\n' | $VRK emit --parse-level)
 levels=$(echo "$parse_out" | python3 -c 'import sys,json; lines=[json.loads(l) for l in sys.stdin if l.strip()]; print(" ".join(r["level"] for r in lines))')
-echo "$levels" | grep -q 'error' \
+<<<"$levels" grep -q 'error' \
   && { echo "PASS: emit --parse-level: error level detected"; PASS=$((PASS+1)); } \
   || { echo "FAIL: emit --parse-level: error level not found in: $levels"; FAIL=$((FAIL+1)); }
-echo "$levels" | grep -q 'info' \
+<<<"$levels" grep -q 'info' \
   && { echo "PASS: emit --parse-level: info level detected"; PASS=$((PASS+1)); } \
   || { echo "FAIL: emit --parse-level: info level not found in: $levels"; FAIL=$((FAIL+1)); }
 
@@ -1050,7 +1050,7 @@ explain_out=$(echo 'run this' | $VRK emit | $VRK throttle --rate 100/s | $VRK pr
 [ -n "$explain_out" ] \
   && { echo "PASS: emit | throttle | prompt --explain: output non-empty"; PASS=$((PASS+1)); } \
   || { echo "FAIL: emit | throttle | prompt --explain: output was empty"; FAIL=$((FAIL+1)); }
-echo "$explain_out" | grep -q 'api.anthropic.com' \
+<<<"$explain_out" grep -q 'api.anthropic.com' \
   && { echo "PASS: emit | throttle | prompt --explain: contains api.anthropic.com"; PASS=$((PASS+1)); } \
   || { echo "FAIL: emit | throttle | prompt --explain: api.anthropic.com not found"; FAIL=$((FAIL+1)); }
 
@@ -1084,10 +1084,10 @@ echo "$jsonl_collected" | python3 -c 'import sys,json; a=json.loads(sys.stdin.re
 
 # round-trip: split then collect → records preserved.
 rt=$(echo '[{"a":1},{"a":2}]' | $VRK jsonl | $VRK jsonl --collect)
-echo "$rt" | grep -qF '"a":1' \
+<<<"$rt" grep -qF '"a":1' \
   && { echo "PASS: jsonl round-trip: a:1 preserved"; PASS=$((PASS+1)); } \
   || { echo "FAIL: jsonl round-trip: a:1 missing from: $rt"; FAIL=$((FAIL+1)); }
-echo "$rt" | grep -qF '"a":2' \
+<<<"$rt" grep -qF '"a":2' \
   && { echo "PASS: jsonl round-trip: a:2 preserved"; PASS=$((PASS+1)); } \
   || { echo "FAIL: jsonl round-trip: a:2 missing from: $rt"; FAIL=$((FAIL+1)); }
 
@@ -1140,10 +1140,10 @@ export VRK_KV_PATH
 # mask | kv: scrubbed text stored; secret absent from retrieved value.
 echo 'token=secret123ABCXYZ' | $VRK mask | $VRK kv set scrubbed_val
 mask_kv_retrieved=$($VRK kv get scrubbed_val)
-echo "$mask_kv_retrieved" | grep -q '\[REDACTED\]' \
+<<<"$mask_kv_retrieved" grep -q '\[REDACTED\]' \
   && { echo "PASS: mask | kv: [REDACTED] in stored value"; PASS=$((PASS+1)); } \
   || { echo "FAIL: mask | kv: [REDACTED] not found in: $mask_kv_retrieved"; FAIL=$((FAIL+1)); }
-echo "$mask_kv_retrieved" | grep -q 'secret123ABCXYZ' \
+<<<"$mask_kv_retrieved" grep -q 'secret123ABCXYZ' \
   && { echo "FAIL: mask | kv: original secret still present in stored value"; FAIL=$((FAIL+1)); } \
   || { echo "PASS: mask | kv: original secret absent from stored value"; PASS=$((PASS+1)); }
 
@@ -1164,7 +1164,7 @@ assert_exit "prompt --explain | mask: exits 0" 0 "$ec"
 [ -n "$explain_mask" ] \
   && { echo "PASS: prompt --explain | mask: output non-empty"; PASS=$((PASS+1)); } \
   || { echo "FAIL: prompt --explain | mask: output was empty"; FAIL=$((FAIL+1)); }
-echo "$explain_mask" | grep -q 'curl' \
+<<<"$explain_mask" grep -q 'curl' \
   && { echo "PASS: prompt --explain | mask: output contains curl"; PASS=$((PASS+1)); } \
   || { echo "FAIL: prompt --explain | mask: curl not found in output"; FAIL=$((FAIL+1)); }
 

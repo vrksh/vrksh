@@ -154,7 +154,7 @@ P3="How vexingly quick daft zebras jump."
 para_out=$(printf '%s\n\n%s\n\n%s' "$P1" "$P2" "$P3" | "$VRK" chunk --size 500 --by paragraph 2>/dev/null)
 
 for para in "$P1" "$P2" "$P3"; do
-  if echo "$para_out" | grep -qF "$para"; then
+  if <<<"$para_out" grep -qF "$para"; then
     ok "--by paragraph: keeps whole: ${para:0:30}..."
   else
     fail "--by paragraph: keeps whole" "paragraph was split: ${para:0:30}..."
@@ -218,7 +218,7 @@ if [ "$exit_code" -eq 0 ]; then
 else
   fail "--quiet success: exit 0" "expected exit 0, got $exit_code"
 fi
-if echo "$stdout" | grep -q '"text"'; then
+if <<<"$stdout" grep -q '"text"'; then
   ok "--quiet success: stdout has chunk"
 else
   fail "--quiet success: stdout has chunk" "stdout did not contain '\"text\"'. got: $stdout"

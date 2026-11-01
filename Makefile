@@ -40,7 +40,7 @@ fuzz:
 	go test -fuzz=FuzzJwt   -fuzztime=60s ./cmd/jwt/
 	go test -fuzz=FuzzEpoch -fuzztime=60s ./cmd/epoch/
 	go test -fuzz=FuzzTok   -fuzztime=60s ./cmd/tok/
-	go test -fuzz=FuzzSse   -fuzztime=60s ./cmd/sse/
+	go test -fuzz=FuzzSSE   -fuzztime=60s ./cmd/sse/
 	go test -fuzz=FuzzChunk -fuzztime=60s ./cmd/chunk/
 	go test -fuzz=FuzzPdf   -fuzztime=60s ./cmd/pdf/
 	go test -fuzz=FuzzMatchesTiktokenGo -fuzztime=60s ./internal/shared/tokcount/

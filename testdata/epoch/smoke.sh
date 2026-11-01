@@ -54,7 +54,7 @@ assert_stdout_equals() {
 
 assert_stdout_contains() {
   local desc=$1 pattern=$2 stdout=$3
-  if echo "$stdout" | grep -qF -- "$pattern"; then
+  if <<<"$stdout" grep -qF -- "$pattern"; then
     ok "$desc (stdout contains '$pattern')"
   else
     fail "$desc" "stdout did not contain '$pattern'. got: $stdout"
@@ -81,7 +81,7 @@ assert_stdout_empty() {
 
 assert_stderr_contains() {
   local desc=$1 pattern=$2 stderr=$3
-  if echo "$stderr" | grep -qF -- "$pattern"; then
+  if <<<"$stderr" grep -qF -- "$pattern"; then
     ok "$desc (stderr contains '$pattern')"
   else
     fail "$desc" "stderr did not contain '$pattern'. got: $stderr"
@@ -331,7 +331,7 @@ assert_stderr_empty    "--now --json: stderr empty"                  "$stderr"
 assert_stdout_contains "--now --json: has unix"        '"unix"'      "$stdout"
 assert_stdout_contains "--now --json: has iso"         '"iso"'       "$stdout"
 # input must NOT appear for --now
-if echo "$stdout" | grep -q '"input"'; then
+if <<<"$stdout" grep -q '"input"'; then
   fail "--now --json: no input field" "stdout contained 'input' key: $stdout"
 else
   ok "--now --json: no input field"

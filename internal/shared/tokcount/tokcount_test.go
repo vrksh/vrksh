@@ -329,7 +329,10 @@ func FuzzMatchesTiktokenGo(f *testing.F) {
 		f.Add(tc.input)
 	}
 	f.Fuzz(func(t *testing.T, input string) {
-		if len(input) > 2048 {
+		// The split regex turns each invalid UTF-8 byte into U+FFFD (3 bytes),
+		// so a piece can be up to 3x the input. Past 4096 bytes encodePiece
+		// chunks and may differ from tiktoken by design, so stay under that.
+		if len(input) > maxPieceBytes/3 {
 			return
 		}
 		assertSameAsTiktokenGo(t, Cl100k, input)

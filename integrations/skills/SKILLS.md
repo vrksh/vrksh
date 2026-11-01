@@ -2653,7 +2653,7 @@ Empty cells are NULL in every column. In INTEGER and REAL columns, `N/A`, `NA`, 
 | Code | Meaning |
 |------|---------|
 | 0 | Success, including empty stdin when the query reads `stdin` |
-| 1 | SQL error (syntax, no such table or column, a string in double quotes, runtime), file not found, CSV parse error, empty file, gzip file, `PRAGMA`, timeout, a size limit hit |
+| 1 | SQL error (syntax, no such table or column, a string in double quotes, runtime), file not found, CSV or JSON parse error, empty file, gzip file, `PRAGMA`, timeout, a size limit hit |
 | 2 | Usage error - no query, a table but no files given, duplicate or invalid table name, `-` or `stdin` with nothing piped, a file where the query should be (`vrk sql users.csv`), bad `--delimiter`, unknown flag |
 
 ### Examples

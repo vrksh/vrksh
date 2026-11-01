@@ -27,25 +27,25 @@ echo "--- --explain ---"
 
 # --explain exits 0 and shows model name and max_tokens
 out=$(echo 'hello' | "$BIN" prompt --explain)
-echo "$out" | grep -q "4096" || fail "--explain: missing max_tokens" "got: $out"
-echo "$out" | grep -qi "claude" || fail "--explain: missing model name" "got: $out"
+<<<"$out" grep -q "4096" || fail "--explain: missing max_tokens" "got: $out"
+<<<"$out" grep -qi "claude" || fail "--explain: missing model name" "got: $out"
 pass "--explain exits 0 and shows model/max_tokens"
 
 # --explain does not leak API key
 out=$(ANTHROPIC_API_KEY=supersecrettestkey123 echo 'hi' | "$BIN" prompt --explain)
-if echo "$out" | grep -q "supersecrettestkey123"; then
+if <<<"$out" grep -q "supersecrettestkey123"; then
   fail "--explain: leaked API key" "key appeared in output"
 fi
 pass "--explain does not leak API key"
 
 # --explain with unknown model passes model name through unchanged
 out=$(echo 'hi' | "$BIN" prompt --model unknown-xyz --explain)
-echo "$out" | grep -q "unknown-xyz" || fail "--explain unknown-model: model name missing" "got: $out"
+<<<"$out" grep -q "unknown-xyz" || fail "--explain unknown-model: model name missing" "got: $out"
 pass "--explain passes unknown model name through"
 
 # --explain with positional arg works
 out=$("$BIN" prompt --explain 'hello world')
-echo "$out" | grep -q "hello world" || fail "--explain positional: prompt missing from output" "got: $out"
+<<<"$out" grep -q "hello world" || fail "--explain positional: prompt missing from output" "got: $out"
 pass "--explain positional arg works"
 
 # --- --budget --fail ---
@@ -54,7 +54,7 @@ echo "--- --budget --fail ---"
 
 # --budget 1 --fail exits 1 (no API call needed; run with no keys)
 out=$(unset ANTHROPIC_API_KEY OPENAI_API_KEY 2>/dev/null; echo 'hello world' | "$BIN" prompt --budget 1 --fail 2>&1) && fail "--budget --fail: expected exit 1 but got 0" "" || true
-if echo "$out" | grep -qi "budget\|token"; then
+if <<<"$out" grep -qi "budget\|token"; then
   pass "--budget 1 --fail exits 1 with budget message"
 else
   fail "--budget 1 --fail: missing budget/token in message" "got: $out"
@@ -62,7 +62,7 @@ fi
 
 # --budget 1 without --fail also exits 1
 out=$(unset ANTHROPIC_API_KEY OPENAI_API_KEY 2>/dev/null; echo 'hello world' | "$BIN" prompt --budget 1 2>&1) && fail "--budget without --fail: expected exit 1 but got 0" "" || true
-if echo "$out" | grep -qi "budget\|token"; then
+if <<<"$out" grep -qi "budget\|token"; then
   pass "--budget 1 (no --fail) also exits 1 with budget message"
 else
   fail "--budget 1 (no --fail): missing budget/token in message" "got: $out"
@@ -73,7 +73,7 @@ echo ""
 echo "--- no API keys ---"
 
 err=$(unset ANTHROPIC_API_KEY OPENAI_API_KEY 2>/dev/null; echo 'hello' | "$BIN" prompt 2>&1) && fail "no-key: expected exit 1" "" || true
-if echo "$err" | grep -q "no API key found"; then
+if <<<"$err" grep -q "no API key found"; then
   pass "no API key exits 1 with correct message"
 else
   fail "no-key: wrong error message" "got: $err"
@@ -104,7 +104,7 @@ echo "--- --help ---"
 pass "--help exits 0"
 
 out=$("$BIN" prompt --help 2>/dev/null) || true
-echo "$out" | grep -q "model\|budget\|explain" || fail "--help: flags missing from output" "got: $out"
+<<<"$out" grep -q "model\|budget\|explain" || fail "--help: flags missing from output" "got: $out"
 pass "--help lists flags"
 
 # --- --endpoint ---
@@ -113,25 +113,25 @@ echo "--- --endpoint ---"
 
 # --endpoint + --explain exits 0 and shows /v1/chat/completions in curl URL
 out=$(echo 'hello' | "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
-echo "$out" | grep -q "/v1/chat/completions" || fail "--endpoint --explain: URL missing /v1/chat/completions" "got: $out"
+<<<"$out" grep -q "/v1/chat/completions" || fail "--endpoint --explain: URL missing /v1/chat/completions" "got: $out"
 pass "--endpoint --explain shows resolved chat/completions URL"
 
 # --endpoint + --explain does not leak VRK_LLM_KEY value
 out=$(echo 'hello' | env VRK_LLM_KEY=supersecretkeyabc123 VRK_LLM_URL=http://localhost:11434/v1 "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
-if echo "$out" | grep -q "supersecretkeyabc123"; then
+if <<<"$out" grep -q "supersecretkeyabc123"; then
   fail "--endpoint --explain: leaked VRK_LLM_KEY" "key appeared in output"
 fi
 pass "--endpoint --explain does not leak VRK_LLM_KEY value"
 
 # --endpoint + --explain with VRK_LLM_KEY set includes $VRK_LLM_KEY reference
 out=$(echo 'hello' | env VRK_LLM_KEY=somekey VRK_LLM_URL=http://localhost:11434/v1 "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
-echo "$out" | grep -q 'VRK_LLM_KEY' || fail "--endpoint --explain with key: missing \$VRK_LLM_KEY in output" "got: $out"
+<<<"$out" grep -q 'VRK_LLM_KEY' || fail "--endpoint --explain with key: missing \$VRK_LLM_KEY in output" "got: $out"
 pass "--endpoint --explain shows \$VRK_LLM_KEY reference when key is set"
 
 # --endpoint on another origin than VRK_LLM_URL with a key set exits 2, key not echoed
 code=0; err=$(echo 'hello' | env VRK_LLM_KEY=somekey VRK_LLM_URL=http://localhost:11434/v1 "$BIN" prompt --endpoint http://localhost:9999/v1 --model llama3.2 2>&1 >/dev/null) || code=$?
 [ "$code" = 2 ] || fail "--endpoint other origin with key: want exit 2" "got $code"
-echo "$err" | grep -q "somekey" && fail "--endpoint other origin: key in error" "got: $err"
+<<<"$err" grep -q "somekey" && fail "--endpoint other origin: key in error" "got: $err"
 pass "--endpoint on another origin than VRK_LLM_URL exits 2 while VRK_LLM_KEY is set"
 
 # same, VRK_LLM_URL unset
@@ -156,7 +156,7 @@ pass "--explain single-quotes the URL"
 
 # --endpoint + --explain without VRK_LLM_KEY omits Authorization header line
 out=$(echo 'hello' | env -u VRK_LLM_KEY "$BIN" prompt --endpoint http://localhost:11434/v1 --model llama3.2 --explain)
-if echo "$out" | grep -q "Authorization"; then
+if <<<"$out" grep -q "Authorization"; then
   fail "--endpoint --explain without key: Authorization header present, want absent" "got: $out"
 fi
 pass "--endpoint --explain omits Authorization header when VRK_LLM_KEY not set"
@@ -164,7 +164,7 @@ pass "--endpoint --explain omits Authorization header when VRK_LLM_KEY not set"
 # --endpoint without --model exits 2
 echo 'hello' | "$BIN" prompt --endpoint http://localhost:11434/v1 2>/dev/null && fail "--endpoint no --model: expected exit 2" "" || true
 out=$(echo 'hello' | "$BIN" prompt --endpoint http://localhost:11434/v1 2>&1) || true
-if echo "$out" | grep -q "\-\-model"; then
+if <<<"$out" grep -q "\-\-model"; then
   pass "--endpoint without --model exits 2 with --model message"
 else
   fail "--endpoint without --model: stderr missing --model" "got: $out"
@@ -186,7 +186,7 @@ if echo "test" | "$BIN" prompt --explain --quiet >/dev/null 2>&1; then
 else
   fail "--quiet --explain: exit 0" "non-zero exit"
 fi
-if echo "$out" | grep -q "curl"; then
+if <<<"$out" grep -q "curl"; then
   pass "--quiet --explain: stdout has curl"
 else
   fail "--quiet --explain: stdout has curl" "got: $out"
@@ -199,13 +199,13 @@ echo "--- --system ---"
 
 # system prompt with --explain
 out=$(echo 'hello' | "$BIN" prompt --system 'Reply with exactly: pong' --explain)
-echo "$out" | grep -q "Reply with exactly: pong" || fail "--system --explain: system prompt missing from output" "got: $out"
+<<<"$out" grep -q "Reply with exactly: pong" || fail "--system --explain: system prompt missing from output" "got: $out"
 pass "--system --explain shows system prompt"
 
 # system from file
 echo 'You are helpful.' > /tmp/vrk_sys_test.txt
 out=$(echo 'hello' | "$BIN" prompt --system @/tmp/vrk_sys_test.txt --explain)
-echo "$out" | grep -q "You are helpful." || fail "--system @file: file content missing from output" "got: $out"
+<<<"$out" grep -q "You are helpful." || fail "--system @file: file content missing from output" "got: $out"
 rm -f /tmp/vrk_sys_test.txt
 pass "--system @file reads from file"
 
@@ -215,7 +215,7 @@ echo 'hello' | "$BIN" prompt --system @/tmp/vrk_nonexistent_sys.txt --explain 2>
 set -e
 [ "$code" -eq 1 ] || fail "--system @missing: expected exit 1, got $code" ""
 err=$(echo 'hello' | "$BIN" prompt --system @/tmp/vrk_nonexistent_sys.txt --explain 2>&1 >/dev/null) || true
-echo "$err" | grep -q "not found" || fail "--system @missing: error missing 'not found'" "got: $err"
+<<<"$err" grep -q "not found" || fail "--system @missing: error missing 'not found'" "got: $err"
 pass "--system @missing exits 1 with file-not-found message"
 
 # empty system — must be exit 2 (usage error)
@@ -277,7 +277,7 @@ pass "--field non-string value exits 1"
 
 # --help lists --field flag
 out=$("$BIN" prompt --help 2>/dev/null) || true
-echo "$out" | grep -q "field" || fail "--help: --field flag missing from output" "got: $out"
+<<<"$out" grep -q "field" || fail "--help: --field flag missing from output" "got: $out"
 pass "--help lists --field flag"
 
 # --- --schema request shape ---
@@ -286,21 +286,21 @@ echo "--- --schema request shape ---"
 
 # OpenAI gets a real JSON Schema object, not the flat map
 out=$(echo j | env -u ANTHROPIC_API_KEY OPENAI_API_KEY=x "$BIN" prompt -m gpt-4o-mini --schema '{"a":"string"}' --explain)
-echo "$out" | grep -q '"schema":{"additionalProperties":false,"properties":{"a":{"type":"string"}},"required":\["a"\],"type":"object"}' \
+<<<"$out" grep -q '"schema":{"additionalProperties":false,"properties":{"a":{"type":"string"}},"required":\["a"\],"type":"object"}' \
   || fail "openai --schema --explain: not a JSON Schema" "got: $out"
-echo "$out" | grep -q '"strict":true' || fail "openai --schema --explain: scalar schema should be strict" "got: $out"
+<<<"$out" grep -q '"strict":true' || fail "openai --schema --explain: scalar schema should be strict" "got: $out"
 pass "openai --schema sends a JSON Schema with required keys"
 
 # array/object fields turn strict mode off
 out=$(echo j | env -u ANTHROPIC_API_KEY OPENAI_API_KEY=x "$BIN" prompt -m gpt-4o-mini --schema '{"a":"array"}' --explain)
-echo "$out" | grep -q '"strict":false' || fail "openai --schema array: want strict false" "got: $out"
+<<<"$out" grep -q '"strict":false' || fail "openai --schema array: want strict false" "got: $out"
 pass "openai --schema with array is not strict"
 
 # --endpoint --schema sends the schema as a system message, with json_object mode
 out=$(echo j | "$BIN" prompt --endpoint http://127.0.0.1:1/v1 -m mock --system 'be terse' --schema '{"a":"string"}' --explain)
-echo "$out" | grep -q '"role":"system","content":"be terse\\n\\nYou must respond with a valid JSON object' \
+<<<"$out" grep -q '"role":"system","content":"be terse\\n\\nYou must respond with a valid JSON object' \
   || fail "--endpoint --schema --explain: system message missing" "got: $out"
-echo "$out" | grep -q '"response_format":{"type":"json_object"}' || fail "--endpoint --schema --explain: json_object missing" "got: $out"
+<<<"$out" grep -q '"response_format":{"type":"json_object"}' || fail "--endpoint --schema --explain: json_object missing" "got: $out"
 pass "--endpoint --schema puts schema in the system message"
 
 # --- empty prompt ---
@@ -321,7 +321,7 @@ set +e
 out=$(printf '  \n' | "$BIN" prompt --endpoint http://127.0.0.1:1 -m mock --json 2>err.tmp); code=$?
 set -e
 [ "$code" -eq 1 ] || fail "empty prompt --json: expected exit 1, got $code" ""
-echo "$out" | grep -q '"error":"prompt: empty prompt, nothing sent"' || fail "empty prompt --json: no envelope" "got: $out"
+<<<"$out" grep -q '"error":"prompt: empty prompt, nothing sent"' || fail "empty prompt --json: no envelope" "got: $out"
 [ -s err.tmp ] && fail "empty prompt --json: stderr not empty" "$(cat err.tmp)"
 rm -f err.tmp
 pass "empty prompt --json writes the error envelope"

@@ -477,7 +477,7 @@ func load(ctx context.Context, conn *dbsql.Conn, t table, warnings *[]string, re
 		scan   scanFunc
 		err    error
 	)
-	if isJSON(data) {
+	if isJSON(data, t.source) {
 		header, scan, err = readJSON(data, t.source)
 	} else {
 		header, scan, err = readCSV(data, t)
@@ -863,11 +863,25 @@ func scanCSV(data []byte, t table, lazy bool, each func([]string) error) (header
 	}
 }
 
-// isJSON reports whether data is JSONL (the first line is an object) or a
-// JSON array. A CSV header that merely starts with { or [ is not.
-func isJSON(data []byte) bool {
+// isJSON reports whether data is JSON: a .json or .jsonl file, a first line
+// that starts like an object ({") or an array of objects ([{), or any first
+// line or array that parses. A CSV header that merely starts with { or [,
+// like {id},name, is not. A first line that starts with {" but does not parse
+// is a cut-off record, so it fails as JSON instead of loading as a header.
+func isJSON(data []byte, source string) bool {
+	switch strings.ToLower(filepath.Ext(source)) {
+	case ".json", ".jsonl", ".ndjson":
+		return true
+	}
 	data = bytes.TrimSpace(data)
 	first, _, _ := bytes.Cut(data, []byte("\n"))
+	first = bytes.TrimSpace(first)
+	if bytes.HasPrefix(first, []byte(`{"`)) {
+		return true
+	}
+	if rest, ok := bytes.CutPrefix(data, []byte("[")); ok && bytes.HasPrefix(bytes.TrimSpace(rest), []byte("{")) {
+		return true
+	}
 	return bytes.HasPrefix(first, []byte("{")) && json.Valid(first) ||
 		bytes.HasPrefix(data, []byte("[")) && json.Valid(data)
 }
@@ -1077,6 +1091,7 @@ func inferType(vals []string) (typ string, junk int) {
 // load can infer every column in one pass over the rows.
 type colStats struct {
 	nums, others int
+	bigs         int // integers past int64: numbers, but they force TEXT
 	junk         int // row of the first value worth a warning, or -1
 	junkVal      string
 	isInt        bool
@@ -1094,6 +1109,12 @@ func (s *colStats) add(i int, v string) {
 	places := 0
 	switch {
 	case intRe.MatchString(v) && fitsInt64(v):
+	case intRe.MatchString(v):
+		s.bigs++
+		if s.junk < 0 {
+			s.junk, s.junkVal = i, v
+		}
+		return
 	case realRe.MatchString(v) && roundTrips(v):
 		s.isInt = false
 		places = len(v) - strings.IndexByte(v, '.') - 1
@@ -1114,8 +1135,9 @@ func (s *colStats) add(i int, v string) {
 
 func (s *colStats) result() (typ string, junk int) {
 	switch {
-	case s.others > 0 || s.nums == 0:
-		if s.nums <= s.others {
+	case s.others > 0 || s.bigs > 0 || s.nums == 0:
+		// A column of only big integers (long IDs) is TEXT, nothing to warn.
+		if s.nums == 0 || s.nums+s.bigs <= s.others {
 			return "TEXT", -1
 		}
 		return "TEXT", s.junk
