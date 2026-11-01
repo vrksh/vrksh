@@ -5,7 +5,9 @@ description: "Run vrk in your browser. Try tok, mask, validate, jwt, sse and 17 
 
 The vrk playground runs the real vrk tools in your browser. The tools are compiled to WebAssembly, so nothing you type leaves the page.
 
-Type a command and press Enter, or pick an example. You can pipe `echo`, `printf` or `cat <file>` into one or more `vrk` tools, the same way you do in a shell.
+The playground is for trying vrk. vrk is made to run in your terminal, in shell scripts and in AI agent pipelines. There it reads your own files, and its exit codes stop a pipe when a step fails. [Install vrk](/install/) to use it that way.
+
+Pick a recipe to run it, or type a command and press Enter. You can pipe `echo`, `printf` or `cat <file>` into one or more `vrk` tools, the same way you do in a shell.
 
 {{< playground >}}
 

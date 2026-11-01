@@ -17,12 +17,15 @@
         <!-- Title bar -->
         <div class="mb-8">
           <h1 class="text-3xl font-bold mb-2">{{ .Title }}</h1>
-          {{/* Keep in sync with PLAYGROUND_TOOLS in static/js/playground.js. */}}
-          {{ $playable := slice "assert" "base" "chunk" "digest" "emit" "epoch" "jsonl" "jwt" "links" "mask" "moniker" "pct" "plain" "recase" "sip" "slug" "sse" "throttle" "tok" "urlinfo" "uuid" "validate" }}
-          {{ if and (eq .Section "docs") (in $playable .File.ContentBaseName) }}
-          <a href="/play/?cmd={{ printf "vrk %s --help" .File.ContentBaseName | urlquery }}" class="text-sm muted-link" style="font-family: var(--font-mono); text-decoration: underline;">Try vrk {{ .File.ContentBaseName }} in your browser &rarr;</a>
-          {{ end }}
         </div>
+
+        {{/* Tools that run in the browser get a console with one example (data/playground.yaml). */}}
+        {{ if eq .Section "docs" }}{{ with index hugo.Data.playground.tools .File.ContentBaseName }}
+        <section class="mb-10" aria-labelledby="try-heading">
+          <h2 id="try-heading" class="text-lg font-semibold mb-3">Try it in your browser</h2>
+          {{ partial "playground.html" (dict "id" "try" "example" .) }}
+        </section>
+        {{ end }}{{ end }}
 
         <div class="prose">
           {{ .Content }}

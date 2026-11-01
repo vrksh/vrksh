@@ -22,9 +22,8 @@
                     class="text-lg md:text-xl mb-8 font-sans"
                     style="color: var(--color-muted);"
                 >
-                    vrk is one static binary with Unix tools for AI pipelines.
-                    It counts tokens, masks secrets, validates JSON and calls LLMs,
-                    and every tool exits non-zero when something goes wrong.
+                    zero silent failures &ensp;•&ensp; composable by default
+                    &ensp;•&ensp; one static CLI binary
                 </p>
 
                 <pre
@@ -76,13 +75,18 @@
                     </button>
                 </div>
 
-                <!-- Playground -->
-                <div class="mt-10 max-w-2xl mx-auto text-left">
-                    <h2 class="text-sm mb-2 font-mono" style="color: var(--color-muted);">
-                        Try vrk here. It runs in your browser and needs no install or API key.
-                    </h2>
-                    {{ partial "playground.html" (dict "id" "try") }}
-                </div>
+                <p class="text-sm" style="color: var(--color-muted);">
+                    Or <a href="#try" class="muted-link" style="text-decoration: underline;">try it in your browser</a> first. No install, no API key.
+                </p>
+            </section>
+
+            <!-- Playground -->
+            <section class="max-w-6xl mx-auto px-4 pb-16" aria-labelledby="try-heading">
+                <h2 id="try-heading" class="text-2xl font-bold mb-2">Try vrk in your browser</h2>
+                <p class="mb-6" style="color: var(--color-muted);">
+                    Pick a recipe, or type your own command. It runs on sample files, right in this page.
+                </p>
+                {{ partial "playground.html" (dict "id" "try") }}
             </section>
 
             <!-- Before/after -->
@@ -142,52 +146,6 @@ jsonschema.validate(json.loads(result), schema)</code></pre>
 
             </section>
 
-            <!-- Documents and data: pdf, sql -->
-            <section class="max-w-6xl mx-auto px-4 pb-16">
-                <h2 class="text-2xl font-semibold mb-2">Your PDFs and spreadsheets, in the pipe</h2>
-                <p class="text-sm mb-6" style="color: var(--color-muted);">
-                    Most of what you want an LLM to read is not markdown. Two tools, no Python, no database server.
-                </p>
-                <div class="grid md:grid-cols-2 gap-8">
-                    <div>
-                        <a href="/docs/pdf/" class="text-sm mb-2 font-mono inline-block" style="color: var(--color-accent); text-decoration: none;">vrk pdf &rarr;</a>
-                        <div class="terminal">
-                            <div class="terminal-header">
-                                <div class="terminal-dots"><span></span><span></span><span></span></div>
-                                <div class="terminal-title">~ vrk</div>
-                            </div>
-                            <div class="terminal-body">
-                                <pre class="text-xs"><code class="language-bash">vrk pdf contract.pdf \
-  | vrk chunk --size 4000 \
-  | vrk prompt --field text \
-      --system 'List every termination clause'</code></pre>
-                            </div>
-                        </div>
-                        <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
-                            text per page, or JSONL with page numbers. a scanned PDF exits 1 instead of feeding the model nothing.
-                        </p>
-                    </div>
-                    <div>
-                        <a href="/docs/sql/" class="text-sm mb-2 font-mono inline-block" style="color: var(--color-accent); text-decoration: none;">vrk sql &rarr;</a>
-                        <div class="terminal">
-                            <div class="terminal-header">
-                                <div class="terminal-dots"><span></span><span></span><span></span></div>
-                                <div class="terminal-title">~ vrk</div>
-                            </div>
-                            <div class="terminal-body">
-                                <pre class="text-xs"><code class="language-bash">vrk sql 'SELECT u.city, SUM(o.total) AS revenue
-         FROM orders o JOIN users u ON u.id = o.user_id
-         GROUP BY u.city' users.csv orders.csv \
-  | vrk prompt --system 'Explain this revenue split'</code></pre>
-                            </div>
-                        </div>
-                        <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
-                            every CSV becomes a table. joins, group by, types inferred. CSV or JSONL out.
-                        </p>
-                    </div>
-                </div>
-            </section>
-
             <!-- Exit code contract -->
             <section class="max-w-6xl mx-auto px-4 pb-16">
                 <div class="font-mono text-sm" style="border-left: 3px solid var(--color-accent); padding: 1.25rem 1.5rem; line-height: 2;">
@@ -221,6 +179,52 @@ jsonschema.validate(json.loads(result), schema)</code></pre>
                 <p class="text-sm mt-2 font-mono" style="color: var(--color-muted);">
                     chunked. paced. structured output. safe to rerun.
                 </p>
+            </section>
+
+            <!-- Documents and data: pdf, sql -->
+            <section class="max-w-6xl mx-auto px-4 pb-16">
+                <h2 class="text-2xl font-semibold mb-2">PDFs and CSVs go in the same pipe</h2>
+                <p class="mb-6" style="color: var(--color-muted);">
+                    Most of what you want an LLM to read is not markdown. Two tools turn it into text the next step can use, with no Python and no database server.
+                </p>
+                <div class="grid md:grid-cols-2 gap-8">
+                    <div>
+                        <a href="/docs/pdf/" class="text-sm mb-2 font-mono inline-block" style="color: var(--color-accent); text-decoration: none;">vrk pdf: read a PDF as text &rarr;</a>
+                        <div class="terminal">
+                            <div class="terminal-header">
+                                <div class="terminal-dots"><span></span><span></span><span></span></div>
+                                <div class="terminal-title">~ vrk</div>
+                            </div>
+                            <div class="terminal-body">
+                                <pre class="text-xs"><code class="language-bash">vrk pdf contract.pdf \
+  | vrk chunk --size 4000 \
+  | vrk prompt --field text \
+      --system 'List every termination clause'</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-sm mt-2" style="color: var(--color-muted);">
+                            Prints the text of each page, or JSONL with page numbers. A scanned PDF with no text exits 1, so the model never gets an empty page.
+                        </p>
+                    </div>
+                    <div>
+                        <a href="/docs/sql/" class="text-sm mb-2 font-mono inline-block" style="color: var(--color-accent); text-decoration: none;">vrk sql: query CSV files with SQL &rarr;</a>
+                        <div class="terminal">
+                            <div class="terminal-header">
+                                <div class="terminal-dots"><span></span><span></span><span></span></div>
+                                <div class="terminal-title">~ vrk</div>
+                            </div>
+                            <div class="terminal-body">
+                                <pre class="text-xs"><code class="language-bash">vrk sql 'SELECT u.city, SUM(o.total) AS revenue
+         FROM orders o JOIN users u ON u.id = o.user_id
+         GROUP BY u.city' users.csv orders.csv \
+  | vrk prompt --system 'Explain this revenue split'</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-sm mt-2" style="color: var(--color-muted);">
+                            Each CSV or JSONL file becomes a table you can join and group. The result comes out as CSV or JSONL.
+                        </p>
+                    </div>
+                </div>
             </section>
 
             <!-- Install section -->
@@ -387,7 +391,7 @@ brew install vrk</code></pre>
                             this.style.borderColor = 'var(--color-border)';
                             this.style.color = 'var(--color-muted)';
                         "
-                        >+ 17 utilities: jwt, epoch, uuid, and more &rarr;</a
+                        >+ 16 utilities: jwt, epoch, uuid, and more &rarr;</a
                     >
                 </p>
             </section>

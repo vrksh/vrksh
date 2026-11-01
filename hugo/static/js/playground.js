@@ -90,10 +90,11 @@
     // ---- tiny shell ----
 
     // Splits a command line into stages of words. Handles 'single', "double"
-    // quotes, backslash escapes, line continuations and unquoted |.
+    // quotes, backslash escapes, line continuations and unquoted |. A line that
+    // starts with | continues the one before, so pipes can be written one per line.
     function parse(line) {
         var stages = [[]], word = null, i = 0, c, q = null;
-        line = line.replace(/\\\r?\n/g, " ");
+        line = line.replace(/\\\r?\n/g, " ").replace(/\r?\n(?=[ \t]*\|)/g, " ");
         function push() { if (word !== null) { stages[stages.length - 1].push(word); word = null; } }
         for (; i < line.length; i++) {
             c = line[i];
@@ -169,14 +170,18 @@
     function runLine(line, stdinText) {
         var stages;
         try { stages = parse(line); } catch (e) { return Promise.resolve({ out: "", err: "parse error: " + e.message + "\n", code: 2 }); }
-        var errs = "";
+        var errs = "", trace = [];
         var p = Promise.resolve({ out: enc.encode(stdinText || ""), code: 0 });
         stages.forEach(function (words) {
             p = p.then(function (prev) {
-                return runStage(words, prev.out).then(function (r) { errs += r.err; return r; });
+                return runStage(words, prev.out).then(function (r) {
+                    errs += r.err;
+                    trace.push({ cmd: words.join(" "), code: r.code, bytes: r.out.length });
+                    return r;
+                });
             });
         });
-        return p.then(function (r) { return { out: dec.decode(r.out), err: errs, code: r.code }; });
+        return p.then(function (r) { return { out: dec.decode(r.out), err: errs, code: r.code, trace: trace }; });
     }
 
     // ---- UI ----
@@ -186,9 +191,81 @@
         var output = root.querySelector("[data-pg-output]");
         var status = root.querySelector("[data-pg-status]");
         var runBtn = root.querySelector("[data-pg-run]");
+        var does = root.querySelector("[data-pg-does]");
+        var traceList = root.querySelector("[data-pg-trace]");
+        var hl = root.querySelector("[data-pg-hl]");
+        var recipes = root.querySelectorAll("[data-pg-recipe]");
+        // A compact console shows one example and leaves the page URL alone.
+        var compact = root.hasAttribute("data-pg-compact");
+        var example = { cmd: input.value, does: does ? does.textContent : "" };
         var busy = false;
 
+        // What each exit code means, shown next to it.
+        var MEANING = { 0: "success", 1: "error or failed check", 2: "usage error", 127: "command not found" };
+
+        // Colours the copy of the command that sits under the transparent textarea.
+        // Prism loads after this script, so the first call may fall back to plain text.
+        var grammar = null;
+        function paint() {
+            var v = input.value;
+            if (!grammar && window.Prism && Prism.languages.bash) {
+                // Bash plus `vrk <tool>`, first so it wins. Kept local so other code blocks on the page are unchanged.
+                grammar = Object.assign({ vrk: { pattern: /\bvrk(?:[ \t]+[a-z]+\b)?/, alias: "function" } }, Prism.languages.bash);
+            }
+            if (grammar) hl.innerHTML = Prism.highlight(v, grammar, "bash");
+            else hl.textContent = v;
+            // A pre drops a trailing newline, so the textarea would be one line taller.
+            if (/\n$/.test(v)) hl.appendChild(document.createTextNode(" "));
+            hl.scrollLeft = input.scrollLeft;
+        }
+
+        function grow() {
+            input.style.height = "auto";
+            input.style.height = input.scrollHeight + "px";
+            paint();
+        }
+
+        // Marks the recipe whose command is in the input, or none if the reader typed their own.
+        function select(btn) {
+            recipes.forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); b.removeAttribute("data-edited"); });
+            if (!does) return;
+            if (btn) does.textContent = "# " + btn.dataset.does;
+            else if (compact) does.textContent = input.value === example.cmd ? example.does : "# Edited. Press RUN to see what changes.";
+            else does.textContent = "# Your own command. Pipe echo, printf or cat into vrk tools.";
+        }
+
+        function recipeFor(cmd) {
+            for (var i = 0; i < recipes.length; i++) if (recipes[i].dataset.cmd === cmd) return recipes[i];
+            return null;
+        }
+
+        function size(n) { return n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB"; }
+
+        // One chip per pipe stage: what ran, how much it wrote, and whether it failed.
+        function renderTrace(trace) {
+            traceList.textContent = "";
+            if (!trace || trace.length < 2) return;
+            trace.forEach(function (t) {
+                var li = document.createElement("li");
+                var chip = document.createElement("span");
+                chip.className = "pg-stage";
+                chip.dataset.code = t.code === 0 ? "ok" : "fail";
+                chip.title = t.cmd;
+                var c = document.createElement("span");
+                c.className = "pg-stage-cmd";
+                c.textContent = t.cmd;
+                var m = document.createElement("span");
+                m.className = "pg-stage-meta";
+                m.textContent = t.code === 0 ? size(t.bytes) : "exit " + t.code;
+                chip.appendChild(c);
+                chip.appendChild(m);
+                li.appendChild(chip);
+                traceList.appendChild(li);
+            });
+        }
+
         function render(r) {
+            if (traceList) renderTrace(r.trace);
             output.textContent = "";
             if (r.out) output.appendChild(document.createTextNode(r.out));
             if (r.err) {
@@ -203,12 +280,12 @@
                 none.textContent = "(no output)";
                 output.appendChild(none);
             }
-            status.textContent = "exit " + r.code;
+            status.textContent = "exit " + r.code + (MEANING[r.code] ? " - " + MEANING[r.code] : "");
             status.dataset.code = r.code === 0 ? "ok" : "fail";
         }
 
         function run() {
-            var line = input.value.trim();
+            var line = input.value.replace(/\s+$/, "");
             if (!line || busy) return;
             busy = true;
             runBtn.disabled = true;
@@ -219,20 +296,33 @@
             }).then(function () {
                 busy = false;
                 runBtn.disabled = false;
-                try { history.replaceState(null, "", location.pathname + "?cmd=" + encodeURIComponent(line) + (root.id ? "#" + root.id : "")); } catch (_) { /* ignore */ }
+                if (!compact) try { history.replaceState(null, "", location.pathname + "?cmd=" + encodeURIComponent(line) + (root.id ? "#" + root.id : "")); } catch (_) { /* ignore */ }
             });
         }
 
         runBtn.addEventListener("click", run);
+        input.addEventListener("scroll", function () { hl.scrollLeft = input.scrollLeft; });
+        document.addEventListener("DOMContentLoaded", paint);
         input.addEventListener("keydown", function (ev) {
             if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); run(); }
+        });
+        // An edited recipe stays marked, so the reader still sees what they started from.
+        input.addEventListener("input", function () {
+            grow();
+            var match = recipeFor(input.value);
+            var picked = root.querySelector('[data-pg-recipe][aria-pressed="true"]');
+            if (match || !picked) { select(match); return; }
+            picked.setAttribute("data-edited", "");
+            if (does) does.textContent = "# Edited from \"" + picked.querySelector(".pg-recipe-title").textContent + "\". Press RUN to see what changes.";
         });
         // Start the download when the reader shows intent, so the first run is fast.
         input.addEventListener("focus", function () { loadModule().catch(function () {}); }, { once: true });
 
-        root.querySelectorAll("[data-pg-example]").forEach(function (btn) {
+        recipes.forEach(function (btn) {
             btn.addEventListener("click", function () {
-                input.value = btn.dataset.pgExample;
+                input.value = btn.dataset.cmd;
+                grow();
+                select(btn);
                 run();
             });
         });
@@ -241,11 +331,13 @@
         if (fileList) fileList.textContent = Object.keys(FILES).join("  ");
 
         var params = new URLSearchParams(location.search);
-        if (params.get("cmd")) {
+        if (!compact && params.get("cmd")) {
             input.value = params.get("cmd");
+            select(recipeFor(input.value));
             root.scrollIntoView();
             run();
         }
+        grow();
     }
 
     document.querySelectorAll("[data-playground]").forEach(init);

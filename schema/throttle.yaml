@@ -16,7 +16,7 @@ before: |
   done
 after: "cat records.jsonl | vrk throttle --rate 60/m | process-each"
 group: v1
-category: utilities
+category: pipeline
 example: "cat records.jsonl | vrk throttle --rate 10/s --burst 5"
 flags:
   - flag: --rate
