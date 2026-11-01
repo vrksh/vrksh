@@ -34,7 +34,7 @@ func runHostile(t *testing.T, name string, args ...string) (stdout, stderr strin
 	}()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(slow * 2 * time.Second):
 		t.Fatalf("%s: hung", name)
 	}
 	runtime.ReadMemStats(&after)

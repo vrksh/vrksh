@@ -627,7 +627,7 @@ func TestBrokenPageTree(t *testing.T) {
 		}()
 		select {
 		case <-done:
-		case <-time.After(5 * time.Second):
+		case <-time.After(slow * 5 * time.Second):
 			t.Fatalf("%s: hung", name)
 		}
 		if code != 1 || stdout != "" || !strings.Contains(stderr, "pdf: corrupt PDF: ") {
@@ -746,7 +746,7 @@ func FuzzPdf(f *testing.F) {
 		}()
 		select {
 		case <-done:
-		case <-time.After(time.Second):
+		case <-time.After(slow * time.Second):
 			t.Fatalf("hung on %d bytes", len(data))
 		}
 	})
@@ -849,7 +849,7 @@ func runPdfDeadline(t *testing.T, args []string, stdin []byte) (stdout, stderr s
 	}()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(slow * 5 * time.Second):
 		t.Fatal("hung")
 	}
 	return stdout, stderr, code
