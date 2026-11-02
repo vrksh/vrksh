@@ -14,7 +14,7 @@ set -e
 
 # Used only when VRK_VERSION is unset and the GitHub API is unreachable.
 # The release workflow fails if this does not match the tag being released.
-FALLBACK_VERSION="0.3.0"
+FALLBACK_VERSION="0.2.1"
 REPO="vrksh/vrksh"
 
 fail() {
